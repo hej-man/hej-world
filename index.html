@@ -449,17 +449,24 @@ function surfaceNets(field, nx, ny, nz, scale) {
   return geo;
 }
 
-// Flat-shaded low-poly render mesh: every triangle gets one colour from its height, slope and biome.
+// ---------------------------------------------------------------------------
+// Terrain texturing, all procedural (no image files). Four layers:
+//  1. per-face biome colours (here), with noise-wobbled biome borders and a per-face brightness jitter
+//  2. slope + height blending in the shader: steep faces turn to rock, high ground fades to snow
+//  3. banded strata on cliffs (shader), dark basalt bands on volcanoes that glow near the crater
+//  4. fine noise grain inside each face (shader), so faces look hand-painted but edges stay crisp
+// ---------------------------------------------------------------------------
 function buildRenderGeometry(colliderGeo, T) {
   const geo = colliderGeo.toNonIndexed();
   geo.computeVertexNormals(); // non-indexed => face normals => faceted look
   const pos = geo.attributes.position.array;
   const colors = new Float32Array(pos.length);
+  const info = new Float32Array(pos.length); // per face: cave (0/1), volcano influence, lava vein glow
   const W = WORLD.waterLevel;
   const C = (hex) => new THREE.Color(hex);
   const pal = {
-    sand: C(0xdcc99a), wetSand: C(0xa89060), meadow: C(0x7bab48), grass: C(0x5d9a3c), forest: C(0x3f7a2e),
-    tundra: C(0x8a8a5c), dirt: C(0x7a5a3a), rock: C(0x8b8883), rock2: C(0x67635f), snow: C(0xf2f5f8),
+    sand: C(0xdcc99a), wetSand: C(0xa89060), meadow: C(0x86b04c), grass: C(0x5d9a3c), forest: C(0x3d7530),
+    dryGrass: C(0xa3a25a), tundra: C(0x8a8a5c), dirt: C(0x7a5a3a), moss: C(0x4f6b34),
     cave: C(0x4a4038), cave2: C(0x35302b), crystal: C(0x5fc6d9), basalt: C(0x3b3735), ash: C(0x5a5452),
     scorched: C(0x6b2f1f), lava: C(0xff6a1f),
   };
@@ -475,47 +482,127 @@ function buildRenderGeometry(colliderGeo, T) {
     nrm.crossVectors(e1, e2).normalize();
     const ny = nrm.y;
     const n = T.noise3(cx * 0.06, cy * 0.06, cz * 0.06);
+    const nb = T.noise2(cx * 0.03 + 50, cz * 0.03 - 20); // low-frequency noise that wobbles biome borders
     const surface = T.surfaceHeight(cx, cz);
     const vi = T.volcanoInfluence(cx, cz);
+    let cave = 0, glow = 0;
 
     if (cy < surface - 6) {
-      // caves
+      cave = 1;
       c.copy(pal.cave).lerp(pal.cave2, 0.5 + 0.5 * n);
-      if (n > 0.55) c.lerp(pal.crystal, Math.min(1, (n - 0.55) * 2.5));
-    } else if (vi > 0.02) {
-      const steep = 1 - smoothstep(0.5, 0.85, ny);
+      if (n > 0.55) { c.lerp(pal.crystal, Math.min(1, (n - 0.55) * 2.5)); glow = -1; } // crystals (handled in shader)
+      if (ny > 0.7 && n < -0.3) c.lerp(pal.moss, 0.35); // mossy cave floors
+    } else if (vi > 0.02 + nb * 0.04) {
       c.copy(pal.basalt).lerp(pal.ash, 0.5 + 0.5 * n);
       let near = 0;
       for (const v of T.volcanoes) near = Math.max(near, 1 - smoothstep(v.crater * 0.9, v.crater * 2.2, Math.hypot(cx - v.x, cz - v.z)));
       c.lerp(pal.scorched, near * 0.7);
       // glowing lava veins running down the slopes
       const vein = Math.abs(T.noise2(cx * 0.05 + 7, cz * 0.05 - 3));
-      if (vi > 0.5 && vein < 0.018 + near * 0.03) c.copy(pal.lava).lerp(pal.scorched, vein * 12);
-      // blend into the normal landscape at the foot of the volcano
-      const land = tmp.copy(pal.grass).lerp(pal.rock, steep);
-      c.lerp(land, 1 - smoothstep(0.02, 0.5, vi));
-    } else if (cy < W + 1.6) {
+      if (vi > 0.5 && vein < 0.018 + near * 0.03) { c.copy(pal.lava).lerp(pal.scorched, vein * 12); glow = 1 - vein * 20; }
+      // blend into the grass at the foot of the volcano
+      c.lerp(pal.grass, 1 - smoothstep(0.02, 0.5, vi + nb * 0.08));
+    } else if (cy < W + 1.6 + nb * 1.2) {
       c.copy(cy < W - 0.5 ? pal.wetSand : pal.sand).lerp(pal.dirt, 0.15 + 0.15 * n);
     } else {
-      const fm = T.forestMask(cx, cz);
-      c.copy(pal.meadow).lerp(pal.grass, 0.5 + 0.5 * n).lerp(pal.forest, fm * 0.8);
-      const alpine = smoothstep(58, 80, cy);
-      c.lerp(pal.tundra, alpine * 0.7);
-      // rock on steep faces, with horizontal strata bands
-      const steep = 1 - smoothstep(0.55, 0.82, ny);
-      const band = 0.5 + 0.5 * Math.sin(cy * 0.9 + n * 2.5);
-      tmp.copy(pal.rock).lerp(pal.rock2, band * 0.7);
-      c.lerp(tmp, Math.max(steep, alpine * smoothstep(0.75, 0.6, ny)));
-      if (ny < 0.8 && ny > 0.55 && cy < 50) c.lerp(pal.dirt, 0.2);
-      const snowLine = 84 + n * 5;
-      if (cy > snowLine && ny > 0.45) c.lerp(pal.snow, smoothstep(snowLine, snowLine + 4, cy));
+      const fm = smoothstep(0, 1, T.forestMask(cx, cz) + nb * 0.25);
+      c.copy(pal.meadow).lerp(pal.grass, 0.5 + 0.5 * n).lerp(pal.forest, fm * 0.85);
+      // dry grass patches on sunny open slopes, tundra higher up
+      c.lerp(pal.dryGrass, smoothstep(0.35, 0.7, n + nb) * (1 - fm) * 0.5);
+      c.lerp(pal.tundra, smoothstep(56, 78, cy + nb * 10) * 0.75);
+      if (ny < 0.82 && cy < 50) c.lerp(pal.dirt, 0.25 * smoothstep(0.82, 0.65, ny));
     }
     // per-face brightness jitter accentuates the facets
     const j = 0.92 + hash1(f) * 0.14;
-    for (let k = 0; k < 3; k++) { colors[i + k * 3] = c.r * j; colors[i + k * 3 + 1] = c.g * j; colors[i + k * 3 + 2] = c.b * j; }
+    for (let k = 0; k < 3; k++) {
+      colors[i + k * 3] = c.r * j; colors[i + k * 3 + 1] = c.g * j; colors[i + k * 3 + 2] = c.b * j;
+      info[i + k * 3] = cave; info[i + k * 3 + 1] = vi; info[i + k * 3 + 2] = glow;
+    }
   }
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  geo.setAttribute('terrainInfo', new THREE.BufferAttribute(info, 3));
   return geo;
+}
+
+const terrainUniforms = {
+  uTime: { value: 0 },
+  uWater: { value: WORLD.waterLevel },
+  uSnowLine: { value: 84 },
+  uVolc: { value: [0, 1, 2, 3].map(() => new THREE.Vector4(-1e4, -1e4, 1, 0)) }, // x, z, crater radius, lava height
+};
+
+function makeTerrainMaterial() {
+  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0, flatShading: true });
+  mat.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, terrainUniforms);
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', `#include <common>
+        attribute vec3 terrainInfo;
+        varying vec3 vInfo;
+        varying vec3 vWorldPos;`)
+      .replace('#include <project_vertex>', `#include <project_vertex>
+        vInfo = terrainInfo;
+        vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>
+        uniform float uTime, uWater, uSnowLine;
+        uniform vec4 uVolc[4];
+        varying vec3 vInfo;
+        varying vec3 vWorldPos;
+        vec3 srgb(vec3 c) { return pow(c, vec3(2.2)); }
+        float hash3(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+        float vnoise(vec3 x) {
+          vec3 i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f);
+          return mix(mix(mix(hash3(i), hash3(i + vec3(1,0,0)), f.x), mix(hash3(i + vec3(0,1,0)), hash3(i + vec3(1,1,0)), f.x), f.y),
+                     mix(mix(hash3(i + vec3(0,0,1)), hash3(i + vec3(1,0,1)), f.x), mix(hash3(i + vec3(0,1,1)), hash3(i + vec3(1,1,1)), f.x), f.y), f.z);
+        }`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+        vec3 faceN = normalize(cross(dFdx(vWorldPos), dFdy(vWorldPos)));
+        float ny = faceN.y;
+        float cave = vInfo.x, volc = vInfo.y, lava = max(vInfo.z, 0.0), crystal = max(-vInfo.z, 0.0);
+        float surf = 1.0 - cave;
+        float n1 = vnoise(vWorldPos * 0.12);
+        vec3 col = diffuseColor.rgb;
+
+        // (3) strata: wavy horizontal bands of rock
+        float wob = (vnoise(vec3(vWorldPos.x * 0.04, 0.0, vWorldPos.z * 0.04)) - 0.5) * 6.0;
+        float sy = vWorldPos.y + wob;
+        float band = sin(sy * 1.25) * 0.5 + 0.5;
+        float thick = step(0.82, fract(sy * 0.19));
+        vec3 strata = mix(mix(srgb(vec3(0.58, 0.56, 0.53)), srgb(vec3(0.43, 0.41, 0.39)), band), srgb(vec3(0.66, 0.55, 0.44)), thick * 0.7);
+        vec3 basalt = mix(srgb(vec3(0.17, 0.16, 0.16)), srgb(vec3(0.30, 0.28, 0.27)), band);
+        strata = mix(strata, basalt, smoothstep(0.05, 0.4, volc));
+
+        // (2) slope + height blending: rock on steep ground (gentler slopes count as steep up high), snow on high flat ground
+        float alpine = smoothstep(58.0, 82.0, vWorldPos.y + (n1 - 0.5) * 10.0);
+        float steep = 1.0 - smoothstep(0.55 + alpine * 0.15, 0.8 + alpine * 0.1, ny);
+        col = mix(col, strata, steep * surf * (1.0 - lava));
+        float snowLine = uSnowLine + (n1 - 0.5) * 10.0;
+        float snow = smoothstep(snowLine, snowLine + 6.0, vWorldPos.y) * smoothstep(0.3, 0.6, ny) * surf * (1.0 - smoothstep(0.1, 0.4, volc));
+        col = mix(col, srgb(vec3(0.94, 0.96, 0.98)), snow);
+        // damp, darker ground right at the waterline
+        col *= mix(1.0, 0.78, (1.0 - smoothstep(uWater - 0.4, uWater + 0.8, vWorldPos.y)) * surf);
+        // cave rock gets the strata too, dimmer
+        col = mix(col, strata * 0.55, cave * steep * 0.6 * (1.0 - crystal));
+
+        // (4) grain: fine noise inside each face
+        float grain = vnoise(vWorldPos * 2.1) * 0.6 + vnoise(vWorldPos * 6.5) * 0.4;
+        col *= 0.92 + grain * 0.16;
+        diffuseColor.rgb = col;`)
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+        float pulse = 0.8 + 0.2 * sin(uTime * 1.7 + vWorldPos.y * 0.15);
+        float heat = 0.0;
+        for (int i = 0; i < 4; i++) {
+          vec4 v = uVolc[i];
+          float d = length(vWorldPos.xz - v.xy);
+          float near = 1.0 - smoothstep(v.z * 0.8, v.z * 1.7, d);
+          // basalt bands near the crater rim glow
+          heat = max(heat, near * smoothstep(0.82, 0.98, band) * (1.0 - smoothstep(v.w, v.w + 28.0, vWorldPos.y)));
+        }
+        totalEmissiveRadiance += srgb(vec3(1.0, 0.35, 0.08)) * (heat * 0.45 * surf + lava * 1.1) * pulse;
+        totalEmissiveRadiance += srgb(vec3(0.35, 0.8, 0.9)) * crystal * 0.25;`);
+  };
+  return mat;
 }
 
 // ---------------------------------------------------------------------------
@@ -591,8 +678,10 @@ function generateWorld(seed) {
 
   terrainMesh = new THREE.Mesh(
     buildRenderGeometry(colliderGeo, terrainFns),
-    new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0, flatShading: true }),
+    makeTerrainMaterial(),
   );
+  terrainUniforms.uVolc.value.forEach((u) => u.set(-1e4, -1e4, 1, 0));
+  terrainFns.volcanoes.slice(0, 4).forEach((v, i) => terrainUniforms.uVolc.value[i].set(v.x, v.z, v.crater, v.lavaY));
   terrainMesh.castShadow = true;
   terrainMesh.receiveShadow = true;
   world.add(terrainMesh);
@@ -1324,6 +1413,7 @@ function frame() {
   updatePlayer(dt);
   updateCamera(dt);
   updateVolcanoes(dt, gameTime);
+  terrainUniforms.uTime.value = gameTime;
   if (clouds) clouds.position.x = (clouds.position.x + dt * 1.2) % (WORLD.size * 0.5);
 
   fpsAcc += dt; fpsFrames++;

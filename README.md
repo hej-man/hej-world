@@ -74,6 +74,10 @@ game.getSelectedItem();      // stack in the selected hotbar slot, or null
   * a flood fill that removes floating rock.
 * **Meshing** uses Surface Nets, then every triangle gets one flat colour (height, slope,
   biome, depth) for a faceted low-poly look. An indexed copy with a BVH is used for physics.
+* **Texturing** is all procedural, with no image files: per-face biome colours with noisy
+  borders, a shader that blends rock onto steep slopes and snow onto high ground, wavy rock
+  strata on cliffs (dark basalt bands on volcanoes that glow near the crater), and a fine noise
+  grain inside each face.
 * **Vegetation**: forests of pine, oak and birch placed from a forest-density map, plus bushes
   and boulders. Trunks and boulders are solid.
 * **Character**: a 1.8 m capsule. Each collision push is classified as walkable ground, a steep
