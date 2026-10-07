@@ -45,7 +45,43 @@
   #inventory .slot:hover { border-color: rgba(255,255,255,0.55); }
   #inventory .empty-note { margin-top: 10px; font-size: 12px; opacity: 0.55; }
   #held { position: fixed; pointer-events: none; z-index: 30; display: none; background: none; border: none; }
-  #tooltip { position: fixed; pointer-events: none; z-index: 31; display: none; background: rgba(0,0,0,0.85); color: #fff; font-size: 12px; padding: 3px 7px; border-radius: 4px; }
+  #tooltip { position: fixed; pointer-events: none; z-index: 31; display: none; background: rgba(0,0,0,0.85); color: #fff; font-size: 12px; padding: 3px 7px; border-radius: 4px; max-width: 260px; white-space: normal; }
+  .slot .swatch.flat { box-shadow: none; }
+  .slot .badge { position: absolute; left: 4px; bottom: 4px; width: 8px; height: 8px; border-radius: 2px; box-shadow: 0 0 0 1px rgba(0,0,0,0.5); }
+
+  /* Inventory layout: backpack on the left, crafting (or the creative palette) on the right */
+  #inventory .cols { display: flex; gap: 18px; }
+  #craft { width: 300px; display: flex; flex-direction: column; }
+  #craft h3 { margin: 0 0 8px; font-size: 14px; font-weight: 600; display: flex; justify-content: space-between; }
+  #craft h3 span { font-size: 11px; font-weight: 400; opacity: 0.6; }
+  #recipes { max-height: 300px; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; padding-right: 4px; }
+  .recipe { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 6px; background: rgba(255,255,255,0.04); opacity: 0.45; cursor: default; }
+  .recipe.ok { opacity: 1; cursor: pointer; background: rgba(255,255,255,0.08); }
+  .recipe.ok:hover { background: rgba(255,255,255,0.18); }
+  .recipe .slot { width: 36px; height: 36px; font-size: 20px; flex: none; }
+  .recipe .slot .swatch { width: 20px; height: 20px; }
+  .recipe b { font-size: 13px; font-weight: 600; }
+  .recipe small { display: block; font-size: 11px; opacity: 0.7; }
+  .recipe small .miss { color: #ff9a8a; }
+  #palette { display: grid; grid-template-columns: repeat(6, 48px); gap: 4px; max-height: 300px; overflow-y: auto; }
+  #palette .slot { cursor: pointer; }
+
+  /* Health, hunger, mana */
+  #stats { position: fixed; left: 50%; bottom: 76px; transform: translateX(-50%); display: flex; gap: 10px; z-index: 5; pointer-events: none; }
+  #stats .bar { width: 146px; height: 12px; border-radius: 6px; background: rgba(0,0,0,0.45); position: relative; overflow: hidden; box-shadow: 0 0 0 1px rgba(255,255,255,0.15); }
+  #stats .bar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 6px; transition: width 0.15s; }
+  #stats .bar span { position: absolute; left: 6px; top: -1px; font-size: 10px; color: #fff; text-shadow: 0 1px 2px #000; }
+  #hp i { background: linear-gradient(#ff6b6b, #c0392b); }
+  #food i { background: linear-gradient(#f5b85a, #c77a1e); }
+  #mana i { background: linear-gradient(#7fb6ff, #3a63d8); }
+  #mode { position: fixed; left: 50%; bottom: 76px; transform: translateX(-50%); color: #fff; font-size: 13px; font-weight: 600; letter-spacing: 1px; background: rgba(120, 70, 200, 0.75); padding: 2px 12px; border-radius: 10px; display: none; z-index: 5; pointer-events: none; }
+
+  /* Aiming: what you're looking at, and break progress */
+  #target { position: fixed; left: 50%; top: 50%; margin-top: 14px; transform: translateX(-50%); color: #fff; font-size: 12px; text-shadow: 0 1px 2px #000; pointer-events: none; white-space: nowrap; }
+  #breakbar { position: fixed; left: 50%; top: 50%; margin: 32px 0 0 -30px; width: 60px; height: 5px; border-radius: 3px; background: rgba(0,0,0,0.5); display: none; pointer-events: none; overflow: hidden; }
+  #breakbar i { display: block; height: 100%; width: 0; background: #fff; }
+  #underwater { position: fixed; inset: 0; pointer-events: none; display: none; z-index: 1;
+    background: radial-gradient(ellipse at center, rgba(40, 120, 170, 0.18) 0%, rgba(10, 45, 80, 0.55) 100%); }
 </style>
 <script type="importmap">
 {
@@ -64,21 +100,41 @@
     Click to play<br><br>
     <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move &nbsp; <kbd>Shift</kbd> sprint &nbsp; <kbd>Space</kbd> jump / swim<br>
     Mouse look &nbsp; <kbd>V</kbd> first / third person &nbsp; <kbd>Z</kbd> camera distance<br>
-    <kbd>1</kbd>–<kbd>9</kbd> or wheel: hotbar &nbsp; <kbd>E</kbd> inventory<br>
+    Left click: break / attack &nbsp; Right click: place / eat / use<br>
+    <kbd>1</kbd>–<kbd>9</kbd> or wheel: hotbar &nbsp; <kbd>E</kbd> inventory + crafting<br>
+    <kbd>G</kbd> creative mode (fly: <kbd>Space</kbd> up, <kbd>Shift</kbd> down)<br>
     <kbd>F</kbd> lantern &nbsp; <kbd>R</kbd> respawn &nbsp; <kbd>N</kbd> new world &nbsp; <kbd>Esc</kbd> pause
   </div>
 </div></div>
+<div id="underwater"></div>
 <div id="hud"></div>
 <div id="crosshair"></div>
+<div id="target"></div>
+<div id="breakbar"><i></i></div>
 <div id="toast"></div>
 <div id="damage"></div>
+<div id="stats">
+  <div class="bar" id="hp"><i></i><span>Health</span></div>
+  <div class="bar" id="food"><i></i><span>Hunger</span></div>
+  <div class="bar" id="mana"><i></i><span>Mana</span></div>
+</div>
+<div id="mode">CREATIVE</div>
 <div id="hotbar"></div>
 <div id="inventory">
-  <h2>Inventory <span>click to move · right-click to split · shift-click to quick move</span></h2>
-  <div class="grid" id="inv-main"></div>
-  <div class="sep"></div>
-  <div class="grid" id="inv-hotbar"></div>
-  <div class="empty-note" id="inv-note">Nothing collected yet. Items you pick up will appear here.</div>
+  <div class="cols">
+    <div>
+      <h2>Inventory <span>click to move · right-click to split · shift-click to quick move</span></h2>
+      <div class="grid" id="inv-main"></div>
+      <div class="sep"></div>
+      <div class="grid" id="inv-hotbar"></div>
+      <div class="empty-note" id="inv-note">Nothing collected yet. Break trees, bushes, rocks and ground to collect things.</div>
+    </div>
+    <div id="craft">
+      <h3 id="craft-title">Crafting <span id="stations"></span></h3>
+      <div id="recipes"></div>
+      <div id="palette" style="display:none"></div>
+    </div>
+  </div>
 </div>
 <div id="held" class="slot"></div>
 <div id="tooltip"></div>
@@ -112,6 +168,8 @@ const PLAYER = {
   jumpSpeed: 8.5,
   gravity: -25,
   maxSlopeDeg: 47,     // steeper than this you can't stand, walk up or jump from
+  flySpeed: 14,        // creative mode
+  reach: 5.5,          // how far away you can break and place things
 };
 const SLOPE_Y = Math.cos(THREE.MathUtils.degToRad(PLAYER.maxSlopeDeg));
 
@@ -396,11 +454,16 @@ function removeFloaters(field, nx, ny, nz) {
 }
 
 // ---------------------------------------------------------------------------
-// Meshing: naive Surface Nets (smooth isosurface, one vertex per surface cell)
+// Meshing: naive Surface Nets (smooth isosurface, one vertex per surface cell).
+// The world is meshed in chunks so digging and building only rebuild the chunks they touch.
+// A chunk owns the faces of grid points x0 <= x < x1, z0 <= z < z1; it computes its own copy of
+// the border vertices, which come out identical in the neighbour, so there are no cracks.
 // ---------------------------------------------------------------------------
-function surfaceNets(field, nx, ny, nz, scale) {
-  const cx = nx - 1, cy = ny - 1, cz = nz - 1;
-  const cellVert = new Int32Array(cx * cy * cz).fill(-1);
+function surfaceNets(field, nx, ny, nz, scale, x0 = 1, x1 = nx - 1, z0 = 1, z1 = nz - 1) {
+  const cy = ny - 1;
+  x0 = Math.max(1, x0); z0 = Math.max(1, z0); x1 = Math.min(nx - 1, x1); z1 = Math.min(nz - 1, z1);
+  const bx = x0 - 1, bz = z0 - 1, wx = x1 - bx, wz = z1 - bz;
+  const cellVert = new Int32Array(wx * cy * wz).fill(-1);
   const positions = [];
   const indices = [];
   const F = (x, y, z) => field[x + nx * (y + ny * z)];
@@ -408,7 +471,7 @@ function surfaceNets(field, nx, ny, nz, scale) {
   const edges = [[0,1],[2,3],[4,5],[6,7],[0,2],[1,3],[4,6],[5,7],[0,4],[1,5],[2,6],[3,7]];
   const v = new Float32Array(8);
 
-  for (let z = 0; z < cz; z++) for (let y = 0; y < cy; y++) for (let x = 0; x < cx; x++) {
+  for (let z = bz; z < z1; z++) for (let y = 0; y < cy; y++) for (let x = bx; x < x1; x++) {
     let mask = 0;
     for (let c = 0; c < 8; c++) {
       const [dx, dy, dz] = corners[c];
@@ -426,17 +489,17 @@ function surfaceNets(field, nx, ny, nz, scale) {
       sz += ca[2] + (cb[2] - ca[2]) * t;
       n++;
     }
-    cellVert[x + cx * (y + cy * z)] = positions.length / 3;
+    cellVert[(x - bx) + wx * (y + cy * (z - bz))] = positions.length / 3;
     positions.push((x + sx / n) * scale, (y + sy / n) * scale, (z + sz / n) * scale);
   }
 
-  const C = (x, y, z) => cellVert[x + cx * (y + cy * z)];
+  const C = (x, y, z) => cellVert[(x - bx) + wx * (y + cy * (z - bz))];
   const quad = (a, b, c, d, flip) => {
     if (a < 0 || b < 0 || c < 0 || d < 0) return;
     if (flip) indices.push(a, c, b, a, d, c);
     else indices.push(a, b, c, a, c, d);
   };
-  for (let z = 1; z < cz; z++) for (let y = 1; y < cy; y++) for (let x = 1; x < cx; x++) {
+  for (let z = z0; z < z1; z++) for (let y = 1; y < cy; y++) for (let x = x0; x < x1; x++) {
     const s0 = F(x, y, z) > 0;
     if (s0 !== (F(x + 1, y, z) > 0)) quad(C(x, y - 1, z - 1), C(x, y, z - 1), C(x, y, z), C(x, y - 1, z), !s0);
     if (s0 !== (F(x, y + 1, z) > 0)) quad(C(x - 1, y, z - 1), C(x - 1, y, z), C(x, y, z), C(x, y, z - 1), !s0);
@@ -486,8 +549,14 @@ function buildRenderGeometry(colliderGeo, T) {
     const surface = T.surfaceHeight(cx, cz);
     const vi = T.volcanoInfluence(cx, cz);
     let cave = 0, glow = 0;
+    const edited = editedMaterialAt(cx - nrm.x * 0.8, cy - nrm.y * 0.8, cz - nrm.z * 0.8);
 
-    if (cy < surface - 6) {
+    if (edited) {
+      // ground the player dug into or added
+      c.copy(edited === 'sand' ? pal.sand : edited === 'dirt' ? pal.dirt : pal.cave).lerp(pal.cave2, 0.2 + 0.2 * n);
+      if (edited === 'dirt' && ny > 0.75 && cy > surface - 3) c.lerp(pal.grass, 0.3);
+      cave = edited === 'stone' && cy < surface - 6 ? 1 : 0;
+    } else if (cy < surface - 6) {
       cave = 1;
       c.copy(pal.cave).lerp(pal.cave2, 0.5 + 0.5 * n);
       if (n > 0.55) { c.lerp(pal.crystal, Math.min(1, (n - 0.55) * 2.5)); glow = -1; } // crystals (handled in shader)
@@ -639,8 +708,14 @@ scene.add(lantern);
 
 const world = new THREE.Group();
 scene.add(world);
-let terrainMesh = null;   // rendered, flat-shaded
-let colliderMesh = null;  // indexed copy with a BVH, used for physics and raycasts
+// Terrain is split into chunks. Each has a flat-shaded render mesh and an indexed collider
+// copy with a BVH (used for physics and raycasts; not added to the scene).
+const CHUNK = 16;                       // grid cells per chunk side (16 cells x 2 m = 32 m)
+let terrainField = null;                // { field, nx, ny, nz }: the editable density field
+let terrainMaterial = null;
+let chunks = [], chunkCount = 0;
+const colliders = [];                   // all chunk collider meshes, for raycasting
+const editedMat = new Map();            // grid index -> 'dirt' | 'sand' | 'stone' for ground the player dug or added
 let terrainFns = null;
 let clouds = null;
 const volcanoFx = [];     // { v, lava, light, smoke[] }
@@ -655,64 +730,198 @@ function addObstacle(o) {
   obstacleGrid.get(k).push(o);
 }
 
+function gridRemove(grid, o) {
+  const list = grid.get(cellKey(Math.floor(o.x / CELL), Math.floor(o.z / CELL)));
+  const i = list ? list.indexOf(o) : -1;
+  if (i >= 0) list.splice(i, 1);
+}
+// Things you can break or harvest (trees, bushes, boulders), in the same kind of spatial hash
+const targetGrid = new Map();
+function addTarget(t) {
+  const k = cellKey(Math.floor(t.x / CELL), Math.floor(t.z / CELL));
+  if (!targetGrid.has(k)) targetGrid.set(k, []);
+  targetGrid.get(k).push(t);
+}
+
 function disposeWorld() {
   world.traverse((o) => {
     if (o.geometry) { o.geometry.disposeBoundsTree?.(); o.geometry.dispose(); }
     if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => m.dispose());
   });
-  colliderMesh?.geometry.disposeBoundsTree();
-  colliderMesh?.geometry.dispose();
+  for (const c of chunks) c.collider?.geometry.disposeBoundsTree();
+  for (const c of chunks) c.collider?.geometry.dispose();
+  chunks = []; colliders.length = 0; editedMat.clear();
   world.clear();
-  obstacleGrid.clear();
+  obstacleGrid.clear(); targetGrid.clear();
   volcanoFx.length = 0;
+  animals.length = 0; bolts.length = 0;
+  resetBlocks();
+}
+
+const chunkWidth = () => CHUNK * WORLD.voxel;
+
+// (Re)builds the collider + render mesh of one chunk from the current density field.
+function buildChunk(i, j) {
+  const { field, nx, ny, nz } = terrainField;
+  const ch = chunks[i + chunkCount * j];
+  if (ch.render) { world.remove(ch.render); ch.render.geometry.dispose(); ch.render = null; }
+  if (ch.collider) {
+    ch.collider.geometry.disposeBoundsTree(); ch.collider.geometry.dispose();
+    colliders.splice(colliders.indexOf(ch.collider), 1); ch.collider = null;
+  }
+  const geo = surfaceNets(field, nx, ny, nz, WORLD.voxel, i * CHUNK, (i + 1) * CHUNK, j * CHUNK, (j + 1) * CHUNK);
+  if (!geo.index.count) { geo.dispose(); return 0; }
+  geo.computeBoundsTree();
+  ch.collider = new THREE.Mesh(geo);
+  ch.collider.userData.chunk = ch;
+  colliders.push(ch.collider);
+  ch.render = new THREE.Mesh(buildRenderGeometry(geo, terrainFns), terrainMaterial);
+  ch.render.castShadow = true;
+  ch.render.receiveShadow = true;
+  world.add(ch.render);
+  return geo.index.count / 3;
+}
+
+// The collider meshes whose triangles could lie between x0..x1, z0..z1.
+const _near = [];
+function chunksIn(x0, x1, z0, z1) {
+  const w = chunkWidth(), vx = WORLD.voxel;
+  const i0 = Math.max(0, Math.floor((x0 - 0.01) / w)), i1 = Math.min(chunkCount - 1, Math.floor((x1 + vx) / w));
+  const j0 = Math.max(0, Math.floor((z0 - 0.01) / w)), j1 = Math.min(chunkCount - 1, Math.floor((z1 + vx) / w));
+  _near.length = 0;
+  for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+    const c = chunks[i + chunkCount * j].collider;
+    if (c) _near.push(c);
+  }
+  return _near;
 }
 
 function generateWorld(seed) {
   disposeWorld();
   const t0 = performance.now();
   terrainFns = createTerrainFunctions(seed);
-  const { field, nx, ny, nz } = buildDensityField(terrainFns);
-  const colliderGeo = surfaceNets(field, nx, ny, nz, WORLD.voxel);
-  colliderGeo.computeBoundsTree();
-  colliderMesh = new THREE.Mesh(colliderGeo);
+  terrainField = buildDensityField(terrainFns);
+  terrainMaterial = makeTerrainMaterial();
+  chunkCount = Math.ceil((terrainField.nx - 1) / CHUNK);
+  chunks = [];
+  for (let j = 0; j < chunkCount; j++) for (let i = 0; i < chunkCount; i++) chunks.push({ i, j, collider: null, render: null });
+  let triangles = 0;
+  for (let j = 0; j < chunkCount; j++) for (let i = 0; i < chunkCount; i++) triangles += buildChunk(i, j);
 
-  terrainMesh = new THREE.Mesh(
-    buildRenderGeometry(colliderGeo, terrainFns),
-    makeTerrainMaterial(),
-  );
   terrainUniforms.uVolc.value.forEach((u) => u.set(-1e4, -1e4, 1, 0));
   terrainFns.volcanoes.slice(0, 4).forEach((v, i) => terrainUniforms.uVolc.value[i].set(v.x, v.z, v.crater, v.lavaY));
-  terrainMesh.castShadow = true;
-  terrainMesh.receiveShadow = true;
-  world.add(terrainMesh);
 
-  // Water
-  const water = new THREE.Mesh(
-    new THREE.PlaneGeometry(WORLD.size - 2, WORLD.size - 2),
-    new THREE.MeshStandardMaterial({ color: 0x2f7fb5, transparent: true, opacity: 0.75, roughness: 0.1, metalness: 0.1 }),
-  );
-  water.rotation.x = -Math.PI / 2;
-  water.position.set(WORLD.size / 2, WORLD.waterLevel, WORLD.size / 2);
-  water.receiveShadow = true;
-  world.add(water);
-
+  world.add(makeWater());
   addVolcanoEffects();
   const counts = placeVegetation(seed);
   addClouds(seed);
+  initBlocks();
+  const animalCount = spawnAnimals(seed);
 
-  const stats = { seed, ms: Math.round(performance.now() - t0), triangles: colliderGeo.index.count / 3, ...counts };
+  const stats = { seed, ms: Math.round(performance.now() - t0), triangles, chunks: chunks.length, ...counts, animals: animalCount };
   console.log('World generated', stats);
   return stats;
+}
+
+// Low-poly water: a finely divided plane whose vertices bob in the shader; flat shading turns the waves into facets.
+const waterUniforms = { uTime: { value: 0 } };
+function makeWater() {
+  const S = WORLD.size - 2;
+  const geo = new THREE.PlaneGeometry(S, S, Math.round(S / 2.5), Math.round(S / 2.5)).toNonIndexed();
+  const mat = new THREE.MeshStandardMaterial({ color: 0x2f7fb5, transparent: true, opacity: 0.74, roughness: 0.15, metalness: 0.1, flatShading: true, side: THREE.DoubleSide });
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uTime = waterUniforms.uTime;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nuniform float uTime;')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        // plane is rotated to lie flat, so local z is world up
+        transformed.z += sin(position.x * 0.45 + uTime * 1.3) * 0.09 + sin(position.y * 0.37 - uTime * 1.1 + position.x * 0.12) * 0.08;`);
+  };
+  const water = new THREE.Mesh(geo, mat);
+  water.rotation.x = -Math.PI / 2;
+  water.position.set(WORLD.size / 2, WORLD.waterLevel, WORLD.size / 2);
+  water.receiveShadow = true;
+  water.renderOrder = 1;
+  return water;
 }
 
 const raycaster = new THREE.Raycaster();
 raycaster.firstHitOnly = true;
 const DOWN = new THREE.Vector3(0, -1, 0);
+const _rayO = new THREE.Vector3();
 
 function groundAt(x, z, fromY = WORLD.height + 5) {
-  raycaster.set(new THREE.Vector3(x, fromY, z), DOWN);
+  raycaster.set(_rayO.set(x, fromY, z), DOWN);
+  raycaster.near = 0;
   raycaster.far = fromY + 10;
-  return raycaster.intersectObject(colliderMesh, false)[0] || null;
+  return raycaster.intersectObjects(chunksIn(x, x, z, z), false)[0] || null;
+}
+
+// First terrain hit along a ray, or null.
+function raycastTerrain(origin, dir, near, far) {
+  raycaster.set(origin, dir);
+  raycaster.near = near; raycaster.far = far;
+  const hit = raycaster.intersectObjects(colliders, false)[0] || null;
+  raycaster.near = 0;
+  return hit;
+}
+
+// ---------------------------------------------------------------------------
+// Terrain editing: dig (carve a sphere out of the density field) or add ground (fill one in),
+// then rebuild only the chunks that changed.
+// ---------------------------------------------------------------------------
+const gridIndexAt = (x, y, z) => {
+  const { nx, ny, nz } = terrainField, vx = WORLD.voxel;
+  const ix = Math.round(x / vx), iy = Math.round(y / vx), iz = Math.round(z / vx);
+  if (ix < 0 || iy < 0 || iz < 0 || ix >= nx || iy >= ny || iz >= nz) return -1;
+  return ix + nx * (iy + ny * iz);
+};
+function editedMaterialAt(x, y, z) {
+  if (!editedMat.size) return null;
+  return editedMat.get(gridIndexAt(x, y, z)) || null;
+}
+
+// What the natural ground is made of at a point (used for drops and to colour dug ground).
+function naturalMaterial(x, y, z, ny = 1) {
+  const T = terrainFns;
+  if (T.volcanoInfluence(x, z) > 0.3) return 'stone';
+  const surf = T.surfaceHeight(x, z);
+  if (y < surf - 3.5 || y > 72 || ny < 0.5) return 'stone';
+  return y < WORLD.waterLevel + 1.8 ? 'sand' : 'dirt';
+}
+
+// Returns how many grid points flipped between ground and air.
+function editTerrain(center, radius, add, material = 'dirt') {
+  const { field, nx, ny, nz } = terrainField, vx = WORLD.voxel;
+  const lo = (v, n) => Math.max(1, Math.ceil((v - radius - 2) / vx)), hi = (v, n) => Math.min(n - 2, Math.floor((v + radius + 2) / vx));
+  let flipped = 0, minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+  for (let iz = lo(center.z, nz); iz <= hi(center.z, nz); iz++)
+  for (let iy = Math.max(add ? 1 : 3, lo(center.y, ny)); iy <= hi(center.y, ny); iy++)
+  for (let ix = lo(center.x, nx); ix <= hi(center.x, nx); ix++) {
+    const x = ix * vx, y = iy * vx, z = iz * vx;
+    const d = Math.hypot(x - center.x, y - center.y, z - center.z);
+    const idx = ix + nx * (iy + ny * iz);
+    const before = field[idx];
+    if (add) {
+      if (d > radius) continue;
+      field[idx] = Math.max(before, radius - d);
+      if (before <= 0 && field[idx] > 0) { flipped++; editedMat.set(idx, material); }
+    } else {
+      if (d <= radius) {
+        field[idx] = Math.min(before, d - radius);
+        if (before > 0 && field[idx] <= 0) flipped++;
+      }
+      // remember what the newly exposed ground around the hole is made of
+      if (d <= radius + vx * 1.2 && field[idx] > 0 && !editedMat.has(idx)) editedMat.set(idx, naturalMaterial(x, y, z));
+    }
+    minX = Math.min(minX, ix); maxX = Math.max(maxX, ix); minZ = Math.min(minZ, iz); maxZ = Math.max(maxZ, iz);
+  }
+  if (minX === Infinity) return 0;
+  // a changed grid point affects the faces owned by its neighbours too
+  const i0 = Math.max(0, Math.floor((minX - 1) / CHUNK)), i1 = Math.min(chunkCount - 1, Math.floor((maxX + 1) / CHUNK));
+  const j0 = Math.max(0, Math.floor((minZ - 1) / CHUNK)), j1 = Math.min(chunkCount - 1, Math.floor((maxZ + 1) / CHUNK));
+  for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) buildChunk(i, j);
+  return flipped;
 }
 
 function addVolcanoEffects() {
@@ -805,6 +1014,7 @@ function placeVegetation(seed) {
   const col = new THREE.Color();
   let pi = 0, ci = 0, bi = 0;
   trees.forEach((t, i) => {
+    const partsOf = [];
     q.setFromAxisAngle(up, t.rot);
     const trunkH = (t.kind === 0 ? 2.2 : t.kind === 1 ? 2.8 : 4.0) * t.scale;
     m.compose(p.set(t.x, t.y - 0.4, t.z), q, s.set(t.scale, trunkH + 0.4, t.scale));
@@ -814,35 +1024,48 @@ function placeVegetation(seed) {
       for (let l = 0; l < 3; l++) {
         const ls = t.scale * (1 - l * 0.24);
         m.compose(p.set(t.x, t.y + trunkH * 0.45 + l * 1.25 * t.scale, t.z), q, s.set(ls, ls, ls));
+        partsOf.push([pines, pi]);
         pines.setMatrixAt(pi, m);
         pines.setColorAt(pi++, col.setHSL(0.36 + t.tint * 0.04, 0.45, 0.22 + t.tint * 0.06));
       }
     } else if (t.kind === 1) {
       m.compose(p.set(t.x, t.y + trunkH + 0.7 * t.scale, t.z), q, s.set(t.scale, t.scale * 0.85, t.scale));
+      partsOf.push([crowns, ci]);
       crowns.setMatrixAt(ci, m);
       crowns.setColorAt(ci++, col.setHSL(0.26 + t.tint * 0.06, 0.5, 0.3 + t.tint * 0.08));
       m.compose(p.set(t.x + 0.6 * t.scale, t.y + trunkH + 0.1, t.z + 0.3 * t.scale), q, s.set(t.scale * 0.65, t.scale * 0.6, t.scale * 0.65));
+      partsOf.push([crowns, ci]);
       crowns.setMatrixAt(ci, m);
       crowns.setColorAt(ci++, col.setHSL(0.27 + t.tint * 0.05, 0.5, 0.27 + t.tint * 0.08));
     } else {
       for (let l = 0; l < 2; l++) {
         m.compose(p.set(t.x, t.y + trunkH * (0.7 + l * 0.3), t.z), q, s.set(t.scale * (0.9 - l * 0.25), t.scale * (1.3 - l * 0.3), t.scale * (0.9 - l * 0.25)));
+        partsOf.push([birches, bi]);
         birches.setMatrixAt(bi, m);
         birches.setColorAt(bi++, col.setHSL(0.2 + t.tint * 0.05, 0.55, 0.42 + t.tint * 0.06));
       }
     }
-    addObstacle({ type: 'cyl', x: t.x, z: t.z, y0: t.y - 0.5, y1: t.y + trunkH + 3, r: 0.27 * t.scale });
+    const ob = { type: 'cyl', x: t.x, z: t.z, y0: t.y - 0.5, y1: t.y + trunkH + 3, r: 0.27 * t.scale };
+    addObstacle(ob);
+    const crownY = t.y + trunkH + (t.kind === 0 ? 0.3 : 0.6) * t.scale;
+    addTarget({
+      kind: 'tree', species: ['pine', 'oak', 'birch'][t.kind], x: t.x, y: t.y, z: t.z, scale: t.scale, obstacle: ob,
+      parts: [[trunks, i], ...partsOf], spheres: [[t.x, t.y + 0.6, t.z, 0.5], [t.x, t.y + trunkH * 0.5, t.z, 0.5], [t.x, crownY, t.z, 1.4 * t.scale]],
+    });
   });
   bushes.forEach((b, i) => {
     m.compose(p.set(b.x, b.y + 0.3 * b.s, b.z), q.setFromAxisAngle(up, b.x), s.set(b.s * 1.2, b.s * 0.8, b.s * 1.2));
     bushMesh.setMatrixAt(i, m);
     bushMesh.setColorAt(i, col.setHSL(0.27 + hash1(i) * 0.06, 0.45, 0.25 + hash1(i + 7) * 0.08));
+    addTarget({ kind: 'bush', x: b.x, y: b.y, z: b.z, parts: [[bushMesh, i]], spheres: [[b.x, b.y + 0.3 * b.s, b.z, 0.95 * b.s]] });
   });
   rocks.forEach((r, i) => {
     q.setFromEuler(new THREE.Euler(r.rot, r.rot * 2, 0));
     m.compose(p.set(r.x, r.y + r.s * 0.3, r.z), q, s.set(r.s * 1.2, r.s, r.s));
     rockMesh.setMatrixAt(i, m);
-    addObstacle({ type: 'sphere', x: r.x, y: r.y + r.s * 0.3, z: r.z, r: r.s * 0.95 });
+    const ob = { type: 'sphere', x: r.x, y: r.y + r.s * 0.3, z: r.z, r: r.s * 0.95 };
+    addObstacle(ob);
+    addTarget({ kind: 'rock', x: r.x, y: r.y, z: r.z, s: r.s, obstacle: ob, parts: [[rockMesh, i]], spheres: [[r.x, r.y + r.s * 0.3, r.z, r.s * 1.05]] });
   });
   pines.count = pi; crowns.count = ci; birches.count = bi;
   trunks.count = trees.length; bushMesh.count = bushes.length; rockMesh.count = rocks.length;
@@ -964,8 +1187,9 @@ const contact = { ground: false, steep: false, ceiling: false, steepN: new THREE
 
 function applyPush(dir, depth) {
   if (dir.y >= SLOPE_Y) {
+    // walkable: resolve straight up, so standing still on a slope doesn't creep downhill
     contact.ground = true;
-    _off.copy(dir).multiplyScalar(depth);
+    _off.set(0, depth / dir.y, 0);
   } else if (dir.y > 0.05) {
     // steep: resolve the overlap horizontally, never upwards
     const h2 = Math.max(dir.x * dir.x + dir.z * dir.z, 0.2);
@@ -989,13 +1213,15 @@ function collideCapsule() {
   _box.expandByPoint(_seg.start); _box.expandByPoint(_seg.end);
   _box.min.addScalar(-r); _box.max.addScalar(r);
 
-  colliderMesh.geometry.boundsTree.shapecast({
-    intersectsBounds: (box) => box.intersectsBox(_box),
-    intersectsTriangle: (tri) => {
-      const distance = tri.closestPointToSegment(_seg, _v1, _v2);
-      if (distance < r) applyPush(_v2.sub(_v1).normalize(), r - distance);
-    },
-  });
+  for (const c of chunksIn(_box.min.x, _box.max.x, _box.min.z, _box.max.z)) {
+    c.geometry.boundsTree.shapecast({
+      intersectsBounds: (box) => box.intersectsBox(_box),
+      intersectsTriangle: (tri) => {
+        const distance = tri.closestPointToSegment(_seg, _v1, _v2);
+        if (distance < r) applyPush(_v2.sub(_v1).normalize(), r - distance);
+      },
+    });
+  }
 
   const gx = Math.floor(_seg.start.x / CELL), gz = Math.floor(_seg.start.z / CELL);
   for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) {
@@ -1011,6 +1237,14 @@ function collideCapsule() {
           _seg.start.add(_off); _seg.end.add(_off);
           contact.steep = true; contact.steepN.x += ox / d; contact.steepN.z += oz / d;
         }
+      } else if (o.type === 'box') {
+        // closest points between the capsule segment and a placed block, found by alternating projection
+        _v3.copy(_seg.start).clamp(o.min, o.max);
+        for (let k = 0; k < 3; k++) { _seg.closestPointToPoint(_v3, true, _v1); _v3.copy(_v1).clamp(o.min, o.max); }
+        _seg.closestPointToPoint(_v3, true, _v1);
+        const d = _v1.distanceTo(_v3);
+        if (d < r && d > 1e-5) applyPush(_v1.sub(_v3).divideScalar(d), r - d);
+        else if (d <= 1e-5) { _v1.set(0, 1, 0); applyPush(_v1, o.max.y - _seg.end.y + r); }
       } else {
         _v3.set(o.x, o.y, o.z);
         _seg.closestPointToPoint(_v3, true, _v1);
@@ -1042,8 +1276,11 @@ function stepPhysics(dt, inputDir, speed) {
   player.inWater = depth > 0.3;
   const swimming = depth > 1.25;
 
-  // gravity (and buoyancy when swimming)
-  if (swimming) {
+  // gravity (and buoyancy when swimming); creative mode flies
+  if (creative) {
+    const up = (keys.Space ? 1 : 0) - (keys.ShiftLeft || keys.ShiftRight ? 1 : 0);
+    player.velocity.y += (up * PLAYER.flySpeed * 0.8 - player.velocity.y) * (1 - Math.exp(-10 * dt));
+  } else if (swimming) {
     player.velocity.y += (PLAYER.gravity * 0.15) * dt;
     player.velocity.y *= 1 - Math.min(1, dt * 2.5);
     if (keys.Space) player.velocity.y = Math.max(player.velocity.y, 3.2);
@@ -1051,11 +1288,12 @@ function stepPhysics(dt, inputDir, speed) {
     player.velocity.y += PLAYER.gravity * dt;
   }
 
-  const k = 1 - Math.exp(-(player.onGround ? 16 : swimming ? 5 : 3) * dt);
+  const k = 1 - Math.exp(-(player.onGround || creative ? 16 : swimming ? 5 : 3) * dt);
   player.velocity.x += (inputDir.x * speed - player.velocity.x) * k;
   player.velocity.z += (inputDir.z * speed - player.velocity.z) * k;
 
   player.position.addScaledVector(player.velocity, dt);
+  const fallSpeed = -player.velocity.y;
 
   contact.ground = contact.steep = contact.ceiling = false;
   contact.steepN.set(0, 0, 0);
@@ -1064,8 +1302,10 @@ function stepPhysics(dt, inputDir, speed) {
 
   player.onGround = contact.ground;
   if (contact.ground) {
+    // fall damage: landing faster than about a 5 m drop hurts
+    if (fallSpeed > 16 && !player.inWater && !creative) damagePlayer((fallSpeed - 16) * 6, 'fell too far');
     player.lastGroundTime = gameTime;
-    if (player.velocity.y < 0) player.velocity.y = -2.5; // keeps you stuck to the ground going downhill
+    if (player.velocity.y < 0) player.velocity.y = creative ? 0 : -2.5; // keeps you stuck to the ground going downhill
   }
   if (contact.steep) {
     // remove any velocity pushing into the steep surface (no climbing it)
@@ -1096,12 +1336,13 @@ function updatePlayer(dt) {
   const moving = _input.lengthSq() > 0;
   if (moving) _input.normalize();
 
-  let speed = keys.ShiftLeft || keys.ShiftRight ? PLAYER.sprintSpeed : PLAYER.walkSpeed;
-  if (player.inWater) speed *= 0.55;
+  player.sprinting = (keys.ShiftLeft || keys.ShiftRight) && moving && !creative;
+  let speed = creative ? PLAYER.flySpeed : player.sprinting ? PLAYER.sprintSpeed : PLAYER.walkSpeed;
+  if (player.inWater && !creative) speed *= 0.55;
 
   // jump only from walkable ground (with a short grace period after leaving it)
   const canJump = player.onGround || gameTime - player.lastGroundTime < 0.12;
-  if (keys.Space && canJump && !player.inWater) {
+  if (keys.Space && canJump && !player.inWater && !creative) {
     player.velocity.y = PLAYER.jumpSpeed;
     player.onGround = false;
     player.lastGroundTime = -1;
@@ -1113,14 +1354,16 @@ function updatePlayer(dt) {
   if (player.position.y < -20) respawn();
   for (const v of terrainFns.volcanoes) {
     if (Math.hypot(player.position.x - v.x, player.position.z - v.z) < v.crater * 0.8 && player.position.y - FOOT_OFFSET < v.lavaY + 0.4) {
-      respawn();
-      flashDamage();
-      toast('You fell into the lava!');
+      if (creative) { player.velocity.y = 12; continue; }
+      damagePlayer(1000, 'fell into the lava');
     }
   }
 
   // Character visuals
-  if (moving) {
+  if (mouse.left || mouse.right || swingTime > 0) {
+    let diff = yaw - player.facing;
+    player.facing += Math.atan2(Math.sin(diff), Math.cos(diff)) * Math.min(1, dt * 14);
+  } else if (moving) {
     const target = Math.atan2(-_input.x, -_input.z);
     let diff = target - player.facing;
     diff = Math.atan2(Math.sin(diff), Math.cos(diff));
@@ -1133,6 +1376,7 @@ function updatePlayer(dt) {
   const { armL, armR, legL, legR } = character.userData;
   legL.rotation.x = swing; legR.rotation.x = grounded ? -swing : -0.3;
   armL.rotation.x = -swing * 0.8; armR.rotation.x = grounded ? swing * 0.8 : -2.4;
+  if (swingTime > 0 || mouse.left) armR.rotation.x = -1.3 - Math.sin(gameTime * 14) * 0.7;
 
   character.position.set(player.position.x, player.position.y - FOOT_OFFSET + (grounded ? Math.abs(Math.sin(player.walkPhase)) * 0.04 * Math.min(1, hSpeed / 5) : 0), player.position.z);
   character.rotation.y = player.facing;
@@ -1156,7 +1400,7 @@ function updateCamera(dt) {
   _camDir.set(-Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch));
   raycaster.set(_target, _back.copy(_camDir).negate());
   raycaster.far = want + 0.4;
-  const hit = raycaster.intersectObject(colliderMesh, false)[0];
+  const hit = raycaster.intersectObjects(colliders, false)[0];
   const wanted = hit ? Math.max(0.4, hit.distance - 0.35) : want;
   camState.dist = wanted < camState.dist ? wanted : camState.dist + (wanted - camState.dist) * Math.min(1, dt * 4);
   camera.position.copy(_target).addScaledVector(_camDir, -camState.dist);
@@ -1214,7 +1458,8 @@ function fillSlotEl(el, stack, keyLabel) {
   if (!stack) return;
   const def = ITEMS[stack.id] || { name: stack.id };
   if (def.icon) el.insertAdjacentHTML('beforeend', `<span>${def.icon}</span>`);
-  else el.insertAdjacentHTML('beforeend', `<span class="swatch" style="background:${def.color || '#999'}"></span>`);
+  else el.insertAdjacentHTML('beforeend', `<span class="swatch${def.flat ? ' flat' : ''}" style="background:${def.color || '#999'}"></span>`);
+  if (def.badge) el.insertAdjacentHTML('beforeend', `<span class="badge" style="background:${def.badge}"></span>`);
   if (stack.count > 1) el.insertAdjacentHTML('beforeend', `<span class="count">${stack.count}</span>`);
   el.dataset.name = def.name;
 }
@@ -1233,7 +1478,7 @@ function makeSlots(container, from, to, interactive) {
     el.dataset.index = i;
     if (interactive) {
       el.addEventListener('mousedown', (e) => { e.preventDefault(); onSlotClick(i, e); });
-      el.addEventListener('mouseenter', () => { const s = slots[i]; if (s) { tooltipEl.textContent = ITEMS[s.id]?.name || s.id; tooltipEl.style.display = 'block'; } });
+      el.addEventListener('mouseenter', () => { const s = slots[i]; if (s) showTooltip(s.id); });
       el.addEventListener('mouseleave', () => { tooltipEl.style.display = 'none'; });
       el.addEventListener('contextmenu', (e) => e.preventDefault());
     }
@@ -1251,6 +1496,13 @@ function renderInventory() {
   fillSlotEl(heldEl, heldStack);
   heldEl.style.display = heldStack ? 'flex' : 'none';
   document.getElementById('inv-note').style.display = slots.some(Boolean) || heldStack ? 'none' : 'block';
+  if (inventoryOpen) renderCrafting();
+}
+
+function showTooltip(id) {
+  const def = ITEMS[id];
+  tooltipEl.innerHTML = `<b>${def?.name || id}</b>${def && itemHint(def) ? '<br>' + itemHint(def) : ''}`;
+  tooltipEl.style.display = 'block';
 }
 
 function onSlotClick(i, e) {
@@ -1303,15 +1555,1042 @@ function setInventoryOpen(open) {
   tooltipEl.style.display = 'none';
   if (open) {
     for (const k in keys) keys[k] = false;
+    mouse.left = mouse.right = false;
     document.exitPointerLock?.();
   } else {
     if (heldStack) { const left = addItem(heldStack.id, heldStack.count); heldStack = null; if (left) console.warn('Inventory full, items lost:', left); }
     renderInventory();
     renderer.domElement.requestPointerLock()?.catch?.(() => {});
   }
+  renderInventory();
   updateOverlay();
 }
 renderInventory();
+
+// ---------------------------------------------------------------------------
+// Items and recipes
+// ---------------------------------------------------------------------------
+const SWATCH = {
+  stick: 'linear-gradient(45deg, transparent 40%, #9a6a3a 40%, #9a6a3a 60%, transparent 60%)',
+  planks: 'repeating-linear-gradient(0deg, #c89a5e 0 5px, #9c7140 5px 6px)',
+  stone: 'radial-gradient(circle at 35% 30%, #a3a09b, #6f6c68)',
+  bricks: 'linear-gradient(#5c5a56 0 0) 0 8px / 100% 1px no-repeat, linear-gradient(#5c5a56 0 0) 0 17px / 100% 1px no-repeat, linear-gradient(#5c5a56 0 0) 12px 0 / 1px 8px no-repeat, linear-gradient(#5c5a56 0 0) 6px 9px / 1px 8px no-repeat, linear-gradient(#5c5a56 0 0) 18px 9px / 1px 8px no-repeat, #a29f99',
+  glass: 'linear-gradient(135deg, rgba(220,245,255,0.85) 0 30%, rgba(160,210,235,0.45) 30% 100%)',
+  wool: 'radial-gradient(circle at 40% 35%, #ffffff, #dcd8cc)',
+  leather: 'linear-gradient(160deg, #a8703c, #6e4421)',
+  dirt: 'radial-gradient(circle at 35% 30%, #8d6a46, #5e4228)',
+  sand: 'radial-gradient(circle at 35% 30%, #eadbb0, #c7b07c)',
+};
+function defineItems() {
+  const reg = (id, name, look, extra = {}) =>
+    registerItem({ id, name, ...(look.length > 3 ? { color: look } : { icon: look }), ...extra });
+  reg('log', 'Log', '🪵', { place: 'log' });
+  reg('planks', 'Planks', SWATCH.planks, { place: 'planks' });
+  reg('stick', 'Stick', SWATCH.stick, { flat: true });
+  reg('stone', 'Stone', SWATCH.stone, { place: 'stone' });
+  reg('dirt', 'Dirt', SWATCH.dirt, { terrain: 'dirt' });
+  reg('sand', 'Sand', SWATCH.sand, { terrain: 'sand' });
+  reg('crystal', 'Crystal', '💎');
+  reg('stone_bricks', 'Stone bricks', SWATCH.bricks, { place: 'stone_bricks' });
+  reg('glass', 'Glass', SWATCH.glass, { place: 'glass' });
+  reg('wool', 'Wool', SWATCH.wool, { place: 'wool' });
+  reg('workbench', 'Workbench', '🛠️', { place: 'workbench' });
+  reg('campfire', 'Campfire', '🔥', { place: 'campfire' });
+  reg('apple', 'Apple', '🍎', { food: 15 });
+  reg('berries', 'Berries', '🫐', { food: 8 });
+  reg('raw_meat', 'Raw meat', '🥩', { food: 10 });
+  reg('cooked_meat', 'Cooked meat', '🍖', { food: 35, heal: 5 });
+  reg('feather', 'Feather', '🪶');
+  reg('leather', 'Leather', SWATCH.leather);
+  for (const [mat, Mat, tier, badge] of [['wood', 'Wooden', 1, '#c08a4c'], ['stone', 'Stone', 2, '#9a9893']]) {
+    reg(`${mat}_pickaxe`, `${Mat} pickaxe`, '⛏️', { tool: 'pickaxe', tier, badge, maxStack: 1, damage: 2 + tier });
+    reg(`${mat}_axe`, `${Mat} axe`, '🪓', { tool: 'axe', tier, badge, maxStack: 1, damage: 3 + tier });
+    reg(`${mat}_shovel`, `${Mat} shovel`, '🪏', { tool: 'shovel', tier, badge, maxStack: 1, damage: 2 + tier });
+    reg(`${mat}_sword`, `${Mat} sword`, '🗡️', { tool: 'sword', tier, badge, maxStack: 1, damage: 4 + tier * 2 });
+  }
+  reg('crystal_wand', 'Crystal wand', '🪄', { wand: true, maxStack: 1 });
+  reg('mana_tonic', 'Mana tonic', '🧪', { mana: 50, maxStack: 16 });
+  reg('bandage', 'Bandage', '🩹', { heal: 30, maxStack: 16 });
+  reg('leather_armour', 'Leather armour', '🦺', { armour: 0.35, maxStack: 1 });
+}
+
+function itemHint(def) {
+  if (def.place) return 'Right click to place';
+  if (def.terrain) return 'Right click to add ground';
+  if (def.food) return `Right click to eat (+${def.food} hunger)`;
+  if (def.heal) return `Right click to use (+${def.heal} health)`;
+  if (def.mana) return `Right click to drink (+${def.mana} mana)`;
+  if (def.wand) return `Right click to cast a bolt (${BOLT_COST} mana)`;
+  if (def.armour) return `Right click to wear (takes ${Math.round(def.armour * 100)}% less damage)`;
+  if (def.tool === 'pickaxe') return 'Breaks stone, boulders and crystal';
+  if (def.tool === 'axe') return 'Chops trees and wood faster';
+  if (def.tool === 'shovel') return 'Digs dirt and sand faster';
+  if (def.tool === 'sword') return `Attack: ${def.damage} damage`;
+  return '';
+}
+
+// `at` names a block you need to stand near (within 4.5 m) to craft the recipe.
+const RECIPES = [
+  { out: 'planks', n: 4, in: { log: 1 } },
+  { out: 'stick', n: 4, in: { planks: 2 } },
+  { out: 'workbench', in: { planks: 4 } },
+  { out: 'campfire', in: { log: 3, stick: 2 } },
+  { out: 'wood_pickaxe', in: { planks: 3, stick: 2 }, at: 'workbench' },
+  { out: 'wood_axe', in: { planks: 3, stick: 2 }, at: 'workbench' },
+  { out: 'wood_shovel', in: { planks: 1, stick: 2 }, at: 'workbench' },
+  { out: 'wood_sword', in: { planks: 2, stick: 1 }, at: 'workbench' },
+  { out: 'stone_pickaxe', in: { stone: 3, stick: 2 }, at: 'workbench' },
+  { out: 'stone_axe', in: { stone: 3, stick: 2 }, at: 'workbench' },
+  { out: 'stone_shovel', in: { stone: 1, stick: 2 }, at: 'workbench' },
+  { out: 'stone_sword', in: { stone: 2, stick: 1 }, at: 'workbench' },
+  { out: 'stone_bricks', n: 4, in: { stone: 4 }, at: 'workbench' },
+  { out: 'leather_armour', in: { leather: 5 }, at: 'workbench' },
+  { out: 'crystal_wand', in: { stick: 1, crystal: 3, feather: 1 }, at: 'workbench' },
+  { out: 'cooked_meat', in: { raw_meat: 1 }, at: 'campfire' },
+  { out: 'glass', in: { sand: 2 }, at: 'campfire' },
+  { out: 'mana_tonic', in: { crystal: 1, berries: 2 }, at: 'campfire' },
+  { out: 'bandage', n: 2, in: { wool: 2 } },
+];
+
+// How many of an item would still fit in the inventory.
+function roomFor(id) {
+  const max = ITEMS[id].maxStack;
+  return slots.reduce((n, s) => n + (!s ? max : s.id === id ? max - s.count : 0), 0);
+}
+
+function stationsNear() {
+  const near = new Set();
+  const fx = player.position.x, fy = player.position.y - FOOT_OFFSET, fz = player.position.z;
+  for (const b of blocks.values()) {
+    if (BLOCKS[b.type].station && Math.hypot(b.x + 0.5 - fx, b.y + 0.5 - fy, b.z + 0.5 - fz) < 4.5) near.add(b.type);
+  }
+  return near;
+}
+
+function canCraft(r, near) {
+  if (r.at && !near.has(r.at)) return false;
+  return Object.entries(r.in).every(([id, n]) => countItem(id) >= n);
+}
+
+function craft(r, all) {
+  const near = stationsNear();
+  let made = 0;
+  do {
+    if (!canCraft(r, near)) break;
+    if (roomFor(r.out) < (r.n || 1)) { toast('Inventory full'); break; }
+    for (const [id, n] of Object.entries(r.in)) removeItem(id, n);
+    addItem(r.out, r.n || 1);
+    made++;
+  } while (all && made < 64);
+  if (made) toast(`Crafted ${made * (r.n || 1)} ${ITEMS[r.out].name}`);
+  renderInventory();
+}
+
+const recipesEl = document.getElementById('recipes');
+const paletteEl = document.getElementById('palette');
+function renderCrafting() {
+  const title = document.getElementById('craft-title');
+  if (creative) {
+    title.firstChild.textContent = 'All items ';
+    document.getElementById('stations').textContent = 'click to take a stack';
+    recipesEl.style.display = 'none';
+    paletteEl.style.display = 'grid';
+    if (!paletteEl.children.length) {
+      for (const id of Object.keys(ITEMS)) {
+        const el = document.createElement('div');
+        el.className = 'slot';
+        fillSlotEl(el, { id, count: 1 });
+        el.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          // holding something? clicking the palette throws it away, otherwise take a full stack
+          heldStack = heldStack ? null : { id, count: ITEMS[id].maxStack };
+          renderInventory();
+        });
+        el.addEventListener('mouseenter', () => showTooltip(id));
+        el.addEventListener('mouseleave', () => { tooltipEl.style.display = 'none'; });
+        paletteEl.appendChild(el);
+      }
+    }
+    return;
+  }
+  title.firstChild.textContent = 'Crafting ';
+  recipesEl.style.display = 'flex';
+  paletteEl.style.display = 'none';
+  const near = stationsNear();
+  document.getElementById('stations').textContent = near.size ? `near: ${[...near].map((t) => BLOCKS[t].name.toLowerCase()).join(', ')}` : 'shift-click crafts all';
+  const iconEl = document.createElement('div');
+  recipesEl.innerHTML = RECIPES.map((r, i) => {
+    const ok = canCraft(r, near);
+    fillSlotEl(iconEl, { id: r.out, count: r.n || 1 });
+    iconEl.className = 'slot';
+    const parts = Object.entries(r.in).map(([id, n]) => {
+      const have = countItem(id);
+      return `<span class="${have < n ? 'miss' : ''}">${n} ${ITEMS[id].name}</span>`;
+    });
+    if (r.at) parts.push(`<span class="${near.has(r.at) ? '' : 'miss'}">at a ${BLOCKS[r.at].name.toLowerCase()}</span>`);
+    return `<div class="recipe${ok ? ' ok' : ''}" data-r="${i}">${iconEl.outerHTML}<div><b>${ITEMS[r.out].name}${r.n > 1 ? ' ×' + r.n : ''}</b><small>${parts.join(' · ')}</small></div></div>`;
+  }).join('');
+}
+recipesEl.addEventListener('mousedown', (e) => {
+  const row = e.target.closest('.recipe');
+  if (!row || !row.classList.contains('ok')) return;
+  e.preventDefault();
+  craft(RECIPES[+row.dataset.r], e.shiftKey);
+});
+
+// ---------------------------------------------------------------------------
+// Placed blocks: 1 m cubes on a grid, drawn with one InstancedMesh per block type
+// ---------------------------------------------------------------------------
+const BLOCKS = {
+  log:          { name: 'Log', colors: [0x7a5532, 0xc29a64], mat: 'wood' },  // [sides, top]
+  planks:       { name: 'Planks', colors: [0xb8894d], mat: 'wood' },
+  stone:        { name: 'Stone', colors: [0x86837e], mat: 'stone' },
+  stone_bricks: { name: 'Stone bricks', colors: [0xa19e98], mat: 'stone' },
+  glass:        { name: 'Glass', colors: [0xcdeaf5], mat: 'soft', glass: true },
+  wool:         { name: 'Wool', colors: [0xf2efe6], mat: 'soft' },
+  workbench:    { name: 'Workbench', colors: [0x8a6238, 0xd0a466], mat: 'wood', station: true },
+  campfire:     { name: 'Campfire', mat: 'soft', solid: false, station: true },
+};
+const MAX_BLOCKS = 4096;
+const blockTypes = {};          // type -> { meshes: InstancedMesh[], keys: string[] }
+const blocks = new Map();       // "x,y,z" -> { type, x, y, z, idx, obstacle }
+const blockKey = (x, y, z) => `${x},${y},${z}`;
+function resetBlocks() { blocks.clear(); for (const k in blockTypes) delete blockTypes[k]; }
+
+// Merges [geometry, colour] pairs into one flat-shaded, vertex-coloured geometry.
+function mergeColored(parts) {
+  const pos = [], col = [], c = new THREE.Color();
+  for (const [g, hex] of parts) {
+    const ng = g.index ? g.toNonIndexed() : g;
+    const p = ng.attributes.position.array;
+    c.set(hex);
+    for (let i = 0; i < p.length; i += 3) { pos.push(p[i], p[i + 1], p[i + 2]); col.push(c.r, c.g, c.b); }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  geo.computeVertexNormals();
+  return geo;
+}
+
+function blockGeometry(def) {
+  const geo = new THREE.BoxGeometry(1, 1, 1).toNonIndexed();
+  const colors = new Float32Array(geo.attributes.position.count * 3), c = new THREE.Color();
+  for (let f = 0; f < 6; f++) { // faces: +x, -x, +y, -y, +z, -z
+    c.set(f === 2 || f === 3 ? def.colors[1] ?? def.colors[0] : def.colors[0]).multiplyScalar(0.92 + hash1(f * 3.7 + def.colors[0] % 97) * 0.12);
+    for (let v = 0; v < 6; v++) colors.set([c.r, c.g, c.b], (f * 6 + v) * 3);
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  return geo;
+}
+
+function campfireParts() {
+  const parts = [];
+  for (let i = 0; i < 7; i++) {
+    const a = (i / 7) * Math.PI * 2;
+    parts.push([new THREE.DodecahedronGeometry(0.12, 0).translate(Math.cos(a) * 0.36, 0.08, Math.sin(a) * 0.36), 0x77736d]);
+  }
+  for (let i = 0; i < 3; i++) {
+    const g = new THREE.CylinderGeometry(0.05, 0.06, 0.6, 5).rotateZ(Math.PI / 2 - 0.35).rotateY((i / 3) * Math.PI);
+    parts.push([g.translate(0, 0.14, 0), 0x6b4a2f]);
+  }
+  const base = new THREE.Mesh(mergeColored(parts), new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.9 }));
+  const flame = new THREE.Mesh(
+    new THREE.ConeGeometry(0.2, 0.55, 5).translate(0, 0.42, 0),
+    new THREE.MeshStandardMaterial({ color: 0xffa040, emissive: 0xff5a10, emissiveIntensity: 1.6, flatShading: true }),
+  );
+  return [base, flame];
+}
+
+function initBlocks() {
+  for (const [type, def] of Object.entries(BLOCKS)) {
+    const templates = type === 'campfire' ? campfireParts() : [new THREE.Mesh(blockGeometry(def), new THREE.MeshStandardMaterial({
+      vertexColors: true, flatShading: true, roughness: def.glass ? 0.1 : 0.85,
+      transparent: !!def.glass, opacity: def.glass ? 0.38 : 1, depthWrite: !def.glass,
+    }))];
+    const meshes = templates.map((t) => {
+      const im = new THREE.InstancedMesh(t.geometry, t.material, MAX_BLOCKS);
+      im.setColorAt(0, new THREE.Color(1, 1, 1));
+      im.count = 0;
+      im.castShadow = !def.glass; im.receiveShadow = true;
+      im.frustumCulled = false; // instances are added later, so the bounding sphere would be stale
+      world.add(im);
+      return im;
+    });
+    blockTypes[type] = { meshes, keys: [] };
+  }
+}
+
+const _bm = new THREE.Matrix4(), _bc = new THREE.Color();
+function placeBlock(type, x, y, z) {
+  const key = blockKey(x, y, z), bt = blockTypes[type], def = BLOCKS[type];
+  if (blocks.has(key) || bt.keys.length >= MAX_BLOCKS) return false;
+  const idx = bt.keys.length;
+  _bm.makeRotationY(type === 'campfire' ? hash1(x + z * 7) * 6 : 0).setPosition(x + 0.5, type === 'campfire' ? y : y + 0.5, z + 0.5);
+  _bc.setScalar(0.93 + hash1(x * 7.1 + y * 3.3 + z * 1.7) * 0.1);
+  for (const im of bt.meshes) {
+    im.setMatrixAt(idx, _bm); im.setColorAt(idx, _bc);
+    im.count = idx + 1;
+    im.instanceMatrix.needsUpdate = true; im.instanceColor.needsUpdate = true;
+  }
+  bt.keys.push(key);
+  const b = { type, x, y, z, idx, obstacle: null };
+  if (def.solid !== false) {
+    b.obstacle = { type: 'box', x: x + 0.5, z: z + 0.5, min: new THREE.Vector3(x, y, z), max: new THREE.Vector3(x + 1, y + 1, z + 1) };
+    addObstacle(b.obstacle);
+  }
+  blocks.set(key, b);
+  return true;
+}
+
+function removeBlock(key) {
+  const b = blocks.get(key);
+  if (!b) return null;
+  const bt = blockTypes[b.type], last = bt.keys.length - 1;
+  if (b.idx !== last) { // move the last instance into the freed slot
+    const lastKey = bt.keys[last];
+    for (const im of bt.meshes) {
+      im.getMatrixAt(last, _bm); im.setMatrixAt(b.idx, _bm);
+      im.getColorAt(last, _bc); im.setColorAt(b.idx, _bc);
+    }
+    blocks.get(lastKey).idx = b.idx;
+    bt.keys[b.idx] = lastKey;
+  }
+  bt.keys.pop();
+  for (const im of bt.meshes) { im.count = last; im.instanceMatrix.needsUpdate = true; im.instanceColor.needsUpdate = true; }
+  if (b.obstacle) gridRemove(obstacleGrid, b.obstacle);
+  blocks.delete(key);
+  return b;
+}
+
+function updateCampfires(time) {
+  const bt = blockTypes.campfire;
+  if (!bt || !bt.keys.length) return;
+  const flame = bt.meshes[1];
+  bt.keys.forEach((key, i) => {
+    const b = blocks.get(key);
+    const f = 0.85 + Math.sin(time * 11 + i * 3) * 0.12 + Math.sin(time * 17.3 + i) * 0.08;
+    _bm.makeScale(1, f, 1).setPosition(b.x + 0.5, b.y, b.z + 0.5);
+    flame.setMatrixAt(i, _bm);
+  });
+  flame.instanceMatrix.needsUpdate = true;
+}
+
+// Walks the block grid along a ray (Amanatides & Woo). Returns the first block hit with the face normal.
+function voxelRay(o, d, t0, t1) {
+  const px = o.x + d.x * t0, py = o.y + d.y * t0, pz = o.z + d.z * t0;
+  let x = Math.floor(px), y = Math.floor(py), z = Math.floor(pz);
+  const sx = Math.sign(d.x), sy = Math.sign(d.y), sz = Math.sign(d.z);
+  const tdx = sx ? Math.abs(1 / d.x) : Infinity, tdy = sy ? Math.abs(1 / d.y) : Infinity, tdz = sz ? Math.abs(1 / d.z) : Infinity;
+  let tmx = sx ? t0 + (sx > 0 ? x + 1 - px : px - x) * tdx : Infinity;
+  let tmy = sy ? t0 + (sy > 0 ? y + 1 - py : py - y) * tdy : Infinity;
+  let tmz = sz ? t0 + (sz > 0 ? z + 1 - pz : pz - z) * tdz : Infinity;
+  let t = t0, n = [0, 0, 0];
+  for (let i = 0; i < 64 && t <= t1; i++) {
+    const key = blockKey(x, y, z);
+    if (blocks.has(key)) return { key, t, normal: n, cell: [x, y, z] };
+    if (tmx < tmy && tmx < tmz) { x += sx; t = tmx; tmx += tdx; n = [-sx, 0, 0]; }
+    else if (tmy < tmz) { y += sy; t = tmy; tmy += tdy; n = [0, -sy, 0]; }
+    else { z += sz; t = tmz; tmz += tdz; n = [0, 0, -sz]; }
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Health, hunger and mana
+// ---------------------------------------------------------------------------
+let creative = false;
+const stats = { health: 100, hunger: 100, mana: 100, armour: 0 };
+let regenTimer = 0, starveTimer = 0;
+const BOLT_COST = 15;
+
+function damagePlayer(amount, reason) {
+  if (creative || amount <= 0 || stats.health <= 0) return;
+  stats.health -= amount * (1 - stats.armour);
+  flashDamage();
+  if (stats.health <= 0) die(reason);
+}
+
+function die(reason) {
+  toast(`You ${reason}. Back to the start, you keep your things.`);
+  Object.assign(stats, { health: 100, hunger: 100, mana: 100 });
+  respawn();
+}
+
+function updateStats(dt) {
+  if (creative) { Object.assign(stats, { health: 100, hunger: 100, mana: 100 }); return; }
+  // about 15 minutes from full to empty when standing still; sprinting burns food 3x faster
+  const drain = (player.sprinting ? 3 : 1) * (player.inWater ? 1.5 : 1) * 100 / 900;
+  stats.hunger = Math.max(0, stats.hunger - drain * dt);
+  stats.mana = Math.min(100, stats.mana + 3 * dt);
+  if (stats.hunger <= 0) {
+    starveTimer += dt;
+    if (starveTimer > 1.5) { starveTimer = 0; damagePlayer(2, 'starved'); }
+  } else if (stats.hunger > 45 && stats.health < 100) {
+    regenTimer += dt; // a well-fed player heals slowly
+    if (regenTimer > 0.8) { regenTimer = 0; stats.health = Math.min(100, stats.health + 1); stats.hunger -= 0.3; }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Animals: livestock and wildlife that wander, graze, flee, and (wolves) hunt you
+// ---------------------------------------------------------------------------
+// per: how many live on a 256 x 256 m map. shy: runs from you inside this range. hostile: chases you inside this range.
+const SPECIES = {
+  cow:     { name: 'Cow', hp: 30, walk: 1.3, run: 4.5, r: 0.75, h: 1.5, graze: true, home: 'meadow', herd: [2, 4], per: 7, drops: [['raw_meat', 2, 3], ['leather', 1, 2]] },
+  pig:     { name: 'Pig', hp: 20, walk: 1.2, run: 4.2, r: 0.55, h: 1.0, graze: true, home: 'meadow', herd: [2, 3], per: 5, drops: [['raw_meat', 2, 3]] },
+  sheep:   { name: 'Sheep', hp: 20, walk: 1.2, run: 4.2, r: 0.6, h: 1.25, graze: true, home: 'meadow', herd: [3, 5], per: 8, drops: [['raw_meat', 1, 2], ['wool', 2, 3]] },
+  chicken: { name: 'Chicken', hp: 8, walk: 1.0, run: 3.8, r: 0.3, h: 0.75, graze: true, home: 'meadow', herd: [3, 4], per: 7, drops: [['raw_meat', 1, 1], ['feather', 1, 2]] },
+  deer:    { name: 'Deer', hp: 24, walk: 1.5, run: 8, r: 0.6, h: 1.9, graze: true, shy: 11, home: 'forest', herd: [2, 3], per: 6, drops: [['raw_meat', 2, 3], ['leather', 1, 2]] },
+  rabbit:  { name: 'Rabbit', hp: 6, walk: 1.4, run: 6.5, r: 0.25, h: 0.6, shy: 6, hop: true, home: 'any', herd: [1, 2], per: 7, drops: [['raw_meat', 1, 1], ['leather', 0, 1]] },
+  wolf:    { name: 'Wolf', hp: 24, walk: 1.7, run: 6.4, r: 0.5, h: 1.15, hostile: 12, bite: 9, home: 'forest', herd: [2, 2], per: 2, drops: [['leather', 1, 2]] },
+};
+const animals = [];
+const population = {};
+let animalRand = Math.random, animalRespawnTimer = 0;
+const _boxGeos = new Map();
+const boxGeo = (w, h, d) => {
+  const k = `${w},${h},${d}`;
+  if (!_boxGeos.has(k)) _boxGeos.set(k, new THREE.BoxGeometry(w, h, d));
+  return _boxGeos.get(k);
+};
+
+// Low-poly animals built from boxes. Local forward is -Z, feet at y = 0.
+function buildAnimal(kind, rand) {
+  const g = new THREE.Group(), mats = [], legs = [];
+  const M = (c) => { const m = new THREE.MeshStandardMaterial({ color: c, roughness: 0.85, flatShading: true }); mats.push(m); return m; };
+  const box = (parent, w, h, d, m, x, y, z, rx = 0) => { const b = new THREE.Mesh(boxGeo(w, h, d), m); b.position.set(x, y, z); b.rotation.x = rx; parent.add(b); return b; };
+  const leg = (m, w, len, x, y, z) => { const p = new THREE.Group(); p.position.set(x, y, z); box(p, w, len, w, m, 0, -len / 2, 0); g.add(p); legs.push(p); };
+  const head = new THREE.Group();
+  g.add(head);
+  let body;
+  switch (kind) {
+    case 'cow': {
+      const white = M(0xf2eee6), black = M(0x2b2826), pink = M(0xe8a3a0), horn = M(0xe0d4b4);
+      for (const [x, z] of [[-0.27, -0.5], [0.27, -0.5], [-0.27, 0.5], [0.27, 0.5]]) leg(white, 0.2, 0.62, x, 0.62, z);
+      body = box(g, 0.8, 0.7, 1.45, white, 0, 0.95, 0);
+      box(g, 0.82, 0.4, 0.45, black, 0, 1.08, 0.25); box(g, 0.82, 0.3, 0.3, black, 0, 0.9, -0.4);
+      head.position.set(0, 1.2, -0.72);
+      box(head, 0.48, 0.48, 0.5, white, 0, 0, -0.22); box(head, 0.5, 0.26, 0.2, black, 0, 0.12, -0.3);
+      box(head, 0.4, 0.22, 0.14, pink, 0, -0.12, -0.5);
+      box(head, 0.08, 0.16, 0.08, horn, -0.21, 0.3, -0.18); box(head, 0.08, 0.16, 0.08, horn, 0.21, 0.3, -0.18);
+      break;
+    }
+    case 'pig': {
+      const pink = M(0xeba4a0), dark = M(0xd0807e);
+      for (const [x, z] of [[-0.2, -0.36], [0.2, -0.36], [-0.2, 0.36], [0.2, 0.36]]) leg(pink, 0.17, 0.34, x, 0.34, z);
+      body = box(g, 0.62, 0.52, 1.0, pink, 0, 0.6, 0);
+      head.position.set(0, 0.72, -0.48);
+      box(head, 0.46, 0.42, 0.38, pink, 0, 0, -0.14); box(head, 0.24, 0.17, 0.1, dark, 0, -0.06, -0.36);
+      box(head, 0.1, 0.1, 0.06, dark, -0.16, 0.24, -0.12); box(head, 0.1, 0.1, 0.06, dark, 0.16, 0.24, -0.12);
+      box(g, 0.06, 0.06, 0.14, dark, 0, 0.75, 0.55, -0.6);
+      break;
+    }
+    case 'sheep': {
+      const wool = M(0xf0ede4), skin = M(0x3d3532);
+      for (const [x, z] of [[-0.2, -0.34], [0.2, -0.34], [-0.2, 0.34], [0.2, 0.34]]) leg(skin, 0.13, 0.45, x, 0.45, z);
+      body = box(g, 0.74, 0.66, 1.0, wool, 0, 0.85, 0);
+      box(g, 0.66, 0.2, 0.86, wool, 0, 1.2, 0);
+      head.position.set(0, 1.0, -0.52);
+      box(head, 0.3, 0.34, 0.4, skin, 0, 0, -0.14); box(head, 0.36, 0.14, 0.26, wool, 0, 0.2, -0.06);
+      box(head, 0.14, 0.06, 0.08, skin, -0.2, 0.06, -0.06); box(head, 0.14, 0.06, 0.08, skin, 0.2, 0.06, -0.06);
+      break;
+    }
+    case 'chicken': {
+      const white = M(0xf7f5ee), yellow = M(0xe8b030), red = M(0xd8332a);
+      leg(yellow, 0.05, 0.26, -0.08, 0.26, 0); leg(yellow, 0.05, 0.26, 0.08, 0.26, 0);
+      body = box(g, 0.32, 0.32, 0.44, white, 0, 0.42, 0);
+      box(g, 0.2, 0.22, 0.1, white, 0, 0.56, 0.22, 0.4);
+      box(g, 0.06, 0.2, 0.3, white, -0.18, 0.44, 0); box(g, 0.06, 0.2, 0.3, white, 0.18, 0.44, 0);
+      head.position.set(0, 0.62, -0.18);
+      box(head, 0.2, 0.24, 0.2, white, 0, 0.04, -0.04); box(head, 0.1, 0.06, 0.12, yellow, 0, 0.02, -0.2);
+      box(head, 0.04, 0.1, 0.12, red, 0, 0.19, -0.04); box(head, 0.04, 0.08, 0.04, red, 0, -0.06, -0.15);
+      break;
+    }
+    case 'deer': {
+      const brown = M(0xa86b3c), light = M(0xe8dcc8), antler = M(0xd9c9a3);
+      for (const [x, z] of [[-0.16, -0.45], [0.16, -0.45], [-0.16, 0.45], [0.16, 0.45]]) leg(brown, 0.11, 0.85, x, 0.85, z);
+      body = box(g, 0.48, 0.52, 1.15, brown, 0, 1.1, 0);
+      box(g, 0.36, 0.1, 0.8, light, 0, 0.84, 0);
+      box(g, 0.14, 0.18, 0.08, light, 0, 1.25, 0.6, -0.4);
+      head.position.set(0, 1.3, -0.5);
+      box(head, 0.2, 0.42, 0.22, brown, 0, 0.12, -0.08, -0.45);
+      box(head, 0.24, 0.24, 0.4, brown, 0, 0.36, -0.28); box(head, 0.13, 0.11, 0.1, M(0x2b2420), 0, 0.31, -0.5);
+      box(head, 0.12, 0.08, 0.04, brown, -0.13, 0.48, -0.18); box(head, 0.12, 0.08, 0.04, brown, 0.13, 0.48, -0.18);
+      if (rand() < 0.5) {
+        for (const s of [-1, 1]) {
+          box(head, 0.05, 0.34, 0.05, antler, s * 0.1, 0.62, -0.2);
+          box(head, 0.05, 0.05, 0.2, antler, s * 0.1, 0.68, -0.29);
+          box(head, 0.18, 0.05, 0.05, antler, s * 0.18, 0.78, -0.2);
+        }
+      }
+      break;
+    }
+    case 'rabbit': {
+      const fur = M(rand() < 0.5 ? 0x9a8470 : 0xb8b0a4), white = M(0xf4f1ea), pink = M(0xe0a8a8);
+      for (const [x, z] of [[-0.08, -0.12], [0.08, -0.12], [-0.09, 0.13], [0.09, 0.13]]) leg(fur, 0.08, 0.12, x, 0.12, z);
+      body = box(g, 0.28, 0.28, 0.42, fur, 0, 0.25, 0);
+      box(g, 0.12, 0.12, 0.1, white, 0, 0.3, 0.24);
+      head.position.set(0, 0.4, -0.2);
+      box(head, 0.2, 0.2, 0.22, fur, 0, 0, -0.05);
+      box(head, 0.06, 0.24, 0.04, fur, -0.05, 0.2, 0.02); box(head, 0.06, 0.24, 0.04, fur, 0.05, 0.2, 0.02);
+      box(head, 0.04, 0.04, 0.02, pink, 0, -0.02, -0.17);
+      break;
+    }
+    case 'wolf': {
+      const grey = M(0x6f6d6a), light = M(0xb8b4ad), dark = M(0x3a3836), eye = M(0xf2c230);
+      eye.emissive.set(0x6a4a00);
+      for (const [x, z] of [[-0.14, -0.38], [0.14, -0.38], [-0.14, 0.38], [0.14, 0.38]]) leg(grey, 0.13, 0.5, x, 0.5, z);
+      body = box(g, 0.42, 0.45, 1.0, grey, 0, 0.75, 0);
+      box(g, 0.46, 0.5, 0.36, grey, 0, 0.8, -0.32);
+      box(g, 0.3, 0.12, 0.7, light, 0, 0.53, 0);
+      box(g, 0.12, 0.12, 0.48, grey, 0, 0.8, 0.66, -0.55);
+      head.position.set(0, 0.92, -0.55);
+      box(head, 0.34, 0.32, 0.34, grey, 0, 0, -0.1); box(head, 0.18, 0.16, 0.26, light, 0, -0.06, -0.36);
+      box(head, 0.08, 0.06, 0.06, dark, 0, -0.02, -0.5);
+      box(head, 0.08, 0.14, 0.06, dark, -0.1, 0.22, -0.02); box(head, 0.08, 0.14, 0.06, dark, 0.1, 0.22, -0.02);
+      box(head, 0.06, 0.04, 0.02, eye, -0.09, 0.05, -0.27); box(head, 0.06, 0.04, 0.02, eye, 0.09, 0.05, -0.27);
+      break;
+    }
+  }
+  body.castShadow = true;
+  return { group: g, legs, head, mats };
+}
+
+function spawnAnimal(kind, x, y, z, rand) {
+  const sp = SPECIES[kind];
+  const model = buildAnimal(kind, rand);
+  const a = {
+    kind, sp, ...model, x, y, z, hp: sp.hp, facing: rand() * Math.PI * 2, angle: rand() * Math.PI * 2,
+    mode: 'idle', timer: rand() * 3, kx: 0, kz: 0, phase: 0, hurtT: 0, flee: 0, aggro: 0, attackCd: 0, groundT: 0,
+  };
+  world.add(a.group);
+  animals.push(a);
+  return a;
+}
+
+function findAnimalSpot(home, rand, awayFromPlayer) {
+  const T = terrainFns, S = WORLD.size, W = WORLD.waterLevel, L = T.ledge;
+  for (let tries = 0; tries < 50; tries++) {
+    const x = 10 + rand() * (S - 20), z = 10 + rand() * (S - 20);
+    if (awayFromPlayer && Math.hypot(x - player.position.x, z - player.position.z) < 50) continue;
+    const g = groundAt(x, z);
+    if (!g) continue;
+    const y = g.point.y;
+    if (y < W + 1.5 || y > 72 || g.face.normal.y < 0.8 || Math.abs(y - T.surfaceHeight(x, z)) > 3 || T.volcanoInfluence(x, z) > 0.25) continue;
+    const fm = T.forestMask(x, z);
+    if (home === 'meadow' && fm > 0.45) continue;
+    if (home === 'forest' && fm < 0.4) continue;
+    if (home === 'forest' && Math.hypot(x - L.x, z - L.z) < 45) continue; // keep wolves away from the starting ledge
+    return { x, y, z };
+  }
+  return null;
+}
+
+function spawnHerd(kind, rand, awayFromPlayer) {
+  const sp = SPECIES[kind];
+  const spot = findAnimalSpot(sp.home, rand, awayFromPlayer);
+  if (!spot) return 0;
+  const n = sp.herd[0] + Math.floor(rand() * (sp.herd[1] - sp.herd[0] + 1));
+  let made = 0;
+  for (let i = 0; i < n * 3 && made < n; i++) {
+    const x = spot.x + (rand() - 0.5) * 8, z = spot.z + (rand() - 0.5) * 8;
+    const g = groundAt(x, z);
+    if (!g || g.point.y < WORLD.waterLevel + 1 || g.face.normal.y < 0.7 || Math.abs(g.point.y - spot.y) > 4) continue;
+    spawnAnimal(kind, x, g.point.y, z, rand);
+    made++;
+  }
+  return made;
+}
+
+function spawnAnimals(seed) {
+  animalRand = mulberry32(seed * 17 + 11);
+  const area = (WORLD.size / 256) ** 2;
+  for (const [kind, sp] of Object.entries(SPECIES)) {
+    population[kind] = Math.max(1, Math.round(sp.per * area));
+    for (let tries = 0; tries < 12 && animals.filter((a) => a.kind === kind).length < population[kind]; tries++) spawnHerd(kind, animalRand, false);
+  }
+  return animals.length;
+}
+
+// Moves an animal if the spot is walkable: on land, not too steep, no step over 0.9 m, no tree, rock or block in the way.
+function tryMoveAnimal(a, mx, mz) {
+  const S = WORLD.size, nx = a.x + mx, nz = a.z + mz;
+  if (nx < 3 || nz < 3 || nx > S - 3 || nz > S - 3) return false;
+  const g = groundAt(nx, nz, a.y + 2.2);
+  if (!g || g.point.y < WORLD.waterLevel + 0.2 || g.face.normal.y < 0.6 || Math.abs(g.point.y - a.y) > 0.9) return false;
+  const gy = g.point.y;
+  const list = obstacleGrid.get(cellKey(Math.floor(nx / CELL), Math.floor(nz / CELL)));
+  if (list) for (const o of list) {
+    if (o.type === 'box') { if (nx > o.min.x - a.sp.r * 0.5 && nx < o.max.x + a.sp.r * 0.5 && nz > o.min.z - a.sp.r * 0.5 && nz < o.max.z + a.sp.r * 0.5 && gy + 0.3 < o.max.y && gy + a.sp.h > o.min.y) return false; }
+    else if (Math.hypot(nx - o.x, nz - o.z) < o.r + a.sp.r * 0.6 && (o.type !== 'sphere' || o.y + o.r > gy + 0.3)) return false;
+  }
+  a.x = nx; a.z = nz; a.y = gy;
+  return true;
+}
+
+function hurtAnimal(a, dmg, dx, dz) {
+  a.hp -= dmg;
+  a.hurtT = 0.25;
+  const len = Math.hypot(dx, dz) || 1;
+  a.kx = dx / len * 6; a.kz = dz / len * 6;
+  if (a.sp.hostile) a.aggro = 20; else a.flee = 6;
+  if (a.hp <= 0) killAnimal(a);
+}
+
+function killAnimal(a) {
+  world.remove(a.group);
+  a.mats.forEach((m) => m.dispose());
+  animals.splice(animals.indexOf(a), 1);
+  if (currentTarget?.animal === a) currentTarget = null;
+  if (creative) return;
+  const got = [];
+  for (const [id, lo, hi] of a.sp.drops) {
+    const n = lo + Math.floor(Math.random() * (hi - lo + 1));
+    if (n > 0) got.push([id, n]);
+  }
+  give(got);
+}
+
+function updateAnimals(dt) {
+  const px = player.position.x, pz = player.position.z, pfeet = player.position.y - FOOT_OFFSET;
+  for (const a of [...animals]) {
+    const sp = a.sp;
+    const dx = px - a.x, dz = pz - a.z, dist = Math.hypot(dx, dz) || 1e-3, dy = pfeet - a.y;
+    if (dist > 140) continue; // far away animals stay put
+    a.timer -= dt; a.hurtT -= dt; a.attackCd -= dt; a.flee -= dt; a.aggro -= dt;
+
+    let wx = 0, wz = 0, speed = 0;
+    const hunting = sp.hostile && !creative && Math.abs(dy) < 6 && (dist < sp.hostile || (a.aggro > 0 && dist < 30));
+    if (hunting) {
+      a.mode = 'chase'; wx = dx / dist; wz = dz / dist; speed = sp.run;
+      if (dist < 1.3 + sp.r && Math.abs(dy) < 1.8 && a.attackCd <= 0) {
+        a.attackCd = 1.1;
+        damagePlayer(sp.bite, `were killed by a ${sp.name.toLowerCase()}`);
+        player.velocity.x += dx / dist * 6; player.velocity.z += dz / dist * 6; player.velocity.y = Math.max(player.velocity.y, 3);
+      }
+      if (dist < 1.1 + sp.r) speed = 0;
+    } else if (a.flee > 0 || (sp.shy && dist < sp.shy && Math.abs(dy) < 5)) {
+      a.mode = 'flee'; wx = -dx / dist; wz = -dz / dist; speed = sp.run;
+    } else {
+      if (a.timer <= 0) {
+        if (animalRand() < 0.45) { a.mode = 'idle'; a.timer = 2 + animalRand() * 5; }
+        else { a.mode = 'walk'; a.angle = animalRand() * Math.PI * 2; a.timer = 2 + animalRand() * 4; }
+      }
+      if (a.mode === 'walk') { wx = -Math.sin(a.angle); wz = -Math.cos(a.angle); speed = sp.walk; }
+      else a.mode = 'idle';
+    }
+
+    // move (plus knockback), steering around things in the way
+    const decay = Math.exp(-6 * dt);
+    a.kx *= decay; a.kz *= decay;
+    let mx = (wx * speed + a.kx) * dt, mz = (wz * speed + a.kz) * dt;
+    let moved = 0;
+    if (mx || mz) {
+      if (tryMoveAnimal(a, mx, mz)) moved = Math.hypot(mx, mz);
+      else {
+        let ok = false;
+        for (const turn of [0.8, -0.8, 1.6, -1.6]) {
+          const c = Math.cos(turn), s = Math.sin(turn);
+          if (tryMoveAnimal(a, mx * c - mz * s, mx * s + mz * c)) { ok = true; moved = Math.hypot(mx, mz); wx = (mx * c - mz * s); wz = (mx * s + mz * c); break; }
+        }
+        if (!ok && a.mode === 'walk') { a.angle += Math.PI * (0.5 + animalRand()); a.timer = 1 + animalRand() * 2; }
+        if (!ok && a.mode === 'flee') a.flee = Math.min(a.flee, 0.5);
+      }
+    }
+    if (!moved) {
+      // settle onto the ground (it might have been dug away)
+      a.groundT -= dt;
+      if (a.groundT <= 0) {
+        a.groundT = 0.4;
+        const g = groundAt(a.x, a.z, a.y + 1.2);
+        if (g) a.y = g.point.y; else a.y -= 1;
+      }
+    }
+
+    // face where it's going
+    if (wx || wz) {
+      const target = Math.atan2(-wx, -wz);
+      const diff = Math.atan2(Math.sin(target - a.facing), Math.cos(target - a.facing));
+      a.facing += diff * Math.min(1, dt * 6);
+    }
+
+    // animation: legs swing in diagonal pairs, grazers lower their heads while idle, rabbits hop
+    const hs = moved / Math.max(dt, 1e-4);
+    a.phase += dt * hs * (sp.hop ? 3 : 6) / Math.max(0.6, sp.h);
+    const sw = Math.sin(a.phase) * Math.min(1, hs / 2) * 0.7;
+    a.legs.forEach((l, i) => { l.rotation.x = (i === 0 || i === 3) ? sw : -sw; });
+    const headDown = a.mode === 'idle' && sp.graze && Math.sin(a.timer * 0.9) > -0.3 ? -0.7 : 0;
+    a.head.rotation.x += (headDown - a.head.rotation.x) * Math.min(1, dt * 4);
+    const hop = sp.hop && hs > 0.2 ? Math.abs(Math.sin(a.phase)) * 0.25 : 0;
+    a.group.position.set(a.x, a.y + hop, a.z);
+    a.group.rotation.y = a.facing;
+    const flash = a.hurtT > 0 ? 0.6 : 0;
+    for (const m of a.mats) if (m.userData.flash !== flash) { m.userData.flash = flash; m.emissive.setRGB(flash, 0, 0); }
+  }
+
+  // top populations back up now and then, out of sight
+  animalRespawnTimer -= dt;
+  if (animalRespawnTimer <= 0) {
+    animalRespawnTimer = 20;
+    for (const kind of Object.keys(SPECIES)) {
+      if (animals.filter((a) => a.kind === kind).length < population[kind]) { spawnHerd(kind, animalRand, true); break; }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Interaction: aim, break, attack, place, eat, cast
+// ---------------------------------------------------------------------------
+const mouse = { left: false, right: false };
+let testMode = false;                // lets headless tests act without pointer lock
+let swingTime = 0, breakProgress = 0, breakKey = null, attackCd = 0, useCd = 0, warnCd = 0;
+let currentTarget = null;
+const _aimO = new THREE.Vector3(), _aimD = new THREE.Vector3(), _eye = new THREE.Vector3(), _tv = new THREE.Vector3();
+
+const outline = new THREE.LineSegments(
+  new THREE.EdgesGeometry(new THREE.BoxGeometry(1.02, 1.02, 1.02)),
+  new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.6 }),
+);
+outline.visible = false;
+scene.add(outline);
+
+function raySphere(o, d, cx, cy, cz, r) {
+  const ox = o.x - cx, oy = o.y - cy, oz = o.z - cz;
+  const b = ox * d.x + oy * d.y + oz * d.z, c = ox * ox + oy * oy + oz * oz - r * r;
+  const h = b * b - c;
+  if (h < 0) return null;
+  const sq = Math.sqrt(h);
+  return -b - sq >= 0 ? -b - sq : -b + sq >= 0 ? 0 : null;
+}
+
+// What's under the crosshair, within reach of the player: terrain, a block, a tree/bush/boulder, or an animal.
+function pickTarget() {
+  camera.getWorldDirection(_aimD);
+  _aimO.copy(camera.position);
+  _eye.set(player.position.x, player.position.y + EYE_OFFSET, player.position.z);
+  const t0 = Math.max(0, _tv.subVectors(_eye, _aimO).dot(_aimD)); // start level with the player (third person)
+  const t1 = t0 + PLAYER.reach;
+  let best = null;
+  const th = raycastTerrain(_aimO, _aimD, t0, t1);
+  if (th) best = { kind: 'terrain', t: th.distance, point: th.point.clone(), normal: th.face.normal.clone(), hit: th };
+  const bh = voxelRay(_aimO, _aimD, t0, best ? best.t : t1);
+  if (bh) best = { kind: 'block', t: bh.t, key: bh.key, cell: bh.cell, normal: new THREE.Vector3(...bh.normal), type: blocks.get(bh.key).type };
+  const gx = Math.floor(player.position.x / CELL), gz = Math.floor(player.position.z / CELL);
+  for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
+    const list = targetGrid.get(cellKey(gx + i, gz + j));
+    if (list) for (const tg of list) for (const [cx, cy, cz, r] of tg.spheres) {
+      const t = raySphere(_aimO, _aimD, cx, cy, cz, r);
+      if (t !== null && t >= t0 - r && t <= (best ? best.t : t1)) best = { kind: tg.kind, t, target: tg };
+    }
+  }
+  for (const a of animals) {
+    if (Math.abs(a.x - player.position.x) > PLAYER.reach + 3 || Math.abs(a.z - player.position.z) > PLAYER.reach + 3) continue;
+    const t = raySphere(_aimO, _aimD, a.x, a.y + a.sp.h * 0.55, a.z, Math.max(0.35, a.sp.r));
+    if (t !== null && t >= t0 - 1 && t <= (best ? best.t : t1)) best = { kind: 'animal', t, animal: a };
+  }
+  return best;
+}
+
+function terrainMaterialAt(hit) {
+  const p = hit.point, n = hit.face.normal;
+  const edited = editedMaterialAt(p.x - n.x * 0.8, p.y - n.y * 0.8, p.z - n.z * 0.8);
+  if (edited) return edited;
+  const ch = hit.object.userData.chunk;
+  if (ch.render.geometry.attributes.terrainInfo.getZ(hit.faceIndex * 3) < -0.5) return 'crystal';
+  return naturalMaterial(p.x, p.y, p.z, n.y);
+}
+
+function materialOf(t) {
+  switch (t.kind) {
+    case 'tree': return 'wood';
+    case 'bush': return 'plant';
+    case 'rock': return 'stone';
+    case 'block': return BLOCKS[t.type].mat;
+    case 'terrain': return t.material || (t.material = terrainMaterialAt(t.hit));
+  }
+  return 'soft';
+}
+
+function targetName(t) {
+  switch (t.kind) {
+    case 'tree': return { pine: 'Pine tree', oak: 'Oak tree', birch: 'Birch tree' }[t.target.species];
+    case 'bush': return 'Berry bush';
+    case 'rock': return 'Boulder';
+    case 'block': return BLOCKS[t.type].name;
+    case 'animal': return `${t.animal.sp.name}  ${Math.max(0, Math.ceil(t.animal.hp))}/${t.animal.sp.hp}`;
+    case 'terrain': return { dirt: 'Dirt', sand: 'Sand', stone: 'Stone', crystal: 'Crystal' }[materialOf(t)];
+  }
+  return '';
+}
+
+// Seconds to break something with the item in hand (Infinity = can't).
+function breakTime(mat, def) {
+  if (creative) return 0.12;
+  const tool = def?.tool, fast = (def?.tier || 0) >= 2;
+  switch (mat) {
+    case 'wood': return tool === 'axe' ? (fast ? 0.7 : 1.1) : 2.6;
+    case 'plant': return 0.35;
+    case 'soft': return 0.5;
+    case 'dirt': case 'sand': return tool === 'shovel' ? (fast ? 0.25 : 0.4) : 0.9;
+    case 'stone': case 'crystal': return tool === 'pickaxe' ? (fast ? 0.8 : 1.4) : Infinity;
+  }
+  return 1;
+}
+
+// Adds [[id, count], ...] to the inventory and shows what you got.
+function give(list) {
+  if (creative) return;
+  const got = [];
+  let lost = 0;
+  for (const [id, n] of list) {
+    if (n <= 0) continue;
+    const left = addItem(id, n);
+    lost += left;
+    if (n - left > 0) got.push(`+${n - left} ${ITEMS[id].name}`);
+  }
+  if (got.length || lost) toast(got.join('  ') + (lost ? '  (inventory full)' : ''));
+}
+
+const _hide = new THREE.Matrix4().makeScale(0, 0, 0);
+function harvest(tg) {
+  for (const [mesh, i] of tg.parts) { mesh.setMatrixAt(i, _hide); mesh.instanceMatrix.needsUpdate = true; }
+  if (tg.obstacle) gridRemove(obstacleGrid, tg.obstacle);
+  gridRemove(targetGrid, tg);
+  const r = Math.random;
+  if (tg.kind === 'tree') {
+    give([
+      ['log', 2 + Math.round(tg.scale * 2)],
+      ['stick', 1 + Math.floor(r() * 2) + (tg.species === 'pine' ? 1 : 0)],
+      ['apple', tg.species === 'oak' && r() < 0.5 ? 1 + Math.floor(r() * 2) : 0],
+    ]);
+  } else if (tg.kind === 'bush') {
+    give([['berries', r() < 0.8 ? 1 + Math.floor(r() * 3) : 0], ['stick', 1]]);
+  } else if (tg.kind === 'rock') {
+    give([['stone', 2 + Math.round(tg.s * 2)]]);
+  }
+}
+
+function doBreak(t) {
+  if (t.kind === 'tree' || t.kind === 'bush' || t.kind === 'rock') { harvest(t.target); return; }
+  if (t.kind === 'block') { const b = removeBlock(t.key); if (b) give([[b.type, 1]]); return; }
+  if (t.kind === 'terrain') {
+    const mat = materialOf(t);
+    const center = t.point.clone().addScaledVector(t.normal, -0.6);
+    const flipped = editTerrain(center, 1.9, false);
+    if (!flipped) return;
+    // plants standing on the removed ground come down with it
+    const gx = Math.floor(center.x / CELL), gz = Math.floor(center.z / CELL);
+    for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
+      for (const tg of [...(targetGrid.get(cellKey(gx + i, gz + j)) || [])]) {
+        if (Math.hypot(tg.x - center.x, tg.y - center.y, tg.z - center.z) < 2.6) harvest(tg);
+      }
+    }
+    give(mat === 'crystal' ? [['crystal', 1 + Math.floor(Math.random() * 2)]] : [[mat, 1]]);
+  }
+}
+
+// Where a block would go: the empty cell in front of the face you're looking at.
+function placementCell(t) {
+  if (!t || (t.kind !== 'terrain' && t.kind !== 'block')) return null;
+  if (t.kind === 'block') return [t.cell[0] + t.normal.x, t.cell[1] + t.normal.y, t.cell[2] + t.normal.z];
+  return [Math.floor(t.point.x + t.normal.x * 0.5), Math.floor(t.point.y + t.normal.y * 0.5), Math.floor(t.point.z + t.normal.z * 0.5)];
+}
+
+const _bmin = new THREE.Vector3(), _bmax = new THREE.Vector3(), _sg = new THREE.Line3(), _p1 = new THREE.Vector3(), _p2 = new THREE.Vector3();
+function cellFree([x, y, z]) {
+  if (x < 1 || z < 1 || y < 1 || x > WORLD.size - 2 || z > WORLD.size - 2 || y > WORLD.height - 2) return false;
+  if (blocks.has(blockKey(x, y, z))) return false;
+  // not inside the player
+  _bmin.set(x, y, z); _bmax.set(x + 1, y + 1, z + 1);
+  _sg.start.copy(player.position); _sg.end.copy(player.position); _sg.end.y -= PLAYER.segment;
+  _p2.copy(_sg.start).clamp(_bmin, _bmax);
+  for (let k = 0; k < 3; k++) { _sg.closestPointToPoint(_p2, true, _p1); _p2.copy(_p1).clamp(_bmin, _bmax); }
+  _sg.closestPointToPoint(_p2, true, _p1);
+  if (_p1.distanceTo(_p2) < PLAYER.radius - 0.02) return false;
+  // not inside an animal
+  return !animals.some((a) => a.x + a.sp.r * 0.6 > x && a.x - a.sp.r * 0.6 < x + 1 && a.z + a.sp.r * 0.6 > z && a.z - a.sp.r * 0.6 < z + 1 && a.y < y + 1 && a.y + a.sp.h > y);
+}
+
+function consumeSelected() {
+  if (creative) return;
+  const s = slots[selectedSlot];
+  if (!s) return;
+  if (!--s.count) slots[selectedSlot] = null;
+  renderInventory();
+}
+
+// Right click
+function useItem(t) {
+  const s = slots[selectedSlot], def = s && ITEMS[s.id];
+  if (t?.kind === 'block' && BLOCKS[t.type].station && !(def && (def.place || def.terrain))) { setInventoryOpen(true); return; }
+  if (!def) return;
+  if (def.place) {
+    const cell = placementCell(t);
+    if (!cell || !cellFree(cell)) return;
+    if (placeBlock(def.place, ...cell)) consumeSelected();
+  } else if (def.terrain) {
+    if (!t || (t.kind !== 'terrain' && t.kind !== 'block')) return;
+    const p = t.kind === 'terrain' ? t.point : new THREE.Vector3(t.cell[0] + 0.5, t.cell[1] + 0.5, t.cell[2] + 0.5).addScaledVector(t.normal, 0.5);
+    const center = p.clone().addScaledVector(t.normal, 0.9);
+    _sg.start.copy(player.position); _sg.end.copy(player.position); _sg.end.y -= PLAYER.segment;
+    _sg.closestPointToPoint(center, true, _p1);
+    if (_p1.distanceTo(center) < 1.9 + PLAYER.radius + 0.3) { toast('Too close to place ground here'); return; }
+    if (editTerrain(center, 1.9, true, def.terrain)) consumeSelected();
+  } else if (def.food) {
+    if (stats.hunger > 99 && !creative) { toast("You're not hungry"); return; }
+    stats.hunger = Math.min(100, stats.hunger + def.food);
+    if (def.heal) stats.health = Math.min(100, stats.health + def.heal);
+    consumeSelected();
+    toast(`Ate ${def.name.toLowerCase()}`);
+    useCd = 0.5;
+  } else if (def.heal) {
+    if (stats.health >= 100) { toast('Health is already full'); return; }
+    stats.health = Math.min(100, stats.health + def.heal);
+    consumeSelected();
+    useCd = 0.5;
+  } else if (def.mana) {
+    if (stats.mana >= 100) { toast('Mana is already full'); return; }
+    stats.mana = Math.min(100, stats.mana + def.mana);
+    consumeSelected();
+    useCd = 0.5;
+  } else if (def.wand) {
+    castBolt();
+  } else if (def.armour) {
+    if (stats.armour >= def.armour) { toast('Already wearing armour'); return; }
+    stats.armour = def.armour;
+    consumeSelected();
+    toast(`Wearing ${def.name.toLowerCase()}`);
+  }
+}
+
+// Wand bolts
+const bolts = [];
+const boltGeo = new THREE.IcosahedronGeometry(0.16, 0);
+const boltMat = new THREE.MeshBasicMaterial({ color: 0x9fe8ff });
+const _bd = new THREE.Vector3();
+function castBolt() {
+  if (stats.mana < BOLT_COST && !creative) { toast('Not enough mana'); return; }
+  if (!creative) stats.mana -= BOLT_COST;
+  camera.getWorldDirection(_bd);
+  const m = new THREE.Mesh(boltGeo, boltMat);
+  m.position.set(player.position.x, player.position.y + EYE_OFFSET - 0.25, player.position.z).addScaledVector(_bd, 0.7);
+  world.add(m);
+  bolts.push({ mesh: m, vel: _bd.clone().multiplyScalar(30), life: 1.5 });
+  useCd = 0.35;
+}
+
+function updateBolts(dt) {
+  for (const b of [...bolts]) {
+    b.life -= dt;
+    const step = b.vel.length() * dt;
+    _bd.copy(b.vel).normalize();
+    let done = b.life <= 0 || !!raycastTerrain(b.mesh.position, _bd, 0, step);
+    if (!done) {
+      b.mesh.position.addScaledVector(b.vel, dt);
+      const p = b.mesh.position;
+      if (blocks.has(blockKey(Math.floor(p.x), Math.floor(p.y), Math.floor(p.z)))) done = true;
+      for (const a of animals) {
+        if (Math.hypot(p.x - a.x, p.y - (a.y + a.sp.h * 0.55), p.z - a.z) < a.sp.r + 0.35) { hurtAnimal(a, 10, b.vel.x, b.vel.z); done = true; break; }
+      }
+      b.mesh.rotation.x += dt * 10; b.mesh.rotation.y += dt * 7;
+    }
+    if (done) { world.remove(b.mesh); bolts.splice(bolts.indexOf(b), 1); }
+  }
+}
+
+const targetEl = document.getElementById('target');
+const breakbarEl = document.getElementById('breakbar');
+const breakFillEl = breakbarEl.firstElementChild;
+
+function targetId(t) {
+  if (!t) return null;
+  if (t.kind === 'terrain') return `g${Math.floor(t.point.x / 2)},${Math.floor(t.point.y / 2)},${Math.floor(t.point.z / 2)}`;
+  if (t.kind === 'block') return t.key;
+  return t.target || t.animal;
+}
+
+function updateInteraction(dt) {
+  swingTime = Math.max(0, swingTime - dt);
+  attackCd -= dt; useCd -= dt; warnCd -= dt;
+  const active = (locked || testMode) && !inventoryOpen;
+  currentTarget = active ? pickTarget() : null;
+  const t = currentTarget;
+  const held = slots[selectedSlot], def = held && ITEMS[held.id];
+
+  // outline: where a held block would go, otherwise the block you're looking at
+  const placeCell = def?.place ? placementCell(t) : null;
+  if (placeCell && cellFree(placeCell)) {
+    outline.position.set(placeCell[0] + 0.5, placeCell[1] + 0.5, placeCell[2] + 0.5);
+    outline.material.color.set(0xffffff); outline.visible = true;
+  } else if (t?.kind === 'block') {
+    outline.position.set(t.cell[0] + 0.5, t.cell[1] + 0.5, t.cell[2] + 0.5);
+    outline.material.color.set(0x000000); outline.visible = true;
+  } else outline.visible = false;
+  targetEl.textContent = t ? targetName(t) : '';
+
+  if (active && mouse.left) {
+    if (t?.kind === 'animal') {
+      breakProgress = 0;
+      if (attackCd <= 0) {
+        attackCd = 0.45; swingTime = 0.25;
+        hurtAnimal(t.animal, def?.damage ?? 2, t.animal.x - player.position.x, t.animal.z - player.position.z);
+      }
+    } else if (t) {
+      const id = targetId(t);
+      if (id !== breakKey) { breakKey = id; breakProgress = 0; }
+      const time = breakTime(materialOf(t), def);
+      if (!isFinite(time)) {
+        if (warnCd <= 0) { toast(`You need a pickaxe to break ${materialOf(t) === 'crystal' ? 'crystal' : 'stone'}`); warnCd = 2.5; }
+        breakProgress = 0;
+      } else {
+        breakProgress += dt / time;
+        if (breakProgress >= 1) { doBreak(t); breakProgress = 0; breakKey = null; }
+      }
+    } else { breakProgress = 0; breakKey = null; }
+  } else { breakProgress = 0; breakKey = null; }
+
+  if (active && mouse.right && useCd <= 0) { useCd = 0.25; swingTime = 0.2; useItem(t); }
+
+  breakbarEl.style.display = breakProgress > 0 ? 'block' : 'none';
+  breakFillEl.style.width = `${Math.min(1, breakProgress) * 100}%`;
+}
+
+// ---------------------------------------------------------------------------
+// Underwater: dense blue fog and a tint when the camera dips below the surface
+// ---------------------------------------------------------------------------
+const waterFogColor = new THREE.Color(0x1b5878);
+const underwaterEl = document.getElementById('underwater');
+let cameraUnderwater = false;
+function updateUnderwater() {
+  const p = camera.position, S = WORLD.size;
+  const under = p.y < WORLD.waterLevel - 0.05 && p.x > 1 && p.z > 1 && p.x < S - 1 && p.z < S - 1;
+  if (under === cameraUnderwater) return;
+  cameraUnderwater = under;
+  scene.fog.color.copy(under ? waterFogColor : skyColor);
+  scene.fog.near = under ? 0.5 : 140;
+  scene.fog.far = under ? 30 : 460;
+  scene.background = under ? waterFogColor : skyColor;
+  underwaterEl.style.display = under ? 'block' : 'none';
+}
+
+const statEls = { hp: document.querySelector('#hp i'), food: document.querySelector('#food i'), mana: document.querySelector('#mana i') };
+function renderStats() {
+  statEls.hp.style.width = `${Math.max(0, stats.health)}%`;
+  statEls.food.style.width = `${stats.hunger}%`;
+  statEls.mana.style.width = `${stats.mana}%`;
+}
+
+function setCreative(on) {
+  creative = on;
+  document.getElementById('stats').style.display = on ? 'none' : 'flex';
+  document.getElementById('mode').style.display = on ? 'block' : 'none';
+  if (!on) player.velocity.y = 0;
+  toast(on ? 'Creative mode: fly with Space and Shift, instant breaking, all items in the inventory' : 'Survival mode');
+  renderInventory();
+}
+
+defineItems();
 
 // ---------------------------------------------------------------------------
 // Input + UI
@@ -1342,6 +2621,7 @@ function updateOverlay() {
 overlay.addEventListener('click', () => renderer.domElement.requestPointerLock());
 document.addEventListener('pointerlockchange', () => {
   locked = document.pointerLockElement === renderer.domElement;
+  if (!locked) mouse.left = mouse.right = false;
   updateOverlay();
 });
 document.addEventListener('pointerlockerror', updateOverlay);
@@ -1354,6 +2634,16 @@ document.addEventListener('mousemove', (e) => {
 function clampPitch() {
   pitch = thirdPerson ? THREE.MathUtils.clamp(pitch, -1.35, 0.6) : THREE.MathUtils.clamp(pitch, -1.55, 1.55);
 }
+document.addEventListener('mousedown', (e) => {
+  if (!locked || inventoryOpen) return;
+  if (e.button === 0) mouse.left = true;
+  if (e.button === 2) { mouse.right = true; useCd = Math.min(useCd, 0); }
+});
+document.addEventListener('mouseup', (e) => {
+  if (e.button === 0) mouse.left = false;
+  if (e.button === 2) mouse.right = false;
+});
+document.addEventListener('contextmenu', (e) => { if (locked) e.preventDefault(); });
 window.addEventListener('wheel', (e) => {
   if (!locked || inventoryOpen) return;
   selectSlot(selectedSlot + Math.sign(e.deltaY));
@@ -1370,15 +2660,15 @@ window.addEventListener('keydown', (e) => {
     thirdPerson = !thirdPerson;
     if (!thirdPerson) yaw = player.facing;
     clampPitch();
-    crosshair.style.display = thirdPerson ? 'none' : 'block';
   }
+  if (e.code === 'KeyG') setCreative(!creative);
   if (e.code === 'KeyZ') camDistIndex = (camDistIndex + 1) % CAM_DISTANCES.length;
   if (e.code === 'KeyF') { lanternOn = !lanternOn; lantern.visible = lanternOn; }
   if (e.code === 'KeyR') respawn();
   if (e.code === 'KeyN') newWorld(Math.floor(Math.random() * 1e6));
 });
 window.addEventListener('keyup', (e) => { keys[e.code] = false; });
-window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
+window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; mouse.left = mouse.right = false; });
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
@@ -1412,18 +2702,28 @@ function frame() {
   gameTime += dt;
   updatePlayer(dt);
   updateCamera(dt);
+  updateInteraction(dt);
+  updateAnimals(dt);
+  updateBolts(dt);
+  updateStats(dt);
+  renderStats();
+  updateUnderwater();
+  updateCampfires(gameTime);
   updateVolcanoes(dt, gameTime);
   terrainUniforms.uTime.value = gameTime;
+  waterUniforms.uTime.value = gameTime;
+  crosshair.style.display = (locked || testMode) && !inventoryOpen ? 'block' : 'none';
   if (clouds) clouds.position.x = (clouds.position.x + dt * 1.2) % (WORLD.size * 0.5);
 
   fpsAcc += dt; fpsFrames++;
   if (fpsAcc > 0.5) { fps = Math.round(fpsFrames / fpsAcc); fpsAcc = 0; fpsFrames = 0; }
   const feet = player.position.y - FOOT_OFFSET;
   const underground = feet < terrainFns.surfaceHeight(player.position.x, player.position.z) - 4;
-  const state = player.onGround ? 'grounded' : contact.steep ? 'sliding' : player.inWater ? 'in water' : 'airborne';
+  const state = creative ? 'flying' : player.onGround ? 'grounded' : contact.steep ? 'sliding' : player.inWater ? 'in water' : 'airborne';
   hud.textContent =
-    `${thirdPerson ? 'Third person' : 'First person'}  ·  ${fps} fps  ·  seed ${worldStats.seed}  ·  map ${WORLD.size} m\n` +
-    `pos ${player.position.x.toFixed(1)}, ${feet.toFixed(1)}, ${player.position.z.toFixed(1)}  ·  ${state}${underground ? '  ·  in a cave' : ''}`;
+    `${thirdPerson ? 'Third person' : 'First person'}  ·  ${creative ? 'Creative' : 'Survival'}  ·  ${fps} fps  ·  seed ${worldStats.seed}  ·  map ${WORLD.size} m\n` +
+    `pos ${player.position.x.toFixed(1)}, ${feet.toFixed(1)}, ${player.position.z.toFixed(1)}  ·  ${state}${underground ? '  ·  in a cave' : ''}` +
+    `${stats.armour ? '  ·  armour' : ''}  ·  ${animals.length} animals`;
 
   renderer.render(scene, camera);
   requestAnimationFrame(frame);
@@ -1439,6 +2739,10 @@ requestAnimationFrame(() => setTimeout(() => {
     player, keys, contact, worldStats: () => worldStats, terrain: () => terrainFns, groundAt,
     setView: (tp) => { thirdPerson = tp; clampPitch(); }, setLook: (y, p) => { yaw = y; pitch = p; clampPitch(); },
     setInventoryOpen, selectSlot, setCamDistance: (i) => { camDistIndex = i; },
+    mouse, stats, animals, blocks, chunks: () => chunks, editTerrain, pickTarget, doBreak, useItem, placeBlock, craft, RECIPES,
+    setCreative, isCreative: () => creative, setTestMode: (on) => { testMode = on; }, target: () => currentTarget,
+    spawnAnimal: (kind, x, z) => { const g = groundAt(x, z); return g && spawnAnimal(kind, x, g.point.y, z, Math.random); },
+    underwater: () => cameraUnderwater, time: () => gameTime, damagePlayer, targets: () => [...targetGrid.values()].flat(),
   };
   frame();
 }, 30));
