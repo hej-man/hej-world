@@ -1,12 +1,13 @@
 # Terrain World
 
-A low-poly 3D survival sandbox in the browser: procedurally generated mountains, a river valley,
+A 3D survival sandbox in the browser: procedurally generated mountains, a river valley,
 big caves and a volcano, dense forests and wandering animals. Walk around in first or third
 person, chop trees, dig and add ground, mine stone and crystal, craft tools and build with blocks,
 while keeping an eye on your health, hunger and mana. A creative mode is there for testing.
 
 Built with **Three.js** (r160) and **three-mesh-bvh** for collision, both loaded from the
-jsDelivr CDN. No build step and no install.
+jsDelivr CDN. No build step and no install. Ground and bark use photo-scanned textures from
+[Poly Haven](https://polyhaven.com) (CC0, public domain), lit by a sky with soft shadows and haze.
 
 ## Run it
 
@@ -16,6 +17,23 @@ If your browser blocks it when opened as a file, serve the folder instead:
     python3 -m http.server 8000      # then open http://localhost:8000
 
 Add `?seed=1234` to the URL to get a specific world; the current seed is shown top-left.
+Add `?quality=low` on a slower computer or laptop (smaller textures and shadow maps, lower
+resolution, fewer leaves).
+
+### Textures
+
+The game downloads its ground textures (grass, forest floor, dirt, sand, rock, snow, bark) from
+Poly Haven when it starts, which takes a few seconds; until they arrive, and whenever there is
+no internet, it uses generated stand-ins. A message at the bottom says which you got. To keep
+copies in the project instead:
+
+    sh get-textures.sh                 # saves 1K JPGs into assets/textures (about 10 MB)
+    python3 -m http.server 8000        # local copies are only used when the folder is served
+
+Browsers don't let WebGL read images from a page opened straight from disk, so with `index.html`
+opened as a file the textures always come from Poly Haven. Which Poly Haven texture each layer
+uses is listed in `TEX_LAYERS` near the top of the terrain code; each layer has backups in case
+one is renamed. All of them are CC0, so no credit is required, but it's nice to give it.
 
 ## Controls
 
@@ -85,9 +103,10 @@ right to craft it once, shift-click to craft as many as you can.
 
 The `WORLD` and `PLAYER` objects at the top of the script hold the main knobs:
 
-* `WORLD.size` – map width/depth in metres (default 256; larger takes longer to generate).
+* `WORLD.size` – map width/depth in metres (default 1024, which takes several seconds to
+  generate; 256 takes about one second).
 * `WORLD.height` – vertical extent (default 128 m; peaks reach ~110 m).
-* `WORLD.voxel` – metres between terrain samples. Bigger means larger low-poly facets.
+* `WORLD.voxel` – metres between terrain samples. Bigger means coarser ground and faster generation.
 * `WORLD.treeSpacing` – smaller means denser forests.
 * `PLAYER.maxSlopeDeg` – slopes steeper than this can't be stood on, walked up or jumped from.
 * `PLAYER.reach`, `PLAYER.flySpeed` – how far you can break/place, and creative flying speed.
@@ -109,7 +128,7 @@ game.getSelectedItem();      // stack in the selected hotbar slot, or null
 
 ## How it works
 
-* **Terrain** is a 3D density field sampled every 2 m over 256 × 128 × 256 m:
+* **Terrain** is a 3D density field sampled every 2 m over 1024 × 128 × 1024 m:
   * domain-warped fractal noise for rolling land,
   * eroded-looking ridged multifractal mountains rising away from the valley, with crags and
     overhangs from 3D noise, rock strata on cliffs and snow above ~85 m,
@@ -119,21 +138,53 @@ game.getSelectedItem();      // stack in the selected hotbar slot, or null
   * large worm caves, huge caverns with crystals, and one guaranteed tunnel into a big cavern
     starting at a flat ledge on the valley side, where you spawn,
   * a flood fill that removes floating rock.
-* **Meshing** uses Surface Nets in 32 × 32 m chunks, then every triangle gets one flat colour
-  (height, slope, biome, depth) for a faceted low-poly look. Each chunk keeps an indexed copy
-  with a BVH for physics. Digging or adding ground edits the density field and rebuilds only the
-  chunks it touches (a few milliseconds).
-* **Texturing** is all procedural, with no image files: per-face biome colours with noisy
-  borders, a shader that blends rock onto steep slopes and snow onto high ground, wavy rock
-  strata on cliffs (dark basalt bands on volcanoes that glow near the crater), and a fine noise
-  grain inside each face.
+* **Meshing** uses Surface Nets in 32 × 32 m chunks. Vertex normals come from the gradient of
+  the density field, so the ground is smoothly rounded and chunk borders don't show. Each
+  vertex also stores how much grass, forest floor, dirt and sand covers it (from height, biome
+  and noise). The collider and the render mesh share one indexed geometry with a BVH for
+  physics. Digging or adding ground edits the density field and rebuilds only the chunks it
+  touches (a few milliseconds).
+* **Texturing**: seven photo texture layers (colour, normal, roughness and ambient occlusion at
+  1024 × 1024) are packed into two texture arrays, so the terrain shader needs only two texture
+  samplers. The shader blends rock onto steep slopes and snow onto high ground, breaks up the
+  borders between layers with noise, projects every texture from three sides (triplanar) so
+  cliffs aren't stretched, adds large-scale colour variation to hide repetition, darkens wet
+  ground at the waterline, turns volcano rock to basalt and makes lava veins, crater rims and
+  cave crystals glow.
+* **Lighting**: a sky dome (horizon haze to deep blue, with a sun glow) is pre-filtered once
+  into an environment map that lights everything from the whole sky (image-based lighting).
+  The sun casts cascaded shadows: a sharp 2048² map for the nearest ~55 m and a coarser one out
+  to 220 m, faded into each other. Caves get almost no sky light. ACES tone mapping.
+* **Fog** is height fog applied to every material: thick in the valleys and thinner with
+  altitude, plus light haze at any height, warmer towards the sun, fading into the sky's
+  horizon colour so distant hills melt into it.
 * **Vegetation**: forests of pine, oak and birch placed from a forest-density map, plus bushes
-  and boulders. Trunks and boulders are solid.
+  and boulders. Leaves are clumps of alpha-cut cards with a drawn leaf or needle texture around
+  a dark core, with normals pointing out of the clump so it shades like a soft volume; trunks
+  use the bark texture; boulders are noise-displaced spheres with the rock texture. Trunks and
+  boulders are solid. Clouds and volcano smoke are soft billboards.
 * **Blocks** are 1 m cubes on a grid, one instanced mesh per block type, with box collision.
 * **Animals** are built from boxes; they wander, graze, steer around trees and blocks, avoid
   water and steep ground, and follow the terrain with downward raycasts.
-* **Water** is a finely divided plane whose vertices bob in the shader, so waves show as facets.
-  Under the surface the fog turns dense and blue and the screen gets a tint.
+* **Water** is a smooth plane with a slow swell; ripples are computed per pixel from a few
+  travelling waves and moving noise. It reflects the sky (Fresnel: clear when looking down,
+  mirror-like at grazing angles) and a small height map of the lake bed makes the shallows
+  turquoise and see-through, with foam at the shore. Under the surface the fog turns dense and
+  blue and the screen gets a tint.
+
+* **Distance.** On the 1024 m map, terrain chunks further than 480 m aren't drawn (the fog
+  reaches the sky colour there), vegetation is grouped into 96 m tiles that switch to simpler
+  trees beyond about 140 m and disappear at 440 m, and animals further than 220 m are hidden.
+  With `?quality=low` these are 380, 90 and 340 m.
+
+### Browser limits
+
+These were traded for speed: the water reflects the sky but not the hills or trees (that needs
+rendering the scene twice); there is no screen-space ambient occlusion or global illumination;
+shadows stop at 220 m, where the haze takes over; trees are leaf cards rather than modelled
+branches; resolution is capped at 1.5× on high-density screens; and the textures take about
+70 MB of video memory (about 18 MB with `?quality=low`). If it stutters, try `?quality=low`;
+the frame rate is shown top-left.
 * **Character**: a 1.8 m capsule. Each collision push is classified as walkable ground, a steep
   slope (pushed out sideways only, so it can't lift you) or a ceiling, so you slide down slopes
   steeper than 47° and can't jump or walk up them. Also gravity, swimming, sprinting and a
