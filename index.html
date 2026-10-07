@@ -5,17 +5,47 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Terrain World</title>
 <style>
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #8fb8de; font-family: system-ui, sans-serif; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #9cc3e6; font-family: system-ui, sans-serif; user-select: none; }
   canvas { display: block; }
+  kbd { background: #333; border: 1px solid #555; border-radius: 4px; padding: 0 6px; font-size: 13px; }
+
   #overlay {
     position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
-    background: rgba(10, 20, 30, 0.55); color: #fff; cursor: pointer; text-align: center;
+    background: rgba(10, 20, 30, 0.55); color: #fff; cursor: pointer; text-align: center; z-index: 20;
   }
-  #overlay .box { background: rgba(0,0,0,0.55); padding: 24px 32px; border-radius: 12px; max-width: 420px; line-height: 1.6; }
+  #overlay .box { background: rgba(0,0,0,0.6); padding: 24px 32px; border-radius: 12px; max-width: 460px; line-height: 1.7; }
   #overlay h1 { margin: 0 0 8px; font-size: 22px; }
-  #overlay kbd { background: #333; border: 1px solid #555; border-radius: 4px; padding: 0 6px; font-size: 13px; }
+
   #hud { position: fixed; left: 12px; top: 10px; color: #fff; font-size: 13px; text-shadow: 0 1px 2px #000; pointer-events: none; white-space: pre; }
   #crosshair { position: fixed; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; background: rgba(255,255,255,0.85); box-shadow: 0 0 2px #000; display: none; pointer-events: none; }
+  #toast { position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%); color: #fff; font-size: 15px; text-shadow: 0 1px 3px #000; pointer-events: none; opacity: 0; transition: opacity 0.3s; }
+  #damage { position: fixed; inset: 0; background: rgba(255, 60, 0, 0.45); pointer-events: none; opacity: 0; transition: opacity 0.6s; }
+
+  /* Hotbar + inventory */
+  .slot {
+    width: 48px; height: 48px; box-sizing: border-box; position: relative;
+    background: rgba(30, 30, 34, 0.72); border: 2px solid rgba(255,255,255,0.18); border-radius: 6px;
+    display: flex; align-items: center; justify-content: center; font-size: 26px; color: #fff;
+  }
+  .slot .count { position: absolute; right: 4px; bottom: 1px; font-size: 13px; font-weight: 700; text-shadow: 0 1px 2px #000; }
+  .slot .key { position: absolute; left: 4px; top: 1px; font-size: 10px; opacity: 0.55; }
+  .slot .swatch { width: 26px; height: 26px; border-radius: 5px; box-shadow: inset 0 -3px 0 rgba(0,0,0,0.25); }
+  #hotbar { position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); display: flex; gap: 4px; padding: 4px; background: rgba(0,0,0,0.25); border-radius: 9px; z-index: 5; }
+  #hotbar .slot.selected { border-color: #fff; box-shadow: 0 0 0 2px rgba(255,255,255,0.35); background: rgba(70, 70, 80, 0.8); }
+  #inventory {
+    position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 15; display: none;
+    background: rgba(28, 30, 36, 0.94); border: 1px solid rgba(255,255,255,0.15); border-radius: 12px; padding: 16px 18px 18px; color: #fff;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+  }
+  #inventory h2 { margin: 0 0 10px; font-size: 16px; font-weight: 600; display: flex; justify-content: space-between; }
+  #inventory h2 span { font-size: 12px; font-weight: 400; opacity: 0.6; }
+  #inventory .grid { display: grid; grid-template-columns: repeat(9, 48px); gap: 4px; }
+  #inventory .sep { height: 12px; }
+  #inventory .slot { cursor: pointer; }
+  #inventory .slot:hover { border-color: rgba(255,255,255,0.55); }
+  #inventory .empty-note { margin-top: 10px; font-size: 12px; opacity: 0.55; }
+  #held { position: fixed; pointer-events: none; z-index: 30; display: none; background: none; border: none; }
+  #tooltip { position: fixed; pointer-events: none; z-index: 31; display: none; background: rgba(0,0,0,0.85); color: #fff; font-size: 12px; padding: 3px 7px; border-radius: 4px; }
 </style>
 <script type="importmap">
 {
@@ -32,13 +62,26 @@
   <div id="loading">Generating terrain…</div>
   <div id="controls" style="display:none">
     Click to play<br><br>
-    <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move &nbsp; <kbd>Shift</kbd> sprint &nbsp; <kbd>Space</kbd> jump<br>
-    Mouse look &nbsp; <kbd>V</kbd> first / third person &nbsp; Wheel zoom<br>
+    <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move &nbsp; <kbd>Shift</kbd> sprint &nbsp; <kbd>Space</kbd> jump / swim<br>
+    Mouse look &nbsp; <kbd>V</kbd> first / third person &nbsp; <kbd>Z</kbd> camera distance<br>
+    <kbd>1</kbd>–<kbd>9</kbd> or wheel: hotbar &nbsp; <kbd>E</kbd> inventory<br>
     <kbd>F</kbd> lantern &nbsp; <kbd>R</kbd> respawn &nbsp; <kbd>N</kbd> new world &nbsp; <kbd>Esc</kbd> pause
   </div>
 </div></div>
 <div id="hud"></div>
 <div id="crosshair"></div>
+<div id="toast"></div>
+<div id="damage"></div>
+<div id="hotbar"></div>
+<div id="inventory">
+  <h2>Inventory <span>click to move · right-click to split · shift-click to quick move</span></h2>
+  <div class="grid" id="inv-main"></div>
+  <div class="sep"></div>
+  <div class="grid" id="inv-hotbar"></div>
+  <div class="empty-note" id="inv-note">Nothing collected yet. Items you pick up will appear here.</div>
+</div>
+<div id="held" class="slot"></div>
+<div id="tooltip"></div>
 
 <script type="module">
 import * as THREE from 'three';
@@ -49,22 +92,28 @@ THREE.BufferGeometry.prototype.disposeBoundsTree = disposeBoundsTree;
 THREE.Mesh.prototype.raycast = acceleratedRaycast;
 
 // ---------------------------------------------------------------------------
-// Settings
+// Settings: change the map size here
 // ---------------------------------------------------------------------------
 const WORLD = {
-  sizeX: 96, sizeY: 64, sizeZ: 96, // samples per axis (1 sample = 1 m): small area
-  voxel: 1.0,
-  waterLevel: 12,
-  caveFloor: 13, // caves are never carved below this (keeps them above the water)
+  size: 256,         // width and depth of the map in metres (try 192, 256, 320)
+  height: 128,       // vertical extent in metres
+  voxel: 2,          // metres between terrain samples; bigger = larger low-poly facets, faster generation
+  waterLevel: 20,
+  treeSpacing: 2.6,  // smaller = denser forests
 };
+WORLD.caveFloor = WORLD.waterLevel + 1;                                // caves stay above the water
+WORLD.volcanoes = Math.max(1, Math.round((WORLD.size / 256) ** 2));  // about one per 256 x 256 m
+
 const PLAYER = {
   radius: 0.4,
-  segment: 1.0,      // capsule segment length; total height = segment + 2 * radius = 1.8 m
-  walkSpeed: 5,
-  sprintSpeed: 9,
+  segment: 1.0,        // capsule segment; total height = segment + 2 * radius = 1.8 m
+  walkSpeed: 5.5,
+  sprintSpeed: 10,
   jumpSpeed: 8.5,
   gravity: -25,
+  maxSlopeDeg: 47,     // steeper than this you can't stand, walk up or jump from
 };
+const SLOPE_Y = Math.cos(THREE.MathUtils.degToRad(PLAYER.maxSlopeDeg));
 
 // ---------------------------------------------------------------------------
 // Seeded simplex noise (2D + 3D)
@@ -142,133 +191,190 @@ function makeNoise(seed) {
 
 const smoothstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 const lerp = (a, b, t) => a + (b - a) * t;
+const smax = (a, b, k) => { const h = Math.max(k - Math.abs(a - b), 0) / k; return Math.max(a, b) + h * h * k * 0.25; };
+const hash1 = (n) => { const s = Math.sin(n * 12.9898) * 43758.5453; return s - Math.floor(s); };
 
 // ---------------------------------------------------------------------------
-// Terrain: density field (positive = solid rock, negative = air)
+// Terrain: height functions + 3D density field (positive = rock, negative = air)
+// All coordinates are in metres.
 // ---------------------------------------------------------------------------
 function createTerrainFunctions(seed) {
   const { noise2, noise3 } = makeNoise(seed);
   const rand = mulberry32(seed * 7 + 3);
-  const { sizeX, sizeZ, waterLevel } = WORLD;
+  const S = WORLD.size, W = WORLD.waterLevel, H = WORLD.height;
 
   const fbm2 = (x, z, oct) => { let a = 1, f = 1, s = 0, n = 0; for (let o = 0; o < oct; o++) { s += a * noise2(x * f, z * f); n += a; a *= 0.5; f *= 2; } return s / n; };
-  const ridged2 = (x, z, oct) => { let a = 1, f = 1, s = 0, n = 0; for (let o = 0; o < oct; o++) { const r = 1 - Math.abs(noise2(x * f + 31.7, z * f - 11.3)); s += a * r * r; n += a; a *= 0.5; f *= 2.1; } return s / n; };
+  // ridged multifractal: sharp crests, with detail suppressed in valleys (looks eroded)
+  const ridged2 = (x, z, oct) => {
+    let a = 1, f = 1, s = 0, n = 0, weight = 1;
+    for (let o = 0; o < oct; o++) {
+      let r = 1 - Math.abs(noise2(x * f + 31.7, z * f - 11.3));
+      r *= r * weight;
+      weight = Math.min(1, r * 1.6);
+      s += a * r; n += a; a *= 0.5; f *= 2.05;
+    }
+    return s / n;
+  };
 
-  // The valley follows a winding river line across the map (along X).
+  // The river winds across the map along X.
   const riverPhase = rand() * 100;
-  const riverZ = (x) => sizeZ * 0.5 + noise2(x * 0.018, riverPhase) * sizeZ * 0.22;
+  const riverZ = (x) => S * 0.5 + noise2(x * 0.006, riverPhase) * S * 0.24;
+  const riverDist = (x, z) => Math.abs(z - riverZ(x));
 
-  function valleyFactor(x, z) {
-    const d = Math.abs(z - riverZ(x));
-    return 1 - smoothstep(4, 18, d); // 1 at the river bed, 0 away from the valley
-  }
+  // domain warp makes features less blobby and more natural
+  const warpX = (x, z) => x + noise2(x * 0.004 + 11, z * 0.004 - 7) * 28;
+  const warpZ = (x, z) => z + noise2(x * 0.004 - 31, z * 0.004 + 5) * 28;
 
   function mountainMask(x, z) {
-    const d = Math.abs(z - riverZ(x));
-    const m = smoothstep(-0.15, 0.45, noise2(x * 0.012 + 100, z * 0.012 - 50));
-    return m * smoothstep(12, 30, d); // mountains rise away from the valley
+    const m = smoothstep(-0.15, 0.45, noise2(warpX(x, z) * 0.0045 + 100, warpZ(x, z) * 0.0045 - 50));
+    return m * smoothstep(25, 75, riverDist(x, z));
   }
 
-  // Surface height (before 3D detail and caves)
-  function baseHeight(x, z) {
-    let h = 22 + fbm2(x * 0.025, z * 0.025, 4) * 4;          // rolling hills
-    h += mountainMask(x, z) * ridged2(x * 0.03, z * 0.03, 4) * 30; // ridged mountains
-    const v = valleyFactor(x, z);
-    h = lerp(h, waterLevel - 2.5, v * 0.95);                   // carve the valley down to the river
-    return Math.min(h, WORLD.sizeY - 6);
+  function forestMask(x, z) {
+    return smoothstep(-0.05, 0.3, fbm2(x * 0.009 + 400, z * 0.009 - 120, 3));
   }
 
-  // Flat ledge in front of the guaranteed cave (set up below)
+  function landHeight(x, z) {
+    const wx = warpX(x, z), wz = warpZ(x, z);
+    let h = 34 + fbm2(wx * 0.007, wz * 0.007, 5) * 12;            // rolling land
+    const mm = mountainMask(x, z);
+    if (mm > 0) h += mm * (0.15 + 0.85 * ridged2(wx * 0.0085, wz * 0.0085, 6)) * 82; // tall ridged mountains
+    const v = 1 - smoothstep(5, 46, riverDist(x, z));
+    return lerp(h, W - 3.5, v);                                      // river valley
+  }
+
+  // Volcanoes: concave cones with a crater and a lava lake, far from the river.
+  const volcanoes = [];
+  for (let n = 0; n < WORLD.volcanoes; n++) {
+    const R = Math.min(64, S * 0.24);
+    let best = null, bestScore = -Infinity;
+    for (let t = 0; t < 60; t++) {
+      const x = R * 0.8 + rand() * (S - R * 1.6), z = R * 0.8 + rand() * (S - R * 1.6);
+      let score = Math.min(riverDist(x, z), 90);
+      for (const v of volcanoes) score = Math.min(score, Math.hypot(x - v.x, z - v.z) - R * 1.5);
+      if (score > bestScore) { bestScore = score; best = { x, z }; }
+    }
+    const peak = Math.min(H - 14, 112), base = 26, crater = R * 0.2, depth = 17;
+    const rim = base + (peak - base) * Math.pow(1 - crater / R, 1.7);
+    volcanoes.push({ ...best, R, peak, base, crater, depth, rim, lavaY: rim - depth + 3 });
+  }
+
+  function volcanoHeight(v, x, z) {
+    const d = Math.hypot(x - v.x, z - v.z);
+    if (d > v.R) return -Infinity;
+    if (d < v.crater) { const t = d / v.crater; return v.rim - v.depth * (1 - t * t); }
+    const p = 1 - d / v.R;
+    const gullies = Math.abs(noise2(Math.atan2(z - v.z, x - v.x) * 3.2, d * 0.02)) * 4 * p;
+    return v.base + (v.peak - v.base) * Math.pow(p, 1.7) - gullies;
+  }
+
+  function volcanoInfluence(x, z) {
+    let m = 0;
+    for (const v of volcanoes) m = Math.max(m, 1 - smoothstep(v.R * 0.55, v.R * 1.05, Math.hypot(x - v.x, z - v.z)));
+    return m;
+  }
+
+  // The guaranteed cave mouth needs a flat ledge in front of it; filled in below.
   const ledge = { x: 0, z: 0, y: 0, r: 0 };
+
   function surfaceHeight(x, z) {
-    const h = baseHeight(x, z);
-    if (!ledge.r) return h;
-    const d = Math.hypot(x - ledge.x, z - ledge.z);
-    return lerp(h, ledge.y, 1 - smoothstep(ledge.r * 0.6, ledge.r, d));
+    let h = landHeight(x, z);
+    for (const v of volcanoes) { const vh = volcanoHeight(v, x, z); if (vh > -Infinity) h = smax(h, vh, 8); }
+    if (ledge.r) {
+      const d = Math.hypot(x - ledge.x, z - ledge.z);
+      h = lerp(h, ledge.y, 1 - smoothstep(ledge.r * 0.6, ledge.r, d));
+    }
+    return Math.min(h, H - 6);
   }
 
-  // A guaranteed cave: a tunnel that starts on the valley slope, runs into the hillside
-  // and ends in a cavern.
-  const caveStartX = sizeX * 0.5 + (rand() - 0.5) * 24;
-  const side = rand() < 0.5 ? -1 : 1;
+  // A guaranteed big cave: a tunnel from the valley side into the hills, ending in a large cavern.
   const tunnel = [];
   {
-    let z0 = riverZ(caveStartX) + side * 6;
-    // walk up the valley slope until there is a hillside tall enough for a cave mouth
-    while (Math.abs(z0 - sizeZ / 2) < sizeZ * 0.4 && baseHeight(caveStartX, z0) < waterLevel + 6) z0 += side;
-    // cut a flat ledge just in front of the mouth, safely above the water
-    Object.assign(ledge, { x: caveStartX, z: z0 - side * 4, y: waterLevel + 2.5, r: 7 });
-    const y0 = ledge.y + 1.4;
-    const yEnd = WORLD.caveFloor + 2.8;
-    const len = Math.max(12, Math.min(28, side > 0 ? sizeZ - 12 - z0 : z0 - 12));
-    const steps = 9;
+    let caveX = S * 0.5, side = 1, z0 = riverZ(caveX) + 8;
+    for (let attempt = 0; attempt < 40; attempt++) {
+      caveX = S * (0.2 + rand() * 0.6);
+      side = rand() < 0.5 ? -1 : 1;
+      z0 = riverZ(caveX) + side * 8;
+      while (Math.abs(z0 - S / 2) < S * 0.42 && surfaceHeight(caveX, z0) < W + 11) z0 += side * 2;
+      const farFromVolcano = volcanoes.every((v) => Math.hypot(caveX - v.x, z0 - v.z) > v.R + 20);
+      if (farFromVolcano && Math.abs(z0 - S / 2) < S * 0.42) break;
+    }
+    Object.assign(ledge, { x: caveX, z: z0 - side * 6, y: W + 3, r: 10 });
+    const y0 = ledge.y + 2.6;
+    const yEnd = WORLD.caveFloor + 6;
+    const len = Math.max(20, Math.min(56, side > 0 ? S - 24 - z0 : z0 - 24));
+    const steps = 10;
     for (let i = 0; i <= steps; i++) {
       const t = i / steps;
       tunnel.push(new THREE.Vector3(
-        caveStartX + Math.sin(t * 4.5) * 4,
+        caveX + Math.sin(t * 4.2) * 8,
         lerp(y0, yEnd, smoothstep(0.1, 0.9, t)),
-        z0 + side * (t * len - 2),
+        z0 + side * (t * len - 3),
       ));
     }
   }
-  const cavern = tunnel[tunnel.length - 1].clone().add(new THREE.Vector3(0, 2, side * 4));
+  const cavern = tunnel[tunnel.length - 1].clone().add(new THREE.Vector3(0, 3, 0));
   const _seg = new THREE.Line3(), _p = new THREE.Vector3(), _c = new THREE.Vector3();
+  const tMin = new THREE.Vector3(Infinity, Infinity, Infinity), tMax = new THREE.Vector3(-Infinity, -Infinity, -Infinity);
+  for (const p of tunnel) { tMin.min(p); tMax.max(p); }
+  tMin.subScalar(24); tMax.addScalar(24);
+
   function tunnelDistance(x, y, z) {
+    if (x < tMin.x || y < tMin.y || z < tMin.z || x > tMax.x || y > tMax.y || z > tMax.z) return 50;
     _p.set(x, y, z);
     let best = Infinity;
     for (let i = 0; i < tunnel.length - 1; i++) {
       _seg.set(tunnel[i], tunnel[i + 1]);
       _seg.closestPointToPoint(_p, true, _c);
-      best = Math.min(best, _c.distanceTo(_p) - 2.4);
+      best = Math.min(best, _c.distanceTo(_p) - 3.6);
     }
-    // stretched cavern at the end of the tunnel
-    const dx = (x - cavern.x) / 9, dy = (y - cavern.y) / 5, dz = (z - cavern.z) / 9;
-    best = Math.min(best, (Math.sqrt(dx * dx + dy * dy + dz * dz) - 1) * 5);
-    return best;
+    const dx = (x - cavern.x) / 17, dy = (y - cavern.y) / 8, dz = (z - cavern.z) / 17;
+    return Math.min(best, (Math.sqrt(dx * dx + dy * dy + dz * dz) - 1) * 8);
   }
 
-  function density(x, y, z, h, mm) {
+  function density(x, y, z, h, mm, vi) {
     let d = h - y;
-    // 3D detail near the surface (overhangs on mountains, lumpy ground elsewhere)
-    d += noise3(x * 0.08, y * 0.08, z * 0.08) * (0.8 + mm * 3);
-    if (y > WORLD.caveFloor) {
-      const fade = smoothstep(WORLD.caveFloor, WORLD.caveFloor + 3, y);
-      // worm caves: intersection of two noise zero-surfaces forms tunnels
-      const a = noise3(x * 0.04, y * 0.055, z * 0.04);
-      const b = noise3(x * 0.04 + 57.1, y * 0.055 - 13.7, z * 0.04 + 91.3);
-      const worm = Math.sqrt(a * a + b * b) - 0.16;
-      d = Math.min(d, lerp(10, worm * 22, fade));
-      // the guaranteed tunnel + cavern
-      d = Math.min(d, lerp(10, tunnelDistance(x, y, z), fade));
+    // 3D detail: overhangs and crags on mountains, gentle lumps elsewhere
+    d += noise3(x * 0.045, y * 0.045, z * 0.045) * (1.2 + mm * 6);
+    if (y > WORLD.caveFloor && vi < 0.75) {
+      const fade = smoothstep(WORLD.caveFloor, WORLD.caveFloor + 5, y);
+      // big worm caves: where two noise fields are both near zero
+      const a = noise3(x * 0.02, y * 0.028, z * 0.02);
+      const b = noise3(x * 0.02 + 57.1, y * 0.028 - 13.7, z * 0.02 + 91.3);
+      let cave = (Math.sqrt(a * a + b * b) - 0.15) * 45;
+      // huge caverns, kept well below the surface
+      const c = noise3(x * 0.011 + 200, y * 0.018, z * 0.011 - 300);
+      cave = Math.min(cave, (0.6 - c) * 70 + Math.max(0, y - (h - 10)) * 4);
+      cave = Math.min(cave, tunnelDistance(x, y, z));
+      d = Math.min(d, lerp(30, cave, fade));
     }
-    // solid bedrock floor
-    d = Math.max(d, 3 - y);
-    return d;
+    return Math.max(d, 4 - y); // solid bedrock floor
   }
 
-  return { surfaceHeight, mountainMask, valleyFactor, density, tunnel, cavern, riverZ, ledge };
+  return { surfaceHeight, landHeight, mountainMask, forestMask, volcanoInfluence, density, tunnel, cavern, riverZ, ledge, volcanoes, noise2, noise3 };
 }
 
 function buildDensityField(T) {
-  const { sizeX: nx, sizeY: ny, sizeZ: nz } = WORLD;
+  const vx = WORLD.voxel;
+  const nx = Math.round(WORLD.size / vx) + 1, ny = Math.round(WORLD.height / vx) + 1, nz = nx;
   const field = new Float32Array(nx * ny * nz);
-  const heights = new Float32Array(nx * nz);
-  for (let z = 0; z < nz; z++) {
-    for (let x = 0; x < nx; x++) {
+  for (let iz = 0; iz < nz; iz++) {
+    for (let ix = 0; ix < nx; ix++) {
+      const x = ix * vx, z = iz * vx;
       const h = T.surfaceHeight(x, z);
       const mm = T.mountainMask(x, z);
-      heights[x + nx * z] = h;
-      for (let y = 0; y < ny; y++) {
-        const idx = x + nx * (y + ny * z);
-        // borders are air, so the terrain becomes a closed "island block"
-        if (x === 0 || z === 0 || y === 0 || x === nx - 1 || z === nz - 1 || y === ny - 1) { field[idx] = -1; continue; }
-        if (y > h + 6) { field[idx] = h - y; continue; } // well above ground: air, skip noise
-        field[idx] = T.density(x, y, z, h, mm);
+      const vi = T.volcanoInfluence(x, z);
+      for (let iy = 0; iy < ny; iy++) {
+        const idx = ix + nx * (iy + ny * iz), y = iy * vx;
+        // borders are air, so the terrain is a closed block
+        if (ix === 0 || iz === 0 || iy === 0 || ix === nx - 1 || iz === nz - 1 || iy === ny - 1) { field[idx] = -1; continue; }
+        if (y > h + 12) { field[idx] = h - y; continue; } // well above ground: skip noise
+        field[idx] = T.density(x, y, z, h, mm, vi);
       }
     }
   }
   removeFloaters(field, nx, ny, nz);
-  return { field, heights };
+  return { field, nx, ny, nz };
 }
 
 // Flood-fill solid rock from the bedrock; any solid piece not connected to it would float, so drop it.
@@ -290,8 +396,7 @@ function removeFloaters(field, nx, ny, nz) {
 }
 
 // ---------------------------------------------------------------------------
-// Meshing: naive Surface Nets (smooth isosurface, like marching cubes but
-// one vertex per surface cell, which gives a clean indexed mesh)
+// Meshing: naive Surface Nets (smooth isosurface, one vertex per surface cell)
 // ---------------------------------------------------------------------------
 function surfaceNets(field, nx, ny, nz, scale) {
   const cx = nx - 1, cy = ny - 1, cz = nz - 1;
@@ -333,54 +438,84 @@ function surfaceNets(field, nx, ny, nz, scale) {
   };
   for (let z = 1; z < cz; z++) for (let y = 1; y < cy; y++) for (let x = 1; x < cx; x++) {
     const s0 = F(x, y, z) > 0;
-    // edge along +X: cells around it vary in Y and Z
     if (s0 !== (F(x + 1, y, z) > 0)) quad(C(x, y - 1, z - 1), C(x, y, z - 1), C(x, y, z), C(x, y - 1, z), !s0);
-    // edge along +Y: cells vary in Z and X
     if (s0 !== (F(x, y + 1, z) > 0)) quad(C(x - 1, y, z - 1), C(x - 1, y, z), C(x, y, z), C(x, y, z - 1), !s0);
-    // edge along +Z: cells vary in X and Y
     if (s0 !== (F(x, y, z + 1) > 0)) quad(C(x - 1, y - 1, z), C(x, y - 1, z), C(x, y, z), C(x - 1, y, z), !s0);
   }
 
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geo.setIndex(indices);
-  geo.computeVertexNormals();
   return geo;
 }
 
-// Color each vertex by height, slope and whether it is underground.
-function colorTerrain(geo, heights, T, seed) {
-  const { noise3 } = makeNoise(seed + 991);
-  const pos = geo.attributes.position, nor = geo.attributes.normal;
-  const colors = new Float32Array(pos.count * 3);
+// Flat-shaded low-poly render mesh: every triangle gets one colour from its height, slope and biome.
+function buildRenderGeometry(colliderGeo, T) {
+  const geo = colliderGeo.toNonIndexed();
+  geo.computeVertexNormals(); // non-indexed => face normals => faceted look
+  const pos = geo.attributes.position.array;
+  const colors = new Float32Array(pos.length);
+  const W = WORLD.waterLevel;
+  const C = (hex) => new THREE.Color(hex);
+  const pal = {
+    sand: C(0xdcc99a), wetSand: C(0xa89060), meadow: C(0x7bab48), grass: C(0x5d9a3c), forest: C(0x3f7a2e),
+    tundra: C(0x8a8a5c), dirt: C(0x7a5a3a), rock: C(0x8b8883), rock2: C(0x67635f), snow: C(0xf2f5f8),
+    cave: C(0x4a4038), cave2: C(0x35302b), crystal: C(0x5fc6d9), basalt: C(0x3b3735), ash: C(0x5a5452),
+    scorched: C(0x6b2f1f), lava: C(0xff6a1f),
+  };
   const c = new THREE.Color(), tmp = new THREE.Color();
-  const sand = new THREE.Color(0xd8c78f), grass = new THREE.Color(0x5f9e3c), darkGrass = new THREE.Color(0x3f7a2e);
-  const dirt = new THREE.Color(0x7a5a3a), rock = new THREE.Color(0x7d7a74), darkRock = new THREE.Color(0x55524d);
-  const snow = new THREE.Color(0xf4f7fb), cave = new THREE.Color(0x4a4038), crystal = new THREE.Color(0x5fb4c9);
-  const { sizeX: nx, sizeZ: nz, waterLevel } = WORLD;
+  const e1 = new THREE.Vector3(), e2 = new THREE.Vector3(), nrm = new THREE.Vector3();
 
-  for (let i = 0; i < pos.count; i++) {
-    const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i), ny = nor.getY(i);
-    const hx = Math.min(nx - 1, Math.max(0, Math.round(x))), hz = Math.min(nz - 1, Math.max(0, Math.round(z)));
-    const surface = heights[hx + nx * hz];
-    const n = noise3(x * 0.15, y * 0.15, z * 0.15);
-    const underground = y < surface - 3 && ny < 0.95 || y < surface - 4;
-    if (underground) {
-      c.copy(cave).lerp(darkRock, 0.5 + 0.5 * n);
-      if (n > 0.55) c.lerp(crystal, (n - 0.55) * 2.2); // occasional glinting minerals
-    } else if (y < waterLevel + 0.8) {
-      c.copy(sand).lerp(dirt, Math.max(0, waterLevel - 1 - y) * 0.3);
+  for (let f = 0, i = 0; i < pos.length; f++, i += 9) {
+    const cx = (pos[i] + pos[i + 3] + pos[i + 6]) / 3;
+    const cy = (pos[i + 1] + pos[i + 4] + pos[i + 7]) / 3;
+    const cz = (pos[i + 2] + pos[i + 5] + pos[i + 8]) / 3;
+    e1.set(pos[i + 3] - pos[i], pos[i + 4] - pos[i + 1], pos[i + 5] - pos[i + 2]);
+    e2.set(pos[i + 6] - pos[i], pos[i + 7] - pos[i + 1], pos[i + 8] - pos[i + 2]);
+    nrm.crossVectors(e1, e2).normalize();
+    const ny = nrm.y;
+    const n = T.noise3(cx * 0.06, cy * 0.06, cz * 0.06);
+    const surface = T.surfaceHeight(cx, cz);
+    const vi = T.volcanoInfluence(cx, cz);
+
+    if (cy < surface - 6) {
+      // caves
+      c.copy(pal.cave).lerp(pal.cave2, 0.5 + 0.5 * n);
+      if (n > 0.55) c.lerp(pal.crystal, Math.min(1, (n - 0.55) * 2.5));
+    } else if (vi > 0.02) {
+      const steep = 1 - smoothstep(0.5, 0.85, ny);
+      c.copy(pal.basalt).lerp(pal.ash, 0.5 + 0.5 * n);
+      let near = 0;
+      for (const v of T.volcanoes) near = Math.max(near, 1 - smoothstep(v.crater * 0.9, v.crater * 2.2, Math.hypot(cx - v.x, cz - v.z)));
+      c.lerp(pal.scorched, near * 0.7);
+      // glowing lava veins running down the slopes
+      const vein = Math.abs(T.noise2(cx * 0.05 + 7, cz * 0.05 - 3));
+      if (vi > 0.5 && vein < 0.018 + near * 0.03) c.copy(pal.lava).lerp(pal.scorched, vein * 12);
+      // blend into the normal landscape at the foot of the volcano
+      const land = tmp.copy(pal.grass).lerp(pal.rock, steep);
+      c.lerp(land, 1 - smoothstep(0.02, 0.5, vi));
+    } else if (cy < W + 1.6) {
+      c.copy(cy < W - 0.5 ? pal.wetSand : pal.sand).lerp(pal.dirt, 0.15 + 0.15 * n);
     } else {
-      c.copy(grass).lerp(darkGrass, 0.5 + 0.5 * n);
-      const steep = 1 - smoothstep(0.55, 0.8, ny);
-      c.lerp(tmp.copy(rock).lerp(darkRock, 0.5 + 0.5 * n), steep);
-      if (ny < 0.75 && ny > 0.55) c.lerp(dirt, 0.25);
-      const snowLine = 40 + n * 3;
-      if (y > snowLine && ny > 0.5) c.lerp(snow, smoothstep(snowLine, snowLine + 2.5, y));
+      const fm = T.forestMask(cx, cz);
+      c.copy(pal.meadow).lerp(pal.grass, 0.5 + 0.5 * n).lerp(pal.forest, fm * 0.8);
+      const alpine = smoothstep(58, 80, cy);
+      c.lerp(pal.tundra, alpine * 0.7);
+      // rock on steep faces, with horizontal strata bands
+      const steep = 1 - smoothstep(0.55, 0.82, ny);
+      const band = 0.5 + 0.5 * Math.sin(cy * 0.9 + n * 2.5);
+      tmp.copy(pal.rock).lerp(pal.rock2, band * 0.7);
+      c.lerp(tmp, Math.max(steep, alpine * smoothstep(0.75, 0.6, ny)));
+      if (ny < 0.8 && ny > 0.55 && cy < 50) c.lerp(pal.dirt, 0.2);
+      const snowLine = 84 + n * 5;
+      if (cy > snowLine && ny > 0.45) c.lerp(pal.snow, smoothstep(snowLine, snowLine + 4, cy));
     }
-    colors[i * 3] = c.r; colors[i * 3 + 1] = c.g; colors[i * 3 + 2] = c.b;
+    // per-face brightness jitter accentuates the facets
+    const j = 0.92 + hash1(f) * 0.14;
+    for (let k = 0; k < 3; k++) { colors[i + k * 3] = c.r * j; colors[i + k * 3 + 1] = c.g * j; colors[i + k * 3 + 2] = c.b * j; }
   }
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  return geo;
 }
 
 // ---------------------------------------------------------------------------
@@ -395,67 +530,88 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-const skyColor = new THREE.Color(0x8fb8de);
+const skyColor = new THREE.Color(0x9cc3e6);
 scene.background = skyColor;
-scene.fog = new THREE.Fog(skyColor, 60, 170);
+scene.fog = new THREE.Fog(skyColor, 140, 460);
 
-const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.05, 400);
+const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.05, 1000);
 
-scene.add(new THREE.HemisphereLight(0xcfe6ff, 0x5a4a35, 0.9));
-const sun = new THREE.DirectionalLight(0xfff1d6, 2.2);
-sun.position.set(WORLD.sizeX * 0.5 + 40, 90, WORLD.sizeZ * 0.5 + 25);
-sun.target.position.set(WORLD.sizeX * 0.5, 0, WORLD.sizeZ * 0.5);
+scene.add(new THREE.HemisphereLight(0xd6eaff, 0x5a4a35, 1.0));
+const sun = new THREE.DirectionalLight(0xfff1d6, 2.4);
+const SUN_OFFSET = new THREE.Vector3(70, 120, 45);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
-Object.assign(sun.shadow.camera, { left: -75, right: 75, top: 75, bottom: -75, near: 10, far: 220 });
-sun.shadow.bias = -0.0005;
-sun.shadow.normalBias = 0.05;
+Object.assign(sun.shadow.camera, { left: -80, right: 80, top: 80, bottom: -80, near: 1, far: 400 });
+sun.shadow.bias = -0.0004;
+sun.shadow.normalBias = 0.06;
 scene.add(sun, sun.target);
 
 // Lantern carried by the player (helps in caves)
-const lantern = new THREE.PointLight(0xffc27a, 18, 16, 1.6);
+const lantern = new THREE.PointLight(0xffc27a, 22, 20, 1.6);
 scene.add(lantern);
 
 const world = new THREE.Group();
 scene.add(world);
-let terrainMesh = null;
+let terrainMesh = null;   // rendered, flat-shaded
+let colliderMesh = null;  // indexed copy with a BVH, used for physics and raycasts
 let terrainFns = null;
-let trees = []; // { x, z, y, r, h } for trunk collision
+let clouds = null;
+const volcanoFx = [];     // { v, lava, light, smoke[] }
+
+// Obstacles (tree trunks, boulders) in a spatial hash for fast collision
+const CELL = 8;
+const obstacleGrid = new Map();
+const cellKey = (cx, cz) => cx * 73856093 ^ cz * 19349663;
+function addObstacle(o) {
+  const k = cellKey(Math.floor(o.x / CELL), Math.floor(o.z / CELL));
+  if (!obstacleGrid.has(k)) obstacleGrid.set(k, []);
+  obstacleGrid.get(k).push(o);
+}
 
 function disposeWorld() {
-  world.traverse((o) => { if (o.geometry) { o.geometry.disposeBoundsTree?.(); o.geometry.dispose(); } if (o.material) o.material.dispose(); });
+  world.traverse((o) => {
+    if (o.geometry) { o.geometry.disposeBoundsTree?.(); o.geometry.dispose(); }
+    if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => m.dispose());
+  });
+  colliderMesh?.geometry.disposeBoundsTree();
+  colliderMesh?.geometry.dispose();
   world.clear();
+  obstacleGrid.clear();
+  volcanoFx.length = 0;
 }
 
 function generateWorld(seed) {
   disposeWorld();
   const t0 = performance.now();
   terrainFns = createTerrainFunctions(seed);
-  const { field, heights } = buildDensityField(terrainFns);
-  const geo = surfaceNets(field, WORLD.sizeX, WORLD.sizeY, WORLD.sizeZ, WORLD.voxel);
-  colorTerrain(geo, heights, terrainFns, seed);
-  geo.computeBoundsTree();
+  const { field, nx, ny, nz } = buildDensityField(terrainFns);
+  const colliderGeo = surfaceNets(field, nx, ny, nz, WORLD.voxel);
+  colliderGeo.computeBoundsTree();
+  colliderMesh = new THREE.Mesh(colliderGeo);
 
-  terrainMesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0.0, flatShading: false }));
+  terrainMesh = new THREE.Mesh(
+    buildRenderGeometry(colliderGeo, terrainFns),
+    new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0, flatShading: true }),
+  );
   terrainMesh.castShadow = true;
   terrainMesh.receiveShadow = true;
   world.add(terrainMesh);
 
-  // Water in the valley
+  // Water
   const water = new THREE.Mesh(
-    new THREE.PlaneGeometry(WORLD.sizeX - 2, WORLD.sizeZ - 2),
-    new THREE.MeshStandardMaterial({ color: 0x2f7fb5, transparent: true, opacity: 0.72, roughness: 0.15, metalness: 0.1 }),
+    new THREE.PlaneGeometry(WORLD.size - 2, WORLD.size - 2),
+    new THREE.MeshStandardMaterial({ color: 0x2f7fb5, transparent: true, opacity: 0.75, roughness: 0.1, metalness: 0.1 }),
   );
   water.rotation.x = -Math.PI / 2;
-  water.position.set(WORLD.sizeX / 2 - 0.5, WORLD.waterLevel, WORLD.sizeZ / 2 - 0.5);
+  water.position.set(WORLD.size / 2, WORLD.waterLevel, WORLD.size / 2);
   water.receiveShadow = true;
-  water.name = 'water';
   world.add(water);
 
-  placeTrees(seed, heights);
+  addVolcanoEffects();
+  const counts = placeVegetation(seed);
   addClouds(seed);
 
-  const stats = { seed, ms: Math.round(performance.now() - t0), triangles: geo.index.count / 3 };
+  const stats = { seed, ms: Math.round(performance.now() - t0), triangles: colliderGeo.index.count / 3, ...counts };
   console.log('World generated', stats);
   return stats;
 }
@@ -464,80 +620,168 @@ const raycaster = new THREE.Raycaster();
 raycaster.firstHitOnly = true;
 const DOWN = new THREE.Vector3(0, -1, 0);
 
-function groundAt(x, z, fromY = WORLD.sizeY + 5) {
+function groundAt(x, z, fromY = WORLD.height + 5) {
   raycaster.set(new THREE.Vector3(x, fromY, z), DOWN);
   raycaster.far = fromY + 10;
-  const hit = raycaster.intersectObject(terrainMesh, false)[0];
-  return hit || null;
+  return raycaster.intersectObject(colliderMesh, false)[0] || null;
 }
 
-function placeTrees(seed, heights) {
+function addVolcanoEffects() {
+  for (const v of terrainFns.volcanoes) {
+    const lavaMat = new THREE.MeshBasicMaterial({ color: 0xff5a1a });
+    const lava = new THREE.Mesh(new THREE.CircleGeometry(v.crater * 0.75, 10), lavaMat);
+    lava.rotation.x = -Math.PI / 2;
+    lava.position.set(v.x, v.lavaY, v.z);
+    world.add(lava);
+    const light = new THREE.PointLight(0xff6a2a, 260, 45, 1.5);
+    light.position.set(v.x, v.lavaY + 6, v.z);
+    world.add(light);
+    const smoke = [];
+    const smokeGeo = new THREE.IcosahedronGeometry(1, 0);
+    for (let i = 0; i < 26; i++) {
+      const m = new THREE.Mesh(smokeGeo, new THREE.MeshStandardMaterial({ color: 0x77706c, transparent: true, opacity: 0.5, depthWrite: false, flatShading: true }));
+      m.userData = { t: i / 26, ox: (Math.random() - 0.5) * v.crater, oz: (Math.random() - 0.5) * v.crater, spin: Math.random() * 2 };
+      world.add(m);
+      smoke.push(m);
+    }
+    volcanoFx.push({ v, lava, lavaMat, light, smoke });
+  }
+}
+
+function updateVolcanoes(dt, time) {
+  for (const fx of volcanoFx) {
+    const pulse = 0.5 + 0.5 * Math.sin(time * 1.7);
+    fx.lavaMat.color.setRGB(1, 0.32 + pulse * 0.12, 0.08);
+    fx.light.intensity = 220 + pulse * 80;
+    for (const s of fx.smoke) {
+      const u = s.userData;
+      u.t = (u.t + dt * 0.05) % 1;
+      s.position.set(fx.v.x + u.ox * (1 + u.t * 2) + u.t * 25, fx.v.lavaY + 4 + u.t * 70, fx.v.z + u.oz * (1 + u.t * 2));
+      s.scale.setScalar(2.5 + u.t * 9);
+      s.rotation.set(u.t * u.spin, u.t * 3, 0);
+      s.material.opacity = 0.55 * Math.sin(Math.PI * Math.min(1, u.t * 1.2));
+    }
+  }
+}
+
+function placeVegetation(seed) {
   const rand = mulberry32(seed * 13 + 5);
-  trees = [];
-  const spots = [];
-  for (let tries = 0; tries < 900 && spots.length < 70; tries++) {
-    const x = 4 + rand() * (WORLD.sizeX - 8), z = 4 + rand() * (WORLD.sizeZ - 8);
-    const hit = groundAt(x, z);
-    if (!hit) continue;
-    const y = hit.point.y;
-    const ny = hit.face.normal.y;
-    if (ny < 0.85 || y < WORLD.waterLevel + 1.2 || y > 36) continue;
-    if (Math.abs(y - heights[Math.round(x) + WORLD.sizeX * Math.round(z)]) > 3) continue; // not on cave floors
-    if (spots.some((s) => (s.x - x) ** 2 + (s.z - z) ** 2 < 9)) continue;
-    const L = terrainFns.ledge;
-    if (Math.hypot(x - L.x, z - L.z) < L.r + 2) continue; // keep the cave mouth clear
-    const scale = 0.8 + rand() * 0.6;
-    spots.push({ x, y, z, scale, kind: rand() < 0.6 ? 0 : 1 });
+  const T = terrainFns, L = T.ledge, W = WORLD.waterLevel;
+  const trees = [], bushes = [], rocks = [];
+  const step = WORLD.treeSpacing;
+  for (let gz = step; gz < WORLD.size - step; gz += step) {
+    for (let gx = step; gx < WORLD.size - step; gx += step) {
+      const x = gx + (rand() - 0.5) * step * 0.9, z = gz + (rand() - 0.5) * step * 0.9;
+      const fm = T.forestMask(x, z), vi = T.volcanoInfluence(x, z);
+      const r = rand();
+      const wantTree = r < 0.05 + fm * 0.85;
+      const wantBush = !wantTree && r < 0.08 + fm * 0.12;
+      const wantRock = !wantTree && !wantBush && r > 0.992 - vi * 0.02;
+      if (!wantTree && !wantBush && !wantRock) continue;
+      if (Math.hypot(x - L.x, z - L.z) < L.r + 3) continue; // keep the cave mouth clear
+      const hit = groundAt(x, z);
+      if (!hit) continue;
+      const y = hit.point.y, ny = hit.face.normal.y;
+      if (Math.abs(y - T.surfaceHeight(x, z)) > 4) continue; // not on cave floors
+      if (wantRock) { if (y > W + 0.5 && ny > 0.6) rocks.push({ x, y, z, s: 0.6 + rand() * 1.4, rot: rand() * 6.28 }); continue; }
+      if (ny < 0.72 || y < W + 1.8 || y > 76 || vi > 0.35) continue;
+      const scale = 0.75 + rand() * 0.7;
+      if (wantBush) { bushes.push({ x, y, z, s: 0.5 + rand() * 0.6 }); continue; }
+      // pines dominate up high, mixed forest lower down
+      const pineChance = smoothstep(35, 60, y) * 0.8 + 0.25 + T.noise2(x * 0.02, z * 0.02) * 0.3;
+      const kind = rand() < pineChance ? 0 : rand() < 0.75 ? 1 : 2; // 0 pine, 1 oak, 2 birch
+      trees.push({ x, y, z, scale, kind, rot: rand() * 6.28, tint: rand() });
+    }
   }
 
-  const trunkGeo = new THREE.CylinderGeometry(0.18, 0.28, 1, 7).translate(0, 0.5, 0);
-  const pineGeo = new THREE.ConeGeometry(1.3, 3.2, 8).translate(0, 1.6, 0);
-  const roundGeo = new THREE.IcosahedronGeometry(1.4, 1);
-  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x6b4a2f, roughness: 1 });
-  const pineMat = new THREE.MeshStandardMaterial({ color: 0x2f6b3a, roughness: 0.9, flatShading: true });
-  const roundMat = new THREE.MeshStandardMaterial({ color: 0x4f8f3a, roughness: 0.9, flatShading: true });
+  const trunkGeo = new THREE.CylinderGeometry(0.16, 0.27, 1, 6).translate(0, 0.5, 0);
+  const pineGeo = new THREE.ConeGeometry(1.35, 2.6, 7).translate(0, 1.3, 0);
+  const crownGeo = new THREE.IcosahedronGeometry(1.5, 0);
+  const birchGeo = new THREE.DodecahedronGeometry(1.1, 0);
+  const bushGeo = new THREE.IcosahedronGeometry(0.9, 0);
+  const rockGeo = new THREE.DodecahedronGeometry(1, 0);
+  const flat = (color) => new THREE.MeshStandardMaterial({ color, roughness: 0.9, flatShading: true });
 
-  const trunks = new THREE.InstancedMesh(trunkGeo, trunkMat, spots.length);
-  const pines = new THREE.InstancedMesh(pineGeo, pineMat, spots.length * 2);
-  const rounds = new THREE.InstancedMesh(roundGeo, roundMat, spots.length);
-  let pi = 0, ri = 0;
-  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3();
-  spots.forEach((t, i) => {
-    const trunkH = (t.kind === 0 ? 2.0 : 2.6) * t.scale;
-    q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rand() * Math.PI * 2);
-    m.compose(p.set(t.x, t.y - 0.3, t.z), q, s.set(t.scale, trunkH + 0.3, t.scale));
+  const nPine = trees.filter((t) => t.kind === 0).length;
+  const nOak = trees.filter((t) => t.kind === 1).length;
+  const nBirch = trees.length - nPine - nOak;
+  const trunks = new THREE.InstancedMesh(trunkGeo, flat(0xffffff), Math.max(1, trees.length));
+  const pines = new THREE.InstancedMesh(pineGeo, flat(0xffffff), Math.max(1, nPine * 3));
+  const crowns = new THREE.InstancedMesh(crownGeo, flat(0xffffff), Math.max(1, nOak * 2));
+  const birches = new THREE.InstancedMesh(birchGeo, flat(0xffffff), Math.max(1, nBirch * 2));
+  const bushMesh = new THREE.InstancedMesh(bushGeo, flat(0xffffff), Math.max(1, bushes.length));
+  const rockMesh = new THREE.InstancedMesh(rockGeo, flat(0x7d776f), Math.max(1, rocks.length));
+
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
+  const col = new THREE.Color();
+  let pi = 0, ci = 0, bi = 0;
+  trees.forEach((t, i) => {
+    q.setFromAxisAngle(up, t.rot);
+    const trunkH = (t.kind === 0 ? 2.2 : t.kind === 1 ? 2.8 : 4.0) * t.scale;
+    m.compose(p.set(t.x, t.y - 0.4, t.z), q, s.set(t.scale, trunkH + 0.4, t.scale));
     trunks.setMatrixAt(i, m);
+    trunks.setColorAt(i, col.set(t.kind === 2 ? 0xe8e4da : 0x6b4a2f));
     if (t.kind === 0) {
-      m.compose(p.set(t.x, t.y + trunkH * 0.55, t.z), q, s.set(t.scale, t.scale, t.scale));
-      pines.setMatrixAt(pi++, m);
-      m.compose(p.set(t.x, t.y + trunkH * 0.55 + 1.6 * t.scale, t.z), q, s.set(t.scale * 0.7, t.scale * 0.8, t.scale * 0.7));
-      pines.setMatrixAt(pi++, m);
+      for (let l = 0; l < 3; l++) {
+        const ls = t.scale * (1 - l * 0.24);
+        m.compose(p.set(t.x, t.y + trunkH * 0.45 + l * 1.25 * t.scale, t.z), q, s.set(ls, ls, ls));
+        pines.setMatrixAt(pi, m);
+        pines.setColorAt(pi++, col.setHSL(0.36 + t.tint * 0.04, 0.45, 0.22 + t.tint * 0.06));
+      }
+    } else if (t.kind === 1) {
+      m.compose(p.set(t.x, t.y + trunkH + 0.7 * t.scale, t.z), q, s.set(t.scale, t.scale * 0.85, t.scale));
+      crowns.setMatrixAt(ci, m);
+      crowns.setColorAt(ci++, col.setHSL(0.26 + t.tint * 0.06, 0.5, 0.3 + t.tint * 0.08));
+      m.compose(p.set(t.x + 0.6 * t.scale, t.y + trunkH + 0.1, t.z + 0.3 * t.scale), q, s.set(t.scale * 0.65, t.scale * 0.6, t.scale * 0.65));
+      crowns.setMatrixAt(ci, m);
+      crowns.setColorAt(ci++, col.setHSL(0.27 + t.tint * 0.05, 0.5, 0.27 + t.tint * 0.08));
     } else {
-      m.compose(p.set(t.x, t.y + trunkH + 0.6 * t.scale, t.z), q, s.set(t.scale, t.scale * 0.9, t.scale));
-      rounds.setMatrixAt(ri++, m);
+      for (let l = 0; l < 2; l++) {
+        m.compose(p.set(t.x, t.y + trunkH * (0.7 + l * 0.3), t.z), q, s.set(t.scale * (0.9 - l * 0.25), t.scale * (1.3 - l * 0.3), t.scale * (0.9 - l * 0.25)));
+        birches.setMatrixAt(bi, m);
+        birches.setColorAt(bi++, col.setHSL(0.2 + t.tint * 0.05, 0.55, 0.42 + t.tint * 0.06));
+      }
     }
-    trees.push({ x: t.x, z: t.z, y0: t.y - 0.5, y1: t.y + trunkH + 3, r: 0.28 * t.scale });
+    addObstacle({ type: 'cyl', x: t.x, z: t.z, y0: t.y - 0.5, y1: t.y + trunkH + 3, r: 0.27 * t.scale });
   });
-  pines.count = pi; rounds.count = ri;
-  for (const im of [trunks, pines, rounds]) { im.castShadow = true; im.receiveShadow = true; im.instanceMatrix.needsUpdate = true; world.add(im); }
+  bushes.forEach((b, i) => {
+    m.compose(p.set(b.x, b.y + 0.3 * b.s, b.z), q.setFromAxisAngle(up, b.x), s.set(b.s * 1.2, b.s * 0.8, b.s * 1.2));
+    bushMesh.setMatrixAt(i, m);
+    bushMesh.setColorAt(i, col.setHSL(0.27 + hash1(i) * 0.06, 0.45, 0.25 + hash1(i + 7) * 0.08));
+  });
+  rocks.forEach((r, i) => {
+    q.setFromEuler(new THREE.Euler(r.rot, r.rot * 2, 0));
+    m.compose(p.set(r.x, r.y + r.s * 0.3, r.z), q, s.set(r.s * 1.2, r.s, r.s));
+    rockMesh.setMatrixAt(i, m);
+    addObstacle({ type: 'sphere', x: r.x, y: r.y + r.s * 0.3, z: r.z, r: r.s * 0.95 });
+  });
+  pines.count = pi; crowns.count = ci; birches.count = bi;
+  trunks.count = trees.length; bushMesh.count = bushes.length; rockMesh.count = rocks.length;
+  for (const im of [trunks, pines, crowns, birches, bushMesh, rockMesh]) {
+    im.castShadow = true; im.receiveShadow = true;
+    im.instanceMatrix.needsUpdate = true;
+    if (im.instanceColor) im.instanceColor.needsUpdate = true;
+    world.add(im);
+  }
+  return { trees: trees.length, bushes: bushes.length, rocks: rocks.length };
 }
 
-let clouds = null;
 function addClouds(seed) {
   const rand = mulberry32(seed * 31 + 9);
   clouds = new THREE.Group();
-  const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, transparent: true, opacity: 0.9 });
-  const geo = new THREE.IcosahedronGeometry(1, 1);
-  for (let i = 0; i < 14; i++) {
+  const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, transparent: true, opacity: 0.92, flatShading: true });
+  const geo = new THREE.IcosahedronGeometry(1, 0);
+  const n = Math.round(24 * (WORLD.size / 256) ** 2);
+  for (let i = 0; i < n; i++) {
     const c = new THREE.Group();
-    const parts = 3 + Math.floor(rand() * 4);
+    const parts = 3 + Math.floor(rand() * 5);
     for (let j = 0; j < parts; j++) {
       const b = new THREE.Mesh(geo, mat);
-      b.position.set((j - parts / 2) * 2.4 + rand(), rand() * 1.2, rand() * 2);
-      b.scale.setScalar(2 + rand() * 1.8);
+      b.position.set((j - parts / 2) * 4 + rand() * 2, rand() * 2, rand() * 4);
+      b.scale.set(4 + rand() * 3, 2.5 + rand() * 2, 4 + rand() * 3);
       c.add(b);
     }
-    c.position.set(rand() * WORLD.sizeX * 1.6 - WORLD.sizeX * 0.3, 70 + rand() * 12, rand() * WORLD.sizeZ * 1.6 - WORLD.sizeZ * 0.3);
+    c.position.set(rand() * WORLD.size * 1.4 - WORLD.size * 0.2, WORLD.height + 20 + rand() * 25, rand() * WORLD.size * 1.4 - WORLD.size * 0.2);
     clouds.add(c);
   }
   world.add(clouds);
@@ -548,30 +792,27 @@ function addClouds(seed) {
 // ---------------------------------------------------------------------------
 function buildCharacter() {
   const g = new THREE.Group();
-  const skin = new THREE.MeshStandardMaterial({ color: 0xf0c49a, roughness: 0.8 });
-  const shirt = new THREE.MeshStandardMaterial({ color: 0xc8463d, roughness: 0.8 });
-  const pants = new THREE.MeshStandardMaterial({ color: 0x2f4a7a, roughness: 0.9 });
-  const dark = new THREE.MeshStandardMaterial({ color: 0x222222 });
-  const pack = new THREE.MeshStandardMaterial({ color: 0x8a6a3a, roughness: 0.9 });
+  const mat = (color) => new THREE.MeshStandardMaterial({ color, roughness: 0.8, flatShading: true });
+  const skin = mat(0xf0c49a), shirt = mat(0xc8463d), pants = mat(0x2f4a7a), dark = mat(0x222222), pack = mat(0x8a6a3a);
 
   // feet at y = 0 in local space, facing -Z
-  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.26, 0.4, 4, 10), shirt);
+  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.26, 0.4, 3, 8), shirt);
   torso.position.y = 1.12;
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.21, 16, 12), skin);
+  const head = new THREE.Mesh(new THREE.IcosahedronGeometry(0.22, 1), skin);
   head.position.y = 1.6;
-  const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 6), dark);
+  const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.035, 6, 4), dark);
   eyeL.position.set(-0.08, 1.63, -0.19);
   const eyeR = eyeL.clone(); eyeR.position.x = 0.08;
-  const hat = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.24, 0.12, 12), pack);
+  const hat = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.25, 0.12, 8), pack);
   hat.position.y = 1.78;
   const backpack = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.42, 0.18), pack);
   backpack.position.set(0, 1.18, 0.28);
 
-  const limb = (mat, w, len) => {
+  const limb = (m, w, len) => {
     const pivot = new THREE.Group();
-    const m = new THREE.Mesh(new THREE.CapsuleGeometry(w, len, 4, 8), mat);
-    m.position.y = -len / 2 - w;
-    pivot.add(m);
+    const mesh = new THREE.Mesh(new THREE.CapsuleGeometry(w, len, 2, 6), m);
+    mesh.position.y = -len / 2 - w;
+    pivot.add(mesh);
     return pivot;
   };
   const armL = limb(shirt, 0.08, 0.42); armL.position.set(-0.36, 1.38, 0);
@@ -588,33 +829,34 @@ function buildCharacter() {
 const character = buildCharacter();
 scene.add(character);
 
-// Player physics state. `player.position` is the centre of the top sphere of the capsule.
+// `player.position` is the centre of the top sphere of the capsule.
 const player = {
   position: new THREE.Vector3(),
   velocity: new THREE.Vector3(),
   onGround: false,
+  lastGroundTime: -1,
   facing: 0,
   walkPhase: 0,
   spawn: new THREE.Vector3(),
+  inWater: false,
 };
-const FOOT_OFFSET = PLAYER.segment + PLAYER.radius; // from position down to the feet
+const FOOT_OFFSET = PLAYER.segment + PLAYER.radius;
 const EYE_OFFSET = 0.2;
 
 function findSpawn() {
-  // stand just outside the mouth of the guaranteed cave, facing into it
+  // stand on the ledge in front of the big cave, facing into it
   const t = terrainFns.tunnel;
   const dir = new THREE.Vector3().subVectors(t[2], t[0]).setY(0).normalize();
-  for (const back of [4, 3, 5, 2, 6, 7, 8]) {
+  for (const back of [7, 6, 8, 5, 9, 4, 10]) {
     const x = t[0].x - dir.x * back, z = t[0].z - dir.z * back;
     const hit = groundAt(x, z);
-    if (hit && hit.point.y > WORLD.waterLevel + 0.3) {
+    if (hit && hit.point.y > WORLD.waterLevel + 0.3 && hit.face.normal.y > SLOPE_Y) {
       player.spawn.set(x, hit.point.y + FOOT_OFFSET + 0.3, z);
       return Math.atan2(-dir.x, -dir.z);
     }
   }
-  // fallback: above the centre of the map
-  const hit = groundAt(WORLD.sizeX / 2, WORLD.sizeZ / 2);
-  player.spawn.set(WORLD.sizeX / 2, (hit ? hit.point.y : WORLD.sizeY) + FOOT_OFFSET + 1, WORLD.sizeZ / 2);
+  const hit = groundAt(WORLD.size / 2, WORLD.size / 2);
+  player.spawn.set(WORLD.size / 2, (hit ? hit.point.y : WORLD.height) + FOOT_OFFSET + 1, WORLD.size / 2);
   return 0;
 }
 
@@ -623,84 +865,131 @@ function respawn() {
   player.velocity.set(0, 0, 0);
 }
 
-// Capsule vs. triangle-BVH collision (the approach from three-mesh-bvh's character example)
-const _box = new THREE.Box3(), _seg = new THREE.Line3(), _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3();
+// ---------------------------------------------------------------------------
+// Collision: capsule vs. terrain triangles (BVH), tree trunks and boulders.
+// Each push-out is classified by its direction: walkable ground, a steep slope
+// (pushed out sideways only, so it can't lift you up), or a ceiling.
+// ---------------------------------------------------------------------------
+const _box = new THREE.Box3(), _seg = new THREE.Line3(), _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3(), _off = new THREE.Vector3();
+const contact = { ground: false, steep: false, ceiling: false, steepN: new THREE.Vector3() };
+
+function applyPush(dir, depth) {
+  if (dir.y >= SLOPE_Y) {
+    contact.ground = true;
+    _off.copy(dir).multiplyScalar(depth);
+  } else if (dir.y > 0.05) {
+    // steep: resolve the overlap horizontally, never upwards
+    const h2 = Math.max(dir.x * dir.x + dir.z * dir.z, 0.2);
+    _off.set(dir.x * depth / h2, 0, dir.z * depth / h2);
+    contact.steep = true;
+    contact.steepN.x += dir.x; contact.steepN.z += dir.z;
+  } else {
+    _off.copy(dir).multiplyScalar(depth);
+    if (dir.y < -0.3) contact.ceiling = true;
+    else { contact.steep = true; contact.steepN.x += dir.x; contact.steepN.z += dir.z; }
+  }
+  _seg.start.add(_off);
+  _seg.end.add(_off);
+}
 
 function collideCapsule() {
+  const r = PLAYER.radius;
   _seg.start.copy(player.position);
   _seg.end.copy(player.position).y -= PLAYER.segment;
-  const r = PLAYER.radius;
   _box.makeEmpty();
   _box.expandByPoint(_seg.start); _box.expandByPoint(_seg.end);
   _box.min.addScalar(-r); _box.max.addScalar(r);
 
-  terrainMesh.geometry.boundsTree.shapecast({
+  colliderMesh.geometry.boundsTree.shapecast({
     intersectsBounds: (box) => box.intersectsBox(_box),
     intersectsTriangle: (tri) => {
-      const triPoint = _v1, capsulePoint = _v2;
-      const distance = tri.closestPointToSegment(_seg, triPoint, capsulePoint);
-      if (distance < r) {
-        const depth = r - distance;
-        const dir = capsulePoint.sub(triPoint).normalize();
-        _seg.start.addScaledVector(dir, depth);
-        _seg.end.addScaledVector(dir, depth);
-      }
+      const distance = tri.closestPointToSegment(_seg, _v1, _v2);
+      if (distance < r) applyPush(_v2.sub(_v1).normalize(), r - distance);
     },
   });
 
-  // Tree trunks: vertical cylinders
-  for (const t of trees) {
-    if (_seg.end.y - r > t.y1 || _seg.start.y + r < t.y0) continue;
-    const dx = _seg.start.x - t.x, dz = _seg.start.z - t.z;
-    const d = Math.hypot(dx, dz), min = t.r + r;
-    if (d < min && d > 1e-5) {
-      const push = (min - d) / d;
-      _seg.start.x += dx * push; _seg.start.z += dz * push;
-      _seg.end.x += dx * push; _seg.end.z += dz * push;
+  const gx = Math.floor(_seg.start.x / CELL), gz = Math.floor(_seg.start.z / CELL);
+  for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) {
+    const list = obstacleGrid.get(cellKey(gx + dx, gz + dz));
+    if (!list) continue;
+    for (const o of list) {
+      if (o.type === 'cyl') {
+        if (_seg.end.y - r > o.y1 || _seg.start.y + r < o.y0) continue;
+        const ox = _seg.start.x - o.x, oz = _seg.start.z - o.z;
+        const d = Math.hypot(ox, oz), min = o.r + r;
+        if (d < min && d > 1e-5) {
+          _off.set(ox / d * (min - d), 0, oz / d * (min - d));
+          _seg.start.add(_off); _seg.end.add(_off);
+          contact.steep = true; contact.steepN.x += ox / d; contact.steepN.z += oz / d;
+        }
+      } else {
+        _v3.set(o.x, o.y, o.z);
+        _seg.closestPointToPoint(_v3, true, _v1);
+        const d = _v1.distanceTo(_v3), min = o.r + r;
+        if (d < min && d > 1e-5) applyPush(_v1.sub(_v3).divideScalar(d), min - d);
+      }
     }
   }
 
-  // World edge: keep the player inside the small terrain area
-  const pad = 1.2;
-  const cx = THREE.MathUtils.clamp(_seg.start.x, pad, WORLD.sizeX - 1 - pad) - _seg.start.x;
-  const cz = THREE.MathUtils.clamp(_seg.start.z, pad, WORLD.sizeZ - 1 - pad) - _seg.start.z;
+  // keep the player inside the map
+  const pad = 1.5;
+  const cx = THREE.MathUtils.clamp(_seg.start.x, pad, WORLD.size - pad) - _seg.start.x;
+  const cz = THREE.MathUtils.clamp(_seg.start.z, pad, WORLD.size - pad) - _seg.start.z;
   _seg.start.x += cx; _seg.end.x += cx; _seg.start.z += cz; _seg.end.z += cz;
-
-  return _v1.subVectors(_seg.start, player.position); // correction vector
 }
 
 const keys = {};
 let yaw = 0, pitch = -0.25;
 let thirdPerson = true;
-let camDistance = 5;
-const camState = { dist: 5 };
+const CAM_DISTANCES = [3.5, 6, 10];
+let camDistIndex = 1;
+const camState = { dist: 6 };
+let gameTime = 0;
 
 function stepPhysics(dt, inputDir, speed) {
-  // gravity
-  if (player.onGround) player.velocity.y = Math.max(player.velocity.y, -1);
-  player.velocity.y += PLAYER.gravity * dt;
+  const W = WORLD.waterLevel;
+  const feet = player.position.y - FOOT_OFFSET;
+  const depth = W - feet;
+  player.inWater = depth > 0.3;
+  const swimming = depth > 1.25;
 
-  // horizontal movement: snappy on ground, some control in the air
-  const targetX = inputDir.x * speed, targetZ = inputDir.z * speed;
-  const k = 1 - Math.exp(-(player.onGround ? 18 : 4) * dt);
-  player.velocity.x += (targetX - player.velocity.x) * k;
-  player.velocity.z += (targetZ - player.velocity.z) * k;
+  // gravity (and buoyancy when swimming)
+  if (swimming) {
+    player.velocity.y += (PLAYER.gravity * 0.15) * dt;
+    player.velocity.y *= 1 - Math.min(1, dt * 2.5);
+    if (keys.Space) player.velocity.y = Math.max(player.velocity.y, 3.2);
+  } else {
+    player.velocity.y += PLAYER.gravity * dt;
+  }
+
+  const k = 1 - Math.exp(-(player.onGround ? 16 : swimming ? 5 : 3) * dt);
+  player.velocity.x += (inputDir.x * speed - player.velocity.x) * k;
+  player.velocity.z += (inputDir.z * speed - player.velocity.z) * k;
 
   player.position.addScaledVector(player.velocity, dt);
 
-  const delta = collideCapsule();
-  player.onGround = delta.y > Math.abs(dt * player.velocity.y * 0.25);
-  const offset = Math.max(0, delta.length() - 1e-5);
-  delta.normalize().multiplyScalar(offset);
-  player.position.add(delta);
+  contact.ground = contact.steep = contact.ceiling = false;
+  contact.steepN.set(0, 0, 0);
+  collideCapsule();
+  player.position.copy(_seg.start);
 
-  if (player.onGround) {
-    player.velocity.y = 0;
-  } else if (offset > 0) {
-    // slide along walls / ceilings: remove the velocity going into the surface
-    delta.normalize();
-    player.velocity.addScaledVector(delta, -delta.dot(player.velocity));
+  player.onGround = contact.ground;
+  if (contact.ground) {
+    player.lastGroundTime = gameTime;
+    if (player.velocity.y < 0) player.velocity.y = -2.5; // keeps you stuck to the ground going downhill
   }
+  if (contact.steep) {
+    // remove any velocity pushing into the steep surface (no climbing it)
+    const n = contact.steepN;
+    const len = Math.hypot(n.x, n.z);
+    if (len > 1e-5) {
+      const nx = n.x / len, nz = n.z / len;
+      const into = player.velocity.x * nx + player.velocity.z * nz;
+      if (into < 0) { player.velocity.x -= nx * into; player.velocity.z -= nz * into; }
+    }
+    if (!contact.ground) player.velocity.y = Math.max(player.velocity.y, -14); // slide down steep slopes
+  }
+  if (contact.ceiling && player.velocity.y > 0) player.velocity.y = 0;
 }
 
 const _fwd = new THREE.Vector3(), _right = new THREE.Vector3(), _input = new THREE.Vector3();
@@ -709,26 +998,37 @@ function updatePlayer(dt) {
   _fwd.set(-Math.sin(yaw), 0, -Math.cos(yaw));
   _right.set(-_fwd.z, 0, _fwd.x);
   _input.set(0, 0, 0);
-  if (keys.KeyW || keys.ArrowUp) _input.add(_fwd);
-  if (keys.KeyS || keys.ArrowDown) _input.sub(_fwd);
-  if (keys.KeyD || keys.ArrowRight) _input.add(_right);
-  if (keys.KeyA || keys.ArrowLeft) _input.sub(_right);
+  if (!inventoryOpen) {
+    if (keys.KeyW || keys.ArrowUp) _input.add(_fwd);
+    if (keys.KeyS || keys.ArrowDown) _input.sub(_fwd);
+    if (keys.KeyD || keys.ArrowRight) _input.add(_right);
+    if (keys.KeyA || keys.ArrowLeft) _input.sub(_right);
+  }
   const moving = _input.lengthSq() > 0;
   if (moving) _input.normalize();
 
-  const inWater = player.position.y - FOOT_OFFSET < WORLD.waterLevel - 0.3;
   let speed = keys.ShiftLeft || keys.ShiftRight ? PLAYER.sprintSpeed : PLAYER.walkSpeed;
-  if (inWater) speed *= 0.55;
+  if (player.inWater) speed *= 0.55;
 
-  if (keys.Space && player.onGround) {
+  // jump only from walkable ground (with a short grace period after leaving it)
+  const canJump = player.onGround || gameTime - player.lastGroundTime < 0.12;
+  if (keys.Space && canJump && !player.inWater) {
     player.velocity.y = PLAYER.jumpSpeed;
     player.onGround = false;
+    player.lastGroundTime = -1;
   }
 
   const steps = 5;
   for (let i = 0; i < steps; i++) stepPhysics(dt / steps, _input, speed);
 
   if (player.position.y < -20) respawn();
+  for (const v of terrainFns.volcanoes) {
+    if (Math.hypot(player.position.x - v.x, player.position.z - v.z) < v.crater * 0.8 && player.position.y - FOOT_OFFSET < v.lavaY + 0.4) {
+      respawn();
+      flashDamage();
+      toast('You fell into the lava!');
+    }
+  }
 
   // Character visuals
   if (moving) {
@@ -737,21 +1037,24 @@ function updatePlayer(dt) {
     diff = Math.atan2(Math.sin(diff), Math.cos(diff));
     player.facing += diff * Math.min(1, dt * 12);
   }
+  const grounded = gameTime - player.lastGroundTime < 0.15;
   const hSpeed = Math.hypot(player.velocity.x, player.velocity.z);
   player.walkPhase += dt * hSpeed * 2.2;
-  const swing = player.onGround ? Math.sin(player.walkPhase) * Math.min(1, hSpeed / 5) * 0.8 : 0.5;
+  const swing = grounded ? Math.sin(player.walkPhase) * Math.min(1, hSpeed / 5) * 0.8 : 0.5;
   const { armL, armR, legL, legR } = character.userData;
-  legL.rotation.x = swing; legR.rotation.x = player.onGround ? -swing : -0.3;
-  armL.rotation.x = -swing * 0.8; armR.rotation.x = player.onGround ? swing * 0.8 : -2.4;
+  legL.rotation.x = swing; legR.rotation.x = grounded ? -swing : -0.3;
+  armL.rotation.x = -swing * 0.8; armR.rotation.x = grounded ? swing * 0.8 : -2.4;
 
-  character.position.set(player.position.x, player.position.y - FOOT_OFFSET + (player.onGround ? Math.abs(Math.sin(player.walkPhase)) * 0.04 * Math.min(1, hSpeed / 5) : 0), player.position.z);
+  character.position.set(player.position.x, player.position.y - FOOT_OFFSET + (grounded ? Math.abs(Math.sin(player.walkPhase)) * 0.04 * Math.min(1, hSpeed / 5) : 0), player.position.z);
   character.rotation.y = player.facing;
   character.visible = thirdPerson;
 
   lantern.position.set(player.position.x, player.position.y + 0.3, player.position.z);
+  sun.position.copy(player.position).add(SUN_OFFSET);
+  sun.target.position.copy(player.position);
 }
 
-const _target = new THREE.Vector3(), _camDir = new THREE.Vector3();
+const _target = new THREE.Vector3(), _camDir = new THREE.Vector3(), _back = new THREE.Vector3();
 
 function updateCamera(dt) {
   _target.set(player.position.x, player.position.y + EYE_OFFSET, player.position.z);
@@ -760,31 +1063,199 @@ function updateCamera(dt) {
     camera.rotation.set(pitch, yaw, 0, 'YXZ');
     return;
   }
-  // orbit behind the player; pull in when terrain blocks the view
+  const want = CAM_DISTANCES[camDistIndex];
   _camDir.set(-Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch));
-  raycaster.set(_target, _camDir.clone().negate());
-  raycaster.far = camDistance + 0.4;
-  const hit = raycaster.intersectObject(terrainMesh, false)[0];
-  const wanted = hit ? Math.max(0.4, hit.distance - 0.35) : camDistance;
+  raycaster.set(_target, _back.copy(_camDir).negate());
+  raycaster.far = want + 0.4;
+  const hit = raycaster.intersectObject(colliderMesh, false)[0];
+  const wanted = hit ? Math.max(0.4, hit.distance - 0.35) : want;
   camState.dist = wanted < camState.dist ? wanted : camState.dist + (wanted - camState.dist) * Math.min(1, dt * 4);
   camera.position.copy(_target).addScaledVector(_camDir, -camState.dist);
   camera.lookAt(_target);
 }
 
 // ---------------------------------------------------------------------------
-// Input
+// Inventory + hotbar (items get registered later with game.registerItem)
+// ---------------------------------------------------------------------------
+const HOTBAR_SIZE = 9, INVENTORY_SIZE = 36; // slots 0-8 are the hotbar, 9-35 the backpack
+const ITEMS = {};                            // id -> { id, name, icon (emoji) or color, maxStack }
+const slots = new Array(INVENTORY_SIZE).fill(null); // each slot: null or { id, count }
+let selectedSlot = 0;
+let heldStack = null; // stack on the mouse cursor while the inventory is open
+let inventoryOpen = false;
+
+function registerItem(def) {
+  ITEMS[def.id] = { maxStack: 64, ...def };
+  return ITEMS[def.id];
+}
+
+// Adds items, filling existing stacks first (hotbar before backpack). Returns how many didn't fit.
+function addItem(id, count = 1) {
+  const def = ITEMS[id];
+  if (!def) throw new Error(`Unknown item "${id}". Register it with game.registerItem first.`);
+  for (const pass of ['stack', 'empty']) {
+    for (let i = 0; i < INVENTORY_SIZE && count > 0; i++) {
+      const s = slots[i];
+      if (pass === 'stack' && s && s.id === id && s.count < def.maxStack) {
+        const n = Math.min(count, def.maxStack - s.count); s.count += n; count -= n;
+      } else if (pass === 'empty' && !s) {
+        const n = Math.min(count, def.maxStack); slots[i] = { id, count: n }; count -= n;
+      }
+    }
+  }
+  renderInventory();
+  return count;
+}
+
+function removeItem(id, count = 1) {
+  for (let i = INVENTORY_SIZE - 1; i >= 0 && count > 0; i--) {
+    const s = slots[i];
+    if (s && s.id === id) { const n = Math.min(count, s.count); s.count -= n; count -= n; if (!s.count) slots[i] = null; }
+  }
+  renderInventory();
+  return count === 0;
+}
+
+const countItem = (id) => slots.reduce((sum, s) => sum + (s && s.id === id ? s.count : 0), 0);
+const getSelectedItem = () => slots[selectedSlot];
+
+function fillSlotEl(el, stack, keyLabel) {
+  el.innerHTML = keyLabel ? `<span class="key">${keyLabel}</span>` : '';
+  el.removeAttribute('title');
+  if (!stack) return;
+  const def = ITEMS[stack.id] || { name: stack.id };
+  if (def.icon) el.insertAdjacentHTML('beforeend', `<span>${def.icon}</span>`);
+  else el.insertAdjacentHTML('beforeend', `<span class="swatch" style="background:${def.color || '#999'}"></span>`);
+  if (stack.count > 1) el.insertAdjacentHTML('beforeend', `<span class="count">${stack.count}</span>`);
+  el.dataset.name = def.name;
+}
+
+const hotbarEl = document.getElementById('hotbar');
+const invMainEl = document.getElementById('inv-main');
+const invHotbarEl = document.getElementById('inv-hotbar');
+const inventoryEl = document.getElementById('inventory');
+const heldEl = document.getElementById('held');
+const tooltipEl = document.getElementById('tooltip');
+
+function makeSlots(container, from, to, interactive) {
+  for (let i = from; i < to; i++) {
+    const el = document.createElement('div');
+    el.className = 'slot';
+    el.dataset.index = i;
+    if (interactive) {
+      el.addEventListener('mousedown', (e) => { e.preventDefault(); onSlotClick(i, e); });
+      el.addEventListener('mouseenter', () => { const s = slots[i]; if (s) { tooltipEl.textContent = ITEMS[s.id]?.name || s.id; tooltipEl.style.display = 'block'; } });
+      el.addEventListener('mouseleave', () => { tooltipEl.style.display = 'none'; });
+      el.addEventListener('contextmenu', (e) => e.preventDefault());
+    }
+    container.appendChild(el);
+  }
+}
+makeSlots(hotbarEl, 0, HOTBAR_SIZE, false);
+makeSlots(invMainEl, HOTBAR_SIZE, INVENTORY_SIZE, true);
+makeSlots(invHotbarEl, 0, HOTBAR_SIZE, true);
+
+function renderInventory() {
+  [...hotbarEl.children].forEach((el, i) => { fillSlotEl(el, slots[i], String(i + 1)); el.classList.toggle('selected', i === selectedSlot); });
+  [...invMainEl.children].forEach((el) => fillSlotEl(el, slots[+el.dataset.index]));
+  [...invHotbarEl.children].forEach((el) => fillSlotEl(el, slots[+el.dataset.index], el.dataset.index * 1 + 1 + ''));
+  fillSlotEl(heldEl, heldStack);
+  heldEl.style.display = heldStack ? 'flex' : 'none';
+  document.getElementById('inv-note').style.display = slots.some(Boolean) || heldStack ? 'none' : 'block';
+}
+
+function onSlotClick(i, e) {
+  const s = slots[i];
+  const max = (id) => ITEMS[id]?.maxStack ?? 64;
+  if (e.button === 0 && e.shiftKey && s && !heldStack) {
+    // quick move between hotbar and backpack
+    const [from, to] = i < HOTBAR_SIZE ? [HOTBAR_SIZE, INVENTORY_SIZE] : [0, HOTBAR_SIZE];
+    for (let j = from; j < to && slots[i]; j++) {
+      const t = slots[j];
+      if (t && t.id === s.id && t.count < max(s.id)) { const n = Math.min(s.count, max(s.id) - t.count); t.count += n; s.count -= n; if (!s.count) slots[i] = null; }
+    }
+    for (let j = from; j < to && slots[i]; j++) if (!slots[j]) { slots[j] = slots[i]; slots[i] = null; }
+  } else if (e.button === 0) {
+    if (!heldStack) { heldStack = s; slots[i] = null; }
+    else if (!s) { slots[i] = heldStack; heldStack = null; }
+    else if (s.id === heldStack.id) {
+      const n = Math.min(heldStack.count, max(s.id) - s.count);
+      s.count += n; heldStack.count -= n;
+      if (!heldStack.count) heldStack = null;
+    } else { slots[i] = heldStack; heldStack = s; }
+  } else if (e.button === 2) {
+    if (!heldStack && s) {
+      const half = Math.ceil(s.count / 2);
+      heldStack = { id: s.id, count: half }; s.count -= half;
+      if (!s.count) slots[i] = null;
+    } else if (heldStack && (!s || (s.id === heldStack.id && s.count < max(s.id)))) {
+      if (!s) slots[i] = { id: heldStack.id, count: 1 }; else s.count++;
+      if (!--heldStack.count) heldStack = null;
+    }
+  }
+  renderInventory();
+}
+
+document.addEventListener('mousemove', (e) => {
+  heldEl.style.left = e.clientX - 24 + 'px'; heldEl.style.top = e.clientY - 24 + 'px';
+  tooltipEl.style.left = e.clientX + 14 + 'px'; tooltipEl.style.top = e.clientY + 14 + 'px';
+});
+
+function selectSlot(i) {
+  selectedSlot = (i + HOTBAR_SIZE) % HOTBAR_SIZE;
+  renderInventory();
+  const s = slots[selectedSlot];
+  if (s) toast(ITEMS[s.id]?.name || s.id);
+}
+
+function setInventoryOpen(open) {
+  inventoryOpen = open;
+  inventoryEl.style.display = open ? 'block' : 'none';
+  tooltipEl.style.display = 'none';
+  if (open) {
+    for (const k in keys) keys[k] = false;
+    document.exitPointerLock?.();
+  } else {
+    if (heldStack) { const left = addItem(heldStack.id, heldStack.count); heldStack = null; if (left) console.warn('Inventory full, items lost:', left); }
+    renderInventory();
+    renderer.domElement.requestPointerLock()?.catch?.(() => {});
+  }
+  updateOverlay();
+}
+renderInventory();
+
+// ---------------------------------------------------------------------------
+// Input + UI
 // ---------------------------------------------------------------------------
 const overlay = document.getElementById('overlay');
 const hud = document.getElementById('hud');
 const crosshair = document.getElementById('crosshair');
+const toastEl = document.getElementById('toast');
+const damageEl = document.getElementById('damage');
 let locked = false;
 let lanternOn = true;
+let toastTimer = 0;
+
+function toast(text) {
+  toastEl.textContent = text;
+  toastEl.style.opacity = 1;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => (toastEl.style.opacity = 0), 1600);
+}
+function flashDamage() {
+  damageEl.style.transition = 'none'; damageEl.style.opacity = 1;
+  requestAnimationFrame(() => { damageEl.style.transition = 'opacity 0.8s'; damageEl.style.opacity = 0; });
+}
+function updateOverlay() {
+  overlay.style.display = locked || inventoryOpen ? 'none' : 'flex';
+}
 
 overlay.addEventListener('click', () => renderer.domElement.requestPointerLock());
 document.addEventListener('pointerlockchange', () => {
   locked = document.pointerLockElement === renderer.domElement;
-  overlay.style.display = locked ? 'none' : 'flex';
+  updateOverlay();
 });
+document.addEventListener('pointerlockerror', updateOverlay);
 document.addEventListener('mousemove', (e) => {
   if (!locked) return;
   yaw -= e.movementX * 0.0022;
@@ -795,19 +1266,24 @@ function clampPitch() {
   pitch = thirdPerson ? THREE.MathUtils.clamp(pitch, -1.35, 0.6) : THREE.MathUtils.clamp(pitch, -1.55, 1.55);
 }
 window.addEventListener('wheel', (e) => {
-  if (!thirdPerson) return;
-  camDistance = THREE.MathUtils.clamp(camDistance + Math.sign(e.deltaY) * 0.6, 2, 12);
-});
+  if (!locked || inventoryOpen) return;
+  selectSlot(selectedSlot + Math.sign(e.deltaY));
+}, { passive: true });
 window.addEventListener('keydown', (e) => {
+  if (e.code === 'Tab') e.preventDefault();
+  if (e.code === 'KeyE' || e.code === 'KeyI' || e.code === 'Tab') { if (!e.repeat) setInventoryOpen(!inventoryOpen); return; }
+  if (inventoryOpen) { if (e.code === 'Escape') setInventoryOpen(false); return; }
   keys[e.code] = true;
   if (e.code === 'Space') e.preventDefault();
   if (e.repeat) return;
+  if (e.code.startsWith('Digit') && e.code !== 'Digit0') selectSlot(+e.code.slice(5) - 1);
   if (e.code === 'KeyV' || e.code === 'KeyC') {
     thirdPerson = !thirdPerson;
-    if (!thirdPerson) yaw = player.facing; // look where the character faces
+    if (!thirdPerson) yaw = player.facing;
     clampPitch();
     crosshair.style.display = thirdPerson ? 'none' : 'block';
   }
+  if (e.code === 'KeyZ') camDistIndex = (camDistIndex + 1) % CAM_DISTANCES.length;
   if (e.code === 'KeyF') { lanternOn = !lanternOn; lantern.visible = lanternOn; }
   if (e.code === 'KeyR') respawn();
   if (e.code === 'KeyN') newWorld(Math.floor(Math.random() * 1e6));
@@ -825,6 +1301,7 @@ window.addEventListener('resize', () => {
 // ---------------------------------------------------------------------------
 let worldStats = null;
 function newWorld(seed) {
+  document.getElementById('loading').style.display = 'block';
   worldStats = generateWorld(seed);
   const facing = findSpawn();
   player.facing = facing;
@@ -833,6 +1310,7 @@ function newWorld(seed) {
   const url = new URL(location.href);
   url.searchParams.set('seed', seed);
   history.replaceState(null, '', url);
+  document.getElementById('loading').style.display = 'none';
 }
 
 const params = new URLSearchParams(location.search);
@@ -842,17 +1320,20 @@ const clock = new THREE.Clock();
 let fpsAcc = 0, fpsFrames = 0, fps = 0;
 function frame() {
   const dt = Math.min(clock.getDelta(), 0.05);
+  gameTime += dt;
   updatePlayer(dt);
   updateCamera(dt);
-  if (clouds) clouds.position.x = (clouds.position.x + dt * 0.8) % WORLD.sizeX;
+  updateVolcanoes(dt, gameTime);
+  if (clouds) clouds.position.x = (clouds.position.x + dt * 1.2) % (WORLD.size * 0.5);
 
   fpsAcc += dt; fpsFrames++;
   if (fpsAcc > 0.5) { fps = Math.round(fpsFrames / fpsAcc); fpsAcc = 0; fpsFrames = 0; }
   const feet = player.position.y - FOOT_OFFSET;
-  const underground = feet < (terrainFns.surfaceHeight(player.position.x, player.position.z) - 3);
+  const underground = feet < terrainFns.surfaceHeight(player.position.x, player.position.z) - 4;
+  const state = player.onGround ? 'grounded' : contact.steep ? 'sliding' : player.inWater ? 'in water' : 'airborne';
   hud.textContent =
-    `${thirdPerson ? 'Third person' : 'First person'}  ·  ${fps} fps  ·  seed ${worldStats.seed}\n` +
-    `pos ${player.position.x.toFixed(1)}, ${feet.toFixed(1)}, ${player.position.z.toFixed(1)}  ·  ${player.onGround ? 'grounded' : 'airborne'}${underground ? '  ·  in a cave' : ''}`;
+    `${thirdPerson ? 'Third person' : 'First person'}  ·  ${fps} fps  ·  seed ${worldStats.seed}  ·  map ${WORLD.size} m\n` +
+    `pos ${player.position.x.toFixed(1)}, ${feet.toFixed(1)}, ${player.position.z.toFixed(1)}  ·  ${state}${underground ? '  ·  in a cave' : ''}`;
 
   renderer.render(scene, camera);
   requestAnimationFrame(frame);
@@ -861,10 +1342,14 @@ function frame() {
 // let the loading text paint before the (synchronous) generation runs
 requestAnimationFrame(() => setTimeout(() => {
   newWorld(initialSeed);
-  document.getElementById('loading').style.display = 'none';
   document.getElementById('controls').style.display = 'block';
-  // test hooks
-  window.__game = { player, keys, worldStats: () => worldStats, setView: (tp) => { thirdPerson = tp; clampPitch(); }, setLook: (y, p) => { yaw = y; pitch = p; clampPitch(); } };
+  // Public hooks, for adding items later and for testing
+  window.game = { registerItem, addItem, removeItem, countItem, getSelectedItem, slots, ITEMS, WORLD, PLAYER };
+  window.__game = {
+    player, keys, contact, worldStats: () => worldStats, terrain: () => terrainFns, groundAt,
+    setView: (tp) => { thirdPerson = tp; clampPitch(); }, setLook: (y, p) => { yaw = y; pitch = p; clampPitch(); },
+    setInventoryOpen, selectSlot, setCamDistance: (i) => { camDistIndex = i; },
+  };
   frame();
 }, 30));
 </script>
