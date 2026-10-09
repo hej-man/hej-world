@@ -1,0 +1,382 @@
+import * as THREE from 'three';
+import { state } from '../state.js';
+import { PLAYER, WORLD } from '../config.js';
+import { camera, scene } from '../render/scene.js';
+import { CELL, cellKey, gridRemove, obstacleGrid, targetGrid, terrainFns, world } from '../world/world.js';
+import { editTerrain, editedMaterialAt, naturalMaterial, raycastTerrain } from '../world/query.js';
+import { EYE_OFFSET, player } from './character.js';
+import { ITEMS, addItem, inventoryOpen, renderInventory, setInventoryOpen, slots } from '../inventory/inventory.js';
+import { BLOCKS, blockKey, blocks, placeBlock, removeBlock, voxelRay } from '../world/blocks.js';
+import { BOLT_COST, MAX_HEALTH, stats } from './survival.js';
+import { animals, hurtAnimal } from '../animals/animals.js';
+import { cameraUnderwater } from '../effects/underwater.js';
+import { toast } from '../ui/hud.js';
+import { gameState } from '../ui/menu.js';
+
+// ---------------------------------------------------------------------------
+// Interaction: aim, break, attack, place, eat, cast
+// ---------------------------------------------------------------------------
+export const mouse = { left: false, right: false };
+
+export let swingTime = 0, breakProgress = 0, breakKey = null, attackCd = 0, warnCd = 0;
+export let aimWater = null;
+const _aimO = new THREE.Vector3(), _aimD = new THREE.Vector3(), _eye = new THREE.Vector3(), _tv = new THREE.Vector3();
+
+const outline = new THREE.LineSegments(
+  new THREE.EdgesGeometry(new THREE.BoxGeometry(1.02, 1.02, 1.02)),
+  new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.6 }),
+);
+outline.visible = false;
+scene.add(outline);
+
+function raySphere(o, d, cx, cy, cz, r) {
+  const ox = o.x - cx, oy = o.y - cy, oz = o.z - cz;
+  const b = ox * d.x + oy * d.y + oz * d.z, c = ox * ox + oy * oy + oz * oz - r * r;
+  const h = b * b - c;
+  if (h < 0) return null;
+  const sq = Math.sqrt(h);
+  return -b - sq >= 0 ? -b - sq : -b + sq >= 0 ? 0 : null;
+}
+
+// What's under the crosshair, within reach of the player: terrain, a block, a tree/bush/boulder, or an animal.
+export function pickTarget() {
+  camera.getWorldDirection(_aimD);
+  _aimO.copy(camera.position);
+  _eye.set(player.position.x, player.position.y + EYE_OFFSET, player.position.z);
+  const t0 = Math.max(0, _tv.subVectors(_eye, _aimO).dot(_aimD)); // start level with the player (third person)
+  const t1 = t0 + PLAYER.reach;
+  let best = null;
+  const th = raycastTerrain(_aimO, _aimD, t0, t1);
+  if (th) best = { kind: 'terrain', t: th.distance, point: th.point.clone(), normal: th.face.normal.clone(), hit: th };
+  const bh = voxelRay(_aimO, _aimD, t0, best ? best.t : t1);
+  if (bh) best = { kind: 'block', t: bh.t, key: bh.key, cell: bh.cell, normal: new THREE.Vector3(...bh.normal), type: blocks.get(bh.key).type };
+  const gx = Math.floor(player.position.x / CELL), gz = Math.floor(player.position.z / CELL);
+  for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
+    const list = targetGrid.get(cellKey(gx + i, gz + j));
+    if (list) for (const tg of list) for (const [cx, cy, cz, r] of tg.spheres) {
+      const t = raySphere(_aimO, _aimD, cx, cy, cz, r);
+      if (t !== null && t >= t0 - r && t <= (best ? best.t : t1)) best = { kind: tg.kind, t, target: tg };
+    }
+  }
+  for (const a of animals) {
+    if (Math.abs(a.x - player.position.x) > PLAYER.reach + 3 || Math.abs(a.z - player.position.z) > PLAYER.reach + 3) continue;
+    const t = raySphere(_aimO, _aimD, a.x, a.y + a.sp.h * 0.55, a.z, Math.max(0.35, a.sp.r));
+    if (t !== null && t >= t0 - 1 && t <= (best ? best.t : t1)) best = { kind: 'animal', t, animal: a };
+  }
+  return best;
+}
+
+// Where the aim ray first meets a water surface (sea or a lake) from above, or null.
+function waterRay(o, d, t0, t1) {
+  if (d.y > -1e-3) return null;
+  const T = terrainFns, levels = [WORLD.waterLevel];
+  for (const lk of T.lakes) if (Math.abs(lk.x - o.x) < lk.R * 2 + t1 && Math.abs(lk.z - o.z) < lk.R * 2 + t1) levels.push(lk.level);
+  let best = null;
+  for (const L of levels) {
+    const t = (L - o.y) / d.y;
+    if (t < t0 || t > t1 || (best && t > best.t)) continue;
+    const x = o.x + d.x * t, z = o.z + d.z * t;
+    if (Math.abs(T.waterAt(x, z) - L) > 0.01) continue;
+    best = { t, point: new THREE.Vector3(x, L, z) };
+  }
+  return best;
+}
+
+function terrainMaterialAt(hit) {
+  const p = hit.point, n = hit.face.normal;
+  const edited = editedMaterialAt(p.x - n.x * 0.8, p.y - n.y * 0.8, p.z - n.z * 0.8);
+  if (edited) return edited;
+  const ch = hit.object.userData.chunk;
+  const g = ch.render.geometry, vi = g.index.getX(hit.faceIndex * 3);
+  if (g.attributes.tinfo.getZ(vi) < -0.5) return 'crystal';
+  return naturalMaterial(p.x, p.y, p.z, n.y);
+}
+
+function materialOf(t) {
+  switch (t.kind) {
+    case 'tree': return 'wood';
+    case 'bush': return 'plant';
+    case 'rock': return 'stone';
+    case 'block': return BLOCKS[t.type].mat;
+    case 'terrain': return t.material || (t.material = terrainMaterialAt(t.hit));
+  }
+  return 'soft';
+}
+
+function targetName(t) {
+  switch (t.kind) {
+    case 'tree': return { pine: 'Pine tree', oak: 'Oak tree', birch: 'Birch tree' }[t.target.species];
+    case 'bush': return 'Berry bush';
+    case 'rock': return t.target.iron ? 'Iron-rich boulder' : 'Boulder';
+    case 'block': return BLOCKS[t.type].name;
+    case 'animal': return `${t.animal.sp.name}  ${Math.max(0, Math.ceil(t.animal.hp))}/${t.animal.sp.hp}`;
+    case 'terrain': return { dirt: 'Dirt', sand: 'Sand', stone: 'Stone', crystal: 'Crystal', iron: 'Iron ore' }[materialOf(t)];
+  }
+  return '';
+}
+
+// Seconds to break something with the item in hand (Infinity = can't).
+export function breakTime(mat, def) {
+  if (state.creative) return 0.12;
+  const tool = def?.tool, tier = def?.tier || 0, speed = [1, 1, 1.6, 2.6][tier];
+  switch (mat) {
+    case 'wood': return tool === 'axe' ? 1.1 / speed : 2.6;
+    case 'plant': return 0.35;
+    case 'soft': return 0.5;
+    case 'dirt': case 'sand': return tool === 'shovel' ? 0.4 / speed : 0.9;
+    case 'stone': case 'crystal': return tool === 'pickaxe' ? 1.4 / speed : Infinity;
+    case 'iron': return tool === 'pickaxe' && tier >= 2 ? 2 / speed : Infinity;
+  }
+  return 1;
+}
+
+// Adds [[id, count], ...] to the inventory and shows what you got.
+export function give(list) {
+  if (state.creative) return;
+  const got = [];
+  let lost = 0;
+  for (const [id, n] of list) {
+    if (n <= 0) continue;
+    const left = addItem(id, n);
+    lost += left;
+    if (n - left > 0) got.push(`+${n - left} ${ITEMS[id].name}`);
+  }
+  if (got.length || lost) toast(got.join('  ') + (lost ? '  (inventory full)' : ''));
+}
+
+const _hide = new THREE.Matrix4().makeScale(0, 0, 0);
+function harvest(tg) {
+  for (const [mesh, i] of tg.parts) { mesh.setMatrixAt(i, _hide); mesh.instanceMatrix.needsUpdate = true; }
+  if (tg.obstacle) gridRemove(obstacleGrid, tg.obstacle);
+  gridRemove(targetGrid, tg);
+  const r = Math.random;
+  if (tg.kind === 'tree') {
+    give([
+      ['log', 2 + Math.round(tg.scale * 2)],
+      ['stick', 1 + Math.floor(r() * 2) + (tg.species === 'pine' ? 1 : 0)],
+      ['apple', tg.species === 'oak' && r() < 0.5 ? 1 + Math.floor(r() * 2) : 0],
+    ]);
+  } else if (tg.kind === 'bush') {
+    give([['berries', r() < 0.8 ? 1 + Math.floor(r() * 3) : 0], ['stick', 1]]);
+  } else if (tg.kind === 'rock') {
+    give(tg.iron ? [['stone', 1 + Math.round(tg.s)], ['iron_ore', 1 + Math.round(tg.s * 1.5)]] : [['stone', 2 + Math.round(tg.s * 2)]]);
+  }
+}
+
+export function doBreak(t) {
+  if (t.kind === 'tree' || t.kind === 'bush' || t.kind === 'rock') { harvest(t.target); return; }
+  if (t.kind === 'block') { const b = removeBlock(t.key); if (b) give([[b.type, 1]]); return; }
+  if (t.kind === 'terrain') {
+    const mat = materialOf(t);
+    const center = t.point.clone().addScaledVector(t.normal, -0.6);
+    const flipped = editTerrain(center, 1.9, false);
+    if (!flipped) return;
+    // plants standing on the removed ground come down with it
+    const gx = Math.floor(center.x / CELL), gz = Math.floor(center.z / CELL);
+    for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
+      for (const tg of [...(targetGrid.get(cellKey(gx + i, gz + j)) || [])]) {
+        if (Math.hypot(tg.x - center.x, tg.y - center.y, tg.z - center.z) < 2.6) harvest(tg);
+      }
+    }
+    give(mat === 'crystal' ? [['crystal', 1 + Math.floor(Math.random() * 2)]] : mat === 'iron' ? [['iron_ore', 1], ['stone', Math.random() < 0.5 ? 1 : 0]] : [[mat, 1]]);
+  }
+}
+
+// Where a block would go: the empty cell in front of the face you're looking at.
+function placementCell(t) {
+  if (!t || (t.kind !== 'terrain' && t.kind !== 'block')) return null;
+  if (t.kind === 'block') return [t.cell[0] + t.normal.x, t.cell[1] + t.normal.y, t.cell[2] + t.normal.z];
+  return [Math.floor(t.point.x + t.normal.x * 0.5), Math.floor(t.point.y + t.normal.y * 0.5), Math.floor(t.point.z + t.normal.z * 0.5)];
+}
+
+const _bmin = new THREE.Vector3(), _bmax = new THREE.Vector3(), _sg = new THREE.Line3(), _p1 = new THREE.Vector3(), _p2 = new THREE.Vector3();
+function cellFree([x, y, z]) {
+  if (x < 1 || z < 1 || y < 1 || x > WORLD.size - 2 || z > WORLD.size - 2 || y > WORLD.height - 2) return false;
+  if (blocks.has(blockKey(x, y, z))) return false;
+  // not inside the player
+  _bmin.set(x, y, z); _bmax.set(x + 1, y + 1, z + 1);
+  _sg.start.copy(player.position); _sg.end.copy(player.position); _sg.end.y -= PLAYER.segment;
+  _p2.copy(_sg.start).clamp(_bmin, _bmax);
+  for (let k = 0; k < 3; k++) { _sg.closestPointToPoint(_p2, true, _p1); _p2.copy(_p1).clamp(_bmin, _bmax); }
+  _sg.closestPointToPoint(_p2, true, _p1);
+  if (_p1.distanceTo(_p2) < PLAYER.radius - 0.02) return false;
+  // not inside an animal
+  return !animals.some((a) => a.x + a.sp.r * 0.6 > x && a.x - a.sp.r * 0.6 < x + 1 && a.z + a.sp.r * 0.6 > z && a.z - a.sp.r * 0.6 < z + 1 && a.y < y + 1 && a.y + a.sp.h > y);
+}
+
+function consumeSelected() {
+  if (state.creative) return;
+  const s = slots[state.selectedSlot];
+  if (!s) return;
+  if (!--s.count) slots[state.selectedSlot] = null;
+  renderInventory();
+}
+
+// Right click on water: fill an empty bottle, or drink a few sips
+export function useWater() {
+  const s = slots[state.selectedSlot];
+  if (s?.id === 'bottle') {
+    consumeSelected();
+    give([['water_bottle', 1]]);
+    state.useCd = 0.4;
+    return;
+  }
+  if (stats.thirst > 99 && !state.creative) { toast("You're not thirsty"); return; }
+  stats.thirst = Math.min(100, stats.thirst + 15);
+  toast('Drank some water');
+  state.useCd = 0.6;
+}
+
+// Right click
+export function useItem(t) {
+  const s = slots[state.selectedSlot], def = s && ITEMS[s.id];
+  // water in front of whatever you're aiming at: drink or fill a bottle, unless you're building
+  if (aimWater && !(def && (def.place || def.terrain || def.food || def.drink || def.heal || def.mana || def.armour || def.wand))) { useWater(); return; }
+  if (t?.kind === 'block' && BLOCKS[t.type].station && !(def && (def.place || def.terrain))) { setInventoryOpen(true); return; }
+  if (!def) return;
+  if (def.place) {
+    const cell = placementCell(t);
+    if (!cell || !cellFree(cell)) return;
+    if (placeBlock(def.place, ...cell, state.buildShape)) consumeSelected();
+  } else if (def.terrain) {
+    if (!t || (t.kind !== 'terrain' && t.kind !== 'block')) return;
+    const p = t.kind === 'terrain' ? t.point : new THREE.Vector3(t.cell[0] + 0.5, t.cell[1] + 0.5, t.cell[2] + 0.5).addScaledVector(t.normal, 0.5);
+    const center = p.clone().addScaledVector(t.normal, 0.9);
+    _sg.start.copy(player.position); _sg.end.copy(player.position); _sg.end.y -= PLAYER.segment;
+    _sg.closestPointToPoint(center, true, _p1);
+    if (_p1.distanceTo(center) < 1.9 + PLAYER.radius + 0.3) { toast('Too close to place ground here'); return; }
+    if (editTerrain(center, 1.9, true, def.terrain)) consumeSelected();
+  } else if (def.food) {
+    if (stats.hunger > 99 && !state.creative) { toast("You're not hungry"); return; }
+    stats.hunger = Math.min(100, stats.hunger + def.food);
+    if (def.drink) stats.thirst = Math.min(100, stats.thirst + def.drink);
+    if (def.heal) stats.health = Math.min(MAX_HEALTH, stats.health + def.heal);
+    consumeSelected();
+    toast(`Ate ${def.name.toLowerCase()}`);
+    state.useCd = 0.5;
+  } else if (def.drink) {
+    if (stats.thirst > 99 && !state.creative) { toast("You're not thirsty"); return; }
+    stats.thirst = Math.min(100, stats.thirst + def.drink);
+    consumeSelected();
+    if (def.leaves && !state.creative) addItem(def.leaves, 1);
+    toast(`Drank ${def.name.toLowerCase()}`);
+    state.useCd = 0.5;
+  } else if (def.heal) {
+    if (stats.health >= MAX_HEALTH) { toast('Health is already full'); return; }
+    stats.health = Math.min(MAX_HEALTH, stats.health + def.heal);
+    consumeSelected();
+    state.useCd = 0.5;
+  } else if (def.mana) {
+    if (stats.mana >= 100) { toast('Mana is already full'); return; }
+    stats.mana = Math.min(100, stats.mana + def.mana);
+    consumeSelected();
+    state.useCd = 0.5;
+  } else if (def.wand) {
+    castBolt();
+  } else if (def.armour) {
+    if (stats.armour >= def.armour) { toast('Already wearing armour'); return; }
+    stats.armour = def.armour;
+    consumeSelected();
+    toast(`Wearing ${def.name.toLowerCase()}`);
+  }
+}
+
+// Wand bolts
+export const bolts = [];
+const boltGeo = new THREE.IcosahedronGeometry(0.16, 0);
+const boltMat = new THREE.MeshBasicMaterial({ color: 0x9fe8ff });
+const _bd = new THREE.Vector3();
+function castBolt() {
+  if (stats.mana < BOLT_COST && !state.creative) { toast('Not enough mana'); return; }
+  if (!state.creative) stats.mana -= BOLT_COST;
+  camera.getWorldDirection(_bd);
+  const m = new THREE.Mesh(boltGeo, boltMat);
+  m.position.set(player.position.x, player.position.y + EYE_OFFSET - 0.25, player.position.z).addScaledVector(_bd, 0.7);
+  world.add(m);
+  bolts.push({ mesh: m, vel: _bd.clone().multiplyScalar(30), life: 1.5 });
+  state.useCd = 0.35;
+}
+
+export function updateBolts(dt) {
+  for (const b of [...bolts]) {
+    b.life -= dt;
+    const step = b.vel.length() * dt;
+    _bd.copy(b.vel).normalize();
+    let done = b.life <= 0 || !!raycastTerrain(b.mesh.position, _bd, 0, step);
+    if (!done) {
+      b.mesh.position.addScaledVector(b.vel, dt);
+      const p = b.mesh.position;
+      if (blocks.has(blockKey(Math.floor(p.x), Math.floor(p.y), Math.floor(p.z)))) done = true;
+      for (const a of animals) {
+        if (Math.hypot(p.x - a.x, p.y - (a.y + a.sp.h * 0.55), p.z - a.z) < a.sp.r + 0.35) { hurtAnimal(a, 10, b.vel.x, b.vel.z); done = true; break; }
+      }
+      b.mesh.rotation.x += dt * 10; b.mesh.rotation.y += dt * 7;
+    }
+    if (done) { world.remove(b.mesh); bolts.splice(bolts.indexOf(b), 1); }
+  }
+}
+
+const targetEl = document.getElementById('target');
+const breakbarEl = document.getElementById('breakbar');
+const breakFillEl = breakbarEl.firstElementChild;
+
+function targetId(t) {
+  if (!t) return null;
+  if (t.kind === 'terrain') return `g${Math.floor(t.point.x / 2)},${Math.floor(t.point.y / 2)},${Math.floor(t.point.z / 2)}`;
+  if (t.kind === 'block') return t.key;
+  return t.target || t.animal;
+}
+
+export function updateInteraction(dt) {
+  swingTime = Math.max(0, swingTime - dt);
+  attackCd -= dt; state.useCd -= dt; warnCd -= dt;
+  const active = (state.locked || state.testMode) && !inventoryOpen && gameState === 'playing';
+  state.currentTarget = active ? pickTarget() : null;
+  const t = state.currentTarget;
+  // water between you and what you're aiming at (only from above the surface)
+  aimWater = null;
+  if (active && !cameraUnderwater) {
+    camera.getWorldDirection(_aimD);
+    _eye.set(player.position.x, player.position.y + EYE_OFFSET, player.position.z);
+    const t0 = Math.max(0, _tv.subVectors(_eye, camera.position).dot(_aimD));
+    aimWater = waterRay(camera.position, _aimD, t0, t ? Math.min(t.t, t0 + PLAYER.reach) : t0 + PLAYER.reach);
+  }
+  const held = slots[state.selectedSlot], def = held && ITEMS[held.id];
+
+  // outline: where a held block would go, otherwise the block you're looking at
+  const placeCell = def?.place ? placementCell(t) : null;
+  if (placeCell && cellFree(placeCell)) {
+    outline.position.set(placeCell[0] + 0.5, placeCell[1] + 0.5, placeCell[2] + 0.5);
+    outline.material.color.set(0xffffff); outline.visible = true;
+  } else if (t?.kind === 'block') {
+    outline.position.set(t.cell[0] + 0.5, t.cell[1] + 0.5, t.cell[2] + 0.5);
+    outline.material.color.set(0x000000); outline.visible = true;
+  } else outline.visible = false;
+  targetEl.textContent = aimWater ? (held?.id === 'bottle' ? 'Water: right click to fill the bottle' : 'Water: right click to drink') : t ? targetName(t) : '';
+
+  if (active && mouse.left) {
+    if (t?.kind === 'animal') {
+      breakProgress = 0;
+      if (attackCd <= 0) {
+        attackCd = 0.45; swingTime = 0.25;
+        hurtAnimal(t.animal, def?.damage ?? 2, t.animal.x - player.position.x, t.animal.z - player.position.z);
+      }
+    } else if (t) {
+      const id = targetId(t);
+      if (id !== breakKey) { breakKey = id; breakProgress = 0; }
+      const time = breakTime(materialOf(t), def);
+      if (!isFinite(time)) {
+        if (warnCd <= 0) { const m = materialOf(t); toast(m === 'iron' ? 'Iron ore needs a stone or iron pickaxe' : `You need a pickaxe to break ${m === 'crystal' ? 'crystal' : 'stone'}`); warnCd = 2.5; }
+        breakProgress = 0;
+      } else {
+        breakProgress += dt / time;
+        if (breakProgress >= 1) { doBreak(t); breakProgress = 0; breakKey = null; }
+      }
+    } else { breakProgress = 0; breakKey = null; }
+  } else { breakProgress = 0; breakKey = null; }
+
+  if (active && mouse.right && state.useCd <= 0) { state.useCd = 0.25; swingTime = 0.2; useItem(t); }
+
+  breakbarEl.style.display = breakProgress > 0 ? 'block' : 'none';
+  breakFillEl.style.width = `${Math.min(1, breakProgress) * 100}%`;
+}

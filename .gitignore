@@ -1,3 +1,7 @@
-.DS_Store
 node_modules/
+dist/
+assets/textures/
+tests/shots/
+.DS_Store
 .idea/
+*.log

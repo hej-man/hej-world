@@ -1,0 +1,8 @@
+dist/
+assets/
+tests/shots/
+node_modules/
+# the game code is hand-formatted in a dense style (several short statements per line);
+# run prettier on a file only when you mean to reformat it
+src/
+index.html
