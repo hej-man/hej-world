@@ -1,9 +1,11 @@
 # Terrain World
 
-A 3D survival sandbox in the browser: procedurally generated mountains, a river valley,
-big caves and a volcano, dense forests and wandering animals. Walk around in first or third
-person, chop trees, dig and add ground, mine stone and crystal, craft tools and build with blocks,
-while keeping an eye on your health, hunger and mana. A creative mode is there for testing.
+A 3D survival sandbox in the browser: procedurally generated mountains, a river valley, lakes,
+big caves and volcanoes with lava running down their sides, dense forests, wandering animals and
+predators, and changing weather. Walk around in first or third person, chop trees, dig and add
+ground, mine stone, iron and crystal, smelt iron, craft tools and armour, and build with blocks
+in several shapes, while keeping an eye on your health, hunger, thirst and mana. A creative mode
+is there for testing.
 
 Built with **Three.js** (r160) and **three-mesh-bvh** for collision, both loaded from the
 jsDelivr CDN. No build step and no install. Ground and bark use photo-scanned textures from
@@ -39,7 +41,7 @@ one is renamed. All of them are CC0, so no credit is required, but it's nice to 
 
 | Key | Action |
 |-----|--------|
-| Click | Capture the mouse and start |
+| Main menu | Continue, new survival or creative world, a random or typed seed, quality and sound |
 | W A S D / arrows | Move (relative to where you look) |
 | Shift | Sprint |
 | Space | Jump (from walkable ground) / swim up in deep water |
@@ -52,9 +54,11 @@ one is renamed. All of them are CC0, so no credit is required, but it's nice to 
 | E (or I / Tab) | Open / close the inventory and crafting |
 | G | Toggle creative mode (fly with Space / Shift) |
 | F | Toggle the lantern (useful in caves) |
+| B | Cycle the building shape: block, slab, slope, stairs, roof prism, pillar |
+| K | Change the weather (clear, cloudy, rain, storm) |
+| M | Sound on / off |
 | R | Respawn at the cave mouth |
-| N | Generate a new world |
-| Esc | Release the mouse / pause |
+| Esc | Pause (resume or go back to the main menu) |
 
 In the inventory: click to pick up and drop a stack, right-click to split a stack or place one
 item, shift-click to move a stack between the hotbar and the backpack. Click a recipe on the
@@ -65,12 +69,17 @@ right to craft it once, shift-click to craft as many as you can.
 * **Breaking.** Hold the left mouse button on something within reach (5.5 m). Trees give logs,
   sticks and sometimes apples; bushes give berries and a stick; boulders give stone. The ground
   can be dug: dirt and sand by hand (faster with a shovel), stone and cave crystal only with a
-  pickaxe. Axes chop wood faster. Placed blocks break back into their item.
+  pickaxe. Iron ore (rusty speckled rock in cliffs and caves, and rusty boulders) needs a stone
+  pickaxe or better. Axes chop wood faster; iron tools are the fastest. Placed blocks break back
+  into their item.
 * **Building.** Right-click with a block (log, planks, stone, stone bricks, glass, wool,
-  workbench, campfire) to place it on the face you aim at; a white outline shows where it goes.
-  Right-click with dirt or sand to add ground to the terrain.
+  workbench, campfire, furnace) to place it on the face you aim at; a white outline shows where
+  it goes. Press B to choose the shape: a full block, half-height slab, slope, stairs, roof prism
+  or thin pillar. Slopes, stairs, prisms and furnaces turn to face the way you look, and you can
+  walk up slopes and stairs. Right-click with dirt or sand to add ground to the terrain.
 * **Crafting.** Basic recipes work anywhere; tools, bricks, armour and the wand need a
-  workbench within 4.5 m, and cooking, glass and the mana tonic need a campfire.
+  workbench within 4.5 m, cooking, glass and the mana tonic need a campfire, and smelting iron
+  needs a furnace.
 
   | Item | Recipe |
   |------|--------|
@@ -82,19 +91,33 @@ right to craft it once, shift-click to craft as many as you can.
   | Stone pickaxe / axe / shovel / sword | stone + sticks, at a workbench (faster, harder hitting) |
   | Stone bricks ×4 | 4 stone, at a workbench |
   | Leather armour | 5 leather, at a workbench (35% less damage) |
+  | Furnace | 8 stone, at a workbench |
+  | Iron ingot ×2 | 2 iron ore, 1 log, at a furnace |
+  | Iron pickaxe / axe / shovel / sword | iron ingots + sticks, at a workbench (fastest, hardest hitting) |
+  | Iron armour | 6 iron ingots, 2 leather, at a workbench (60% less damage) |
+  | Bottle ×2 | 1 glass, at a workbench |
   | Crystal wand | 1 stick, 3 crystal, 1 feather, at a workbench |
   | Cooked meat | 1 raw meat, at a campfire |
   | Glass | 2 sand, at a campfire |
   | Mana tonic | 1 crystal, 2 berries, at a campfire |
   | Bandage ×2 | 2 wool |
-* **Animals.** Cows, pigs, sheep and chickens graze in meadows; deer, wolves and rabbits live
-  in forests and fields. Deer and rabbits run when you get close, others run once hit, and wolves
-  chase and bite you. Animals drop raw meat, leather, wool and feathers. Herds are topped back up
-  over time, away from you.
-* **Health, hunger, mana.** Hunger drains slowly (faster when sprinting or swimming); at zero
-  you start losing health, and when well fed you heal. Food and bandages restore them. Falls of
-  more than about 5 m hurt, and lava kills. Mana refills over time and powers the crystal wand's
-  bolts. When you die you respawn at the cave and keep your inventory.
+  | Bandage | 3 silk |
+* **Animals.** Cows, pigs, sheep and chickens graze in meadows; deer and rabbits live in forests
+  and fields. Deer and rabbits run when you get close, others run once hit. Predators attack:
+  wolves hunt in packs of two to four, bears roam the forests and hit very hard, boars charge if
+  you come close, and cave spiders lurk in caves. Animals drop raw meat, leather, wool, feathers
+  and silk. Herds are topped back up over time, away from you.
+* **Health, hunger, thirst, mana.** You have 150 health. Hunger and thirst drain over time
+  (thirst faster when sprinting or near a volcano); at zero you start losing health, and when
+  fed and watered you heal. You start with bread, apples, cooked meat and three water bottles.
+  Right-click on a lake or the river to drink, or with an empty bottle to fill it. Falls of more
+  than about 5 m hurt, also when you land on a slope. Lava burns: standing in it costs 24 health
+  a second, and you keep burning for a few seconds after you step out unless you jump into water.
+  Mana refills over time and powers the crystal wand's bolts. When you die you respawn at the
+  cave and keep your inventory.
+* **Weather** changes every few minutes between clear, cloudy, rain and storms with thunder and
+  lightning; it snows instead on high mountains. Rain darkens and wets the ground. Press K to
+  change it yourself.
 * **Creative mode** (G): fly, no damage or hunger, instant breaking without tools, placing
   doesn't use up items, and the inventory shows every item to take stacks from (click it again
   while holding a stack to throw that stack away).
@@ -133,10 +156,13 @@ game.getSelectedItem();      // stack in the selected hotbar slot, or null
   * eroded-looking ridged multifractal mountains rising away from the valley, with crags and
     overhangs from 3D noise, rock strata on cliffs and snow above ~85 m,
   * a winding river valley carved below the water line, with beaches,
-  * volcanoes: concave cones with a crater, a glowing lava lake (falling in respawns you),
-    lava veins on the slopes and a smoke plume,
-  * large worm caves, huge caverns with crystals, and one guaranteed tunnel into a big cavern
-    starting at a flat ledge on the valley side, where you spawn,
+  * lakes in the rolling land, each with its own water level and a muddy shore,
+  * volcanoes: concave cones with a crater, a glowing lava lake, three or four lava streams
+    flowing down the slopes, and a smoke plume,
+  * iron ore veins in the rock,
+  * large worm caves (sealed under at least 5 m of ground except at scattered cave mouths),
+    huge caverns with crystals, and one guaranteed tunnel into a big cavern starting at a flat
+    ledge on the valley side, where you spawn,
   * a flood fill that removes floating rock.
 * **Meshing** uses Surface Nets in 32 × 32 m chunks. Vertex normals come from the gradient of
   the density field, so the ground is smoothly rounded and chunk borders don't show. Each
@@ -163,8 +189,12 @@ game.getSelectedItem();      // stack in the selected hotbar slot, or null
   a dark core, with normals pointing out of the clump so it shades like a soft volume; trunks
   use the bark texture; boulders are noise-displaced spheres with the rock texture. Trunks and
   boulders are solid. Clouds and volcano smoke are soft billboards.
-* **Blocks** are 1 m cubes on a grid, one instanced mesh per block type, with box collision.
-* **Animals** are built from boxes; they wander, graze, steer around trees and blocks, avoid
+* **Grass** near you is real 3D tufts: crossed blade cards in 16 m patches within about 44 m,
+  tinted by the ground texture under them, swaying more in wind and storms.
+* **Blocks** sit on a 1 m grid, with one instanced mesh per block type and shape. Each type has a
+  drawn texture with a bump map (planks, bricks, log rings and bark, stone, wool, glass). Boxes
+  collide as boxes, slopes and prisms as triangles.
+* **Animals** (and the bear, boar and spider) are built from boxes; they wander, graze, steer around trees and blocks, avoid
   water and steep ground, and follow the terrain with downward raycasts.
 * **Water** is a smooth plane with a slow swell; ripples are computed per pixel from a few
   travelling waves and moving noise. It reflects the sky (Fresnel: clear when looking down,
@@ -185,7 +215,11 @@ shadows stop at 220 m, where the haze takes over; trees are leaf cards rather th
 branches; resolution is capped at 1.5× on high-density screens; and the textures take about
 70 MB of video memory (about 18 MB with `?quality=low`). If it stutters, try `?quality=low`;
 the frame rate is shown top-left.
-* **Character**: a 1.8 m capsule. Each collision push is classified as walkable ground, a steep
+* **Character**: the explorer has jointed arms and legs (elbows, knees), a head that turns
+  towards where you look, a backpack and hat, armour that shows when worn and the selected tool
+  or block in hand. Walking, running (leaning forward), jumping, landing, swimming and swinging
+  each have their own pose, and joints ease between them. In first person you see your hand and
+  tool. Physically the player is a 1.8 m capsule. Each collision push is classified as walkable ground, a steep
   slope (pushed out sideways only, so it can't lift you) or a ceiling, so you slide down slopes
   steeper than 47° and can't jump or walk up them. Also gravity, swimming, sprinting and a
   third-person camera that pulls in when terrain is in the way.

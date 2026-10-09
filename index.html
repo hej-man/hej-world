@@ -9,12 +9,31 @@
   canvas { display: block; }
   kbd { background: #333; border: 1px solid #555; border-radius: 4px; padding: 0 6px; font-size: 13px; }
 
-  #overlay {
-    position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
-    background: rgba(10, 20, 30, 0.55); color: #fff; cursor: pointer; text-align: center; z-index: 20;
+  /* Main menu and pause menu */
+  #menu {
+    position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 20; color: #fff;
+    background: radial-gradient(ellipse at center, rgba(8, 16, 26, 0.15) 0%, rgba(4, 8, 14, 0.7) 100%);
   }
-  #overlay .box { background: rgba(0,0,0,0.6); padding: 24px 32px; border-radius: 12px; max-width: 460px; line-height: 1.7; }
-  #overlay h1 { margin: 0 0 8px; font-size: 22px; }
+  #menu .panel {
+    width: 360px; max-width: calc(100vw - 32px); max-height: calc(100vh - 24px); overflow-y: auto; box-sizing: border-box; text-align: center;
+    background: rgba(14, 18, 24, 0.8); backdrop-filter: blur(6px); border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 14px; padding: 26px 28px 20px; box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  }
+  #menu h1 { margin: 0; font-size: 34px; letter-spacing: 1px; font-weight: 700; }
+  #menu .sub { margin: 4px 0 16px; opacity: 0.65; font-size: 13px; }
+  #menu button { font: inherit; color: #fff; cursor: pointer; border-radius: 8px; border: 1px solid rgba(255,255,255,0.18); background: rgba(255,255,255,0.08); }
+  #menu button:hover:not(:disabled) { background: rgba(255,255,255,0.18); }
+  #menu button:disabled { opacity: 0.4; cursor: default; }
+  #menu button.big { display: block; width: 100%; margin: 8px 0; padding: 11px; font-size: 15px; font-weight: 600; }
+  #menu button.primary { background: #3c8a4e; border-color: #5ab36d; }
+  #menu button.primary:hover:not(:disabled) { background: #48a05c; }
+  #menu button.small { padding: 6px 10px; font-size: 13px; }
+  #menu .row { display: flex; gap: 6px; align-items: center; margin-top: 10px; font-size: 13px; text-align: left; }
+  #menu .row label { width: 62px; opacity: 0.75; }
+  #menu input, #menu select { flex: 1; min-width: 0; background: rgba(0,0,0,0.35); color: #fff; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; padding: 6px 8px; font: inherit; font-size: 13px; }
+  #menu details { margin-top: 14px; text-align: left; font-size: 12.5px; line-height: 1.85; }
+  #menu summary { cursor: pointer; opacity: 0.8; }
+  #menu #loading { margin: 6px 0 4px; font-size: 13px; color: #ffd98a; }
 
   #hud { position: fixed; left: 12px; top: 10px; color: #fff; font-size: 13px; text-shadow: 0 1px 2px #000; pointer-events: none; white-space: pre; }
   #crosshair { position: fixed; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; background: rgba(255,255,255,0.85); box-shadow: 0 0 2px #000; display: none; pointer-events: none; }
@@ -68,18 +87,20 @@
 
   /* Health, hunger, mana */
   #stats { position: fixed; left: 50%; bottom: 76px; transform: translateX(-50%); display: flex; gap: 10px; z-index: 5; pointer-events: none; }
-  #stats .bar { width: 146px; height: 12px; border-radius: 6px; background: rgba(0,0,0,0.45); position: relative; overflow: hidden; box-shadow: 0 0 0 1px rgba(255,255,255,0.15); }
+  #stats .bar { width: 116px; height: 12px; border-radius: 6px; background: rgba(0,0,0,0.45); position: relative; overflow: hidden; box-shadow: 0 0 0 1px rgba(255,255,255,0.15); }
   #stats .bar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 6px; transition: width 0.15s; }
   #stats .bar span { position: absolute; left: 6px; top: -1px; font-size: 10px; color: #fff; text-shadow: 0 1px 2px #000; }
   #hp i { background: linear-gradient(#ff6b6b, #c0392b); }
   #food i { background: linear-gradient(#f5b85a, #c77a1e); }
-  #mana i { background: linear-gradient(#7fb6ff, #3a63d8); }
+  #water i { background: linear-gradient(#7fe0ff, #1f86c9); }
+  #mana i { background: linear-gradient(#a7a0ff, #5a46d8); }
   #mode { position: fixed; left: 50%; bottom: 76px; transform: translateX(-50%); color: #fff; font-size: 13px; font-weight: 600; letter-spacing: 1px; background: rgba(120, 70, 200, 0.75); padding: 2px 12px; border-radius: 10px; display: none; z-index: 5; pointer-events: none; }
 
   /* Aiming: what you're looking at, and break progress */
   #target { position: fixed; left: 50%; top: 50%; margin-top: 14px; transform: translateX(-50%); color: #fff; font-size: 12px; text-shadow: 0 1px 2px #000; pointer-events: none; white-space: nowrap; }
   #breakbar { position: fixed; left: 50%; top: 50%; margin: 32px 0 0 -30px; width: 60px; height: 5px; border-radius: 3px; background: rgba(0,0,0,0.5); display: none; pointer-events: none; overflow: hidden; }
   #breakbar i { display: block; height: 100%; width: 0; background: #fff; }
+  #flash { position: fixed; inset: 0; pointer-events: none; background: #e8eeff; opacity: 0; z-index: 1; }
   #underwater { position: fixed; inset: 0; pointer-events: none; display: none; z-index: 1;
     background: radial-gradient(ellipse at center, rgba(40, 120, 170, 0.18) 0%, rgba(10, 45, 80, 0.55) 100%); }
 </style>
@@ -94,19 +115,39 @@
 </script>
 </head>
 <body>
-<div id="overlay"><div class="box">
-  <h1>Terrain World</h1>
-  <div id="loading">Generating terrain…</div>
-  <div id="controls" style="display:none">
-    Click to play<br><br>
-    <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move &nbsp; <kbd>Shift</kbd> sprint &nbsp; <kbd>Space</kbd> jump / swim<br>
-    Mouse look &nbsp; <kbd>V</kbd> first / third person &nbsp; <kbd>Z</kbd> camera distance<br>
-    Left click: break / attack &nbsp; Right click: place / eat / use<br>
-    <kbd>1</kbd>–<kbd>9</kbd> or wheel: hotbar &nbsp; <kbd>E</kbd> inventory + crafting<br>
-    <kbd>G</kbd> creative mode (fly: <kbd>Space</kbd> up, <kbd>Shift</kbd> down)<br>
-    <kbd>F</kbd> lantern &nbsp; <kbd>R</kbd> respawn &nbsp; <kbd>N</kbd> new world &nbsp; <kbd>Esc</kbd> pause
+<div id="menu">
+  <div class="panel" id="title-panel">
+    <h1>Terrain World</h1>
+    <div class="sub">Survive, build and explore</div>
+    <div id="loading">Generating the world…</div>
+    <button class="big primary" id="btn-continue" style="display:none">Continue</button>
+    <button class="big primary" id="btn-survival" disabled>New game: Survival</button>
+    <button class="big" id="btn-creative" disabled>New game: Creative</button>
+    <div class="row"><label>World seed</label><input id="seed-input" inputmode="numeric"><button class="small" id="btn-random" title="Random seed">🎲</button><button class="small" id="btn-newworld">Make</button></div>
+    <div class="row"><label>Graphics</label><select id="quality-select"><option value="high">High</option><option value="low">Low (faster)</option></select></div>
+    <div class="row"><label>Sound</label><select id="sound-select"><option value="on">On</option><option value="off">Off</option></select></div>
+    <details><summary>Controls</summary><div class="controls"></div></details>
   </div>
-</div></div>
+  <div class="panel" id="pause-panel" style="display:none">
+    <h1>Paused</h1>
+    <div class="sub" id="pause-info"></div>
+    <button class="big primary" id="btn-resume">Resume</button>
+    <button class="big" id="btn-mainmenu">Main menu</button>
+    <details><summary>Controls</summary><div class="controls"></div></details>
+  </div>
+</div>
+<template id="controls-text">
+  <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move &nbsp; <kbd>Shift</kbd> sprint &nbsp; <kbd>Space</kbd> jump / swim<br>
+  Mouse look &nbsp; <kbd>V</kbd> first / third person &nbsp; <kbd>Z</kbd> camera distance<br>
+  Left click: break / attack &nbsp; Right click: place / eat / drink / use<br>
+  Right click on water: drink, or fill an empty bottle<br>
+  <kbd>1</kbd>–<kbd>9</kbd> or wheel: hotbar &nbsp; <kbd>E</kbd> inventory + crafting<br>
+  <kbd>G</kbd> creative mode (fly: <kbd>Space</kbd> up, <kbd>Shift</kbd> down)<br>
+  <kbd>B</kbd> building shape: block, slab, slope, stairs, roof prism, pillar<br>
+  <kbd>K</kbd> change the weather &nbsp; <kbd>M</kbd> sound on / off<br>
+  <kbd>F</kbd> lantern &nbsp; <kbd>R</kbd> respawn &nbsp; <kbd>Esc</kbd> pause
+</template>
+<div id="flash"></div>
 <div id="underwater"></div>
 <div id="hud"></div>
 <div id="crosshair"></div>
@@ -117,6 +158,7 @@
 <div id="stats">
   <div class="bar" id="hp"><i></i><span>Health</span></div>
   <div class="bar" id="food"><i></i><span>Hunger</span></div>
+  <div class="bar" id="water"><i></i><span>Thirst</span></div>
   <div class="bar" id="mana"><i></i><span>Mana</span></div>
 </div>
 <div id="mode">CREATIVE</div>
@@ -142,7 +184,7 @@
 
 <script type="module">
 import * as THREE from 'three';
-import { computeBoundsTree, disposeBoundsTree, acceleratedRaycast } from 'three-mesh-bvh';
+import { computeBoundsTree, disposeBoundsTree, acceleratedRaycast, ExtendedTriangle } from 'three-mesh-bvh';
 import { CSM } from 'three/addons/csm/CSM.js';
 
 THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
@@ -290,7 +332,7 @@ function createTerrainFunctions(seed) {
   const warpZ = (x, z) => z + noise2(x * 0.004 - 31, z * 0.004 + 5) * 28;
 
   function mountainMask(x, z) {
-    const m = smoothstep(-0.15, 0.45, noise2(warpX(x, z) * 0.0045 + 100, warpZ(x, z) * 0.0045 - 50));
+    const m = smoothstep(0.02, 0.5, noise2(warpX(x, z) * 0.0045 + 100, warpZ(x, z) * 0.0045 - 50));
     return m * smoothstep(25, 75, riverDist(x, z));
   }
 
@@ -302,7 +344,12 @@ function createTerrainFunctions(seed) {
     const wx = warpX(x, z), wz = warpZ(x, z);
     let h = 34 + fbm2(wx * 0.007, wz * 0.007, 5) * 12;            // rolling land
     const mm = mountainMask(x, z);
-    if (mm > 0) h += mm * (0.15 + 0.85 * ridged2(wx * 0.0085, wz * 0.0085, 6)) * 82; // tall ridged mountains
+    if (mm > 0) {
+      // tall ridged mountains; the ridges only reach full height in the middle of a range, so the
+      // edges are walkable foothills rather than cliffs
+      const ridge = ridged2(wx * 0.0052, wz * 0.0052, 5);
+      h += (mm * mm * (3 - 2 * mm)) * (0.2 + 0.8 * ridge * smoothstep(0.15, 0.85, mm)) * 80;
+    }
     const v = 1 - smoothstep(5, 46, riverDist(x, z));
     return lerp(h, W - 3.5, v);                                      // river valley
   }
@@ -341,12 +388,40 @@ function createTerrainFunctions(seed) {
   // The guaranteed cave mouth needs a flat ledge in front of it; filled in below.
   const ledge = { x: 0, z: 0, y: 0, r: 0 };
 
+  // Lakes: bowls in the rolling land above the sea, each with its own water level. A lake's
+  // radius wobbles with the direction, so the shore isn't a perfect circle.
+  const lakes = [];
+  const lakeRadius = (lk, a) => lk.R * (1 + 0.28 * noise2(Math.cos(a) * 1.1 + lk.seed, Math.sin(a) * 1.1 - lk.seed));
+  // distance from the lake's centre as a fraction of its radius in that direction (9 = far away)
+  function lakeShape(lk, x, z) {
+    const dx = x - lk.x, dz = z - lk.z;
+    if (Math.abs(dx) > lk.R * 1.9 || Math.abs(dz) > lk.R * 1.9) return 9;
+    return Math.hypot(dx, dz) / lakeRadius(lk, Math.atan2(dz, dx));
+  }
+  const LAKE_EDGE = 1.3; // the water surface reaches this far (in lake radii)
+  function lakeAt(x, z, reach = LAKE_EDGE) {
+    for (const lk of lakes) if (lakeShape(lk, x, z) < reach) return lk;
+    return null;
+  }
+  // height of the water surface that covers this point (the sea level outside the lakes)
+  function waterAt(x, z) {
+    const lk = lakes.length ? lakeAt(x, z) : null;
+    return lk ? lk.level : W;
+  }
+
   function surfaceHeight(x, z) {
     let h = landHeight(x, z);
     for (const v of volcanoes) { const vh = volcanoHeight(v, x, z); if (vh > -Infinity) h = smax(h, vh, 8); }
     if (ledge.r) {
       const d = Math.hypot(x - ledge.x, z - ledge.z);
       h = lerp(h, ledge.y, 1 - smoothstep(ledge.r * 0.6, ledge.r, d));
+    }
+    for (const lk of lakes) {
+      const d = lakeShape(lk, x, z);
+      if (d < LAKE_EDGE) {
+        const bowl = lk.level - 0.6 - lk.depth * Math.max(0, 1 - d * d);
+        h = Math.min(h, lerp(bowl, h, smoothstep(0.8, LAKE_EDGE, d)));
+      }
     }
     return Math.min(h, H - 6);
   }
@@ -378,6 +453,33 @@ function createTerrainFunctions(seed) {
     }
   }
   const cavern = tunnel[tunnel.length - 1].clone().add(new THREE.Vector3(0, 3, 0));
+
+  // Pick the lakes: flat-ish open land, away from the river, volcanoes, the cave and each other.
+  {
+    const want = Math.max(1, Math.round(7 * (S / 1024) ** 2));
+    for (let tries = 0; tries < 600 && lakes.length < want; tries++) {
+      const R = 15 + rand() * 20;
+      const x = R * 2.2 + rand() * (S - R * 4.4), z = R * 2.2 + rand() * (S - R * 4.4);
+      if (riverDist(x, z) < R * 1.5 + 40 || mountainMask(x, z) > 0.12) continue;
+      if (volcanoes.some((v) => Math.hypot(x - v.x, z - v.z) < v.R + R * 1.5 + 20)) continue;
+      if (tunnel.some((p) => Math.hypot(x - p.x, z - p.z) < R * 1.5 + 30)) continue;
+      if (lakes.some((l) => Math.hypot(x - l.x, z - l.z) < (l.R + R) * 1.6 + 20)) continue;
+      const lk = { x, z, R, seed: rand() * 100, depth: 2.5 + rand() * 4 };
+      // the water comes up to just below the lowest point of the shore
+      let lo = Infinity, hi = -Infinity;
+      for (let k = 0; k < 72; k++) {
+        const a = (k / 72) * Math.PI * 2, r = lakeRadius(lk, a) * LAKE_EDGE;
+        const h = surfaceHeight(x + Math.cos(a) * r, z + Math.sin(a) * r);
+        lo = Math.min(lo, h); hi = Math.max(hi, h);
+      }
+      if (hi - lo > 9 || lo < W + 6 || hi > 66) continue;
+      lk.level = lo - 1.8; // the ground has small 3D bumps, up to about a metre lower than the height
+      lakes.push(lk);
+    }
+  }
+
+  // Iron ore: veins in the rock, found in cliffs, caves and anywhere you dig into stone.
+  const oreAt = (x, y, z) => smoothstep(0.42, 0.56, noise3(x * 0.09 + 500, y * 0.11, z * 0.09 - 200));
   const _seg = new THREE.Line3(), _p = new THREE.Vector3(), _c = new THREE.Vector3();
   const tMin = new THREE.Vector3(Infinity, Infinity, Infinity), tMax = new THREE.Vector3(-Infinity, -Infinity, -Infinity);
   for (const p of tunnel) { tMin.min(p); tMax.max(p); }
@@ -396,16 +498,19 @@ function createTerrainFunctions(seed) {
     return Math.min(best, (Math.sqrt(dx * dx + dy * dy + dz * dz) - 1) * 8);
   }
 
-  function density(x, y, z, h, mm, vi) {
+  function density(x, y, z, h, mm, vi, lake) {
     let d = h - y;
     // 3D detail: overhangs and crags on mountains, gentle lumps elsewhere
-    d += noise3(x * 0.045, y * 0.045, z * 0.045) * (1.2 + mm * 6);
-    if (y > WORLD.caveFloor && vi < 0.75) {
+    d += noise3(x * 0.045, y * 0.045, z * 0.045) * (1.0 + mm * 3.5);
+    if (y > WORLD.caveFloor && vi < 0.75 && !lake) { // no caves under lakes, or they would drain
       const fade = smoothstep(WORLD.caveFloor, WORLD.caveFloor + 5, y);
       // big worm caves: where two noise fields are both near zero
       const a = noise3(x * 0.02, y * 0.028, z * 0.02);
       const b = noise3(x * 0.02 + 57.1, y * 0.028 - 13.7, z * 0.02 + 91.3);
       let cave = (Math.sqrt(a * a + b * b) - 0.15) * 45;
+      // keep a roof of at least 5 m, except where a cave mouth is allowed to open
+      const mouth = smoothstep(0.45, 0.6, noise2(x * 0.012 - 77, z * 0.012 + 41));
+      cave += Math.max(0, y - (h - 5)) * 6 * (1 - mouth);
       // huge caverns, kept well below the surface
       const c = noise3(x * 0.011 + 200, y * 0.018, z * 0.011 - 300);
       cave = Math.min(cave, (0.6 - c) * 70 + Math.max(0, y - (h - 10)) * 4);
@@ -415,7 +520,10 @@ function createTerrainFunctions(seed) {
     return Math.max(d, 4 - y); // solid bedrock floor
   }
 
-  return { surfaceHeight, landHeight, mountainMask, forestMask, volcanoInfluence, density, tunnel, cavern, riverZ, ledge, volcanoes, noise2, noise3 };
+  return {
+    surfaceHeight, landHeight, mountainMask, forestMask, volcanoInfluence, density, tunnel, cavern, riverZ, ledge, volcanoes,
+    lakes, lakeAt, lakeRadius, waterAt, oreAt, LAKE_EDGE, noise2, noise3,
+  };
 }
 
 function buildDensityField(T) {
@@ -428,12 +536,13 @@ function buildDensityField(T) {
       const h = T.surfaceHeight(x, z);
       const mm = T.mountainMask(x, z);
       const vi = T.volcanoInfluence(x, z);
+      const lake = !!T.lakeAt(x, z, 1.7);
       for (let iy = 0; iy < ny; iy++) {
         const idx = ix + nx * (iy + ny * iz), y = iy * vx;
         // borders are air, so the terrain is a closed block
         if (ix === 0 || iz === 0 || iy === 0 || ix === nx - 1 || iz === nz - 1 || iy === ny - 1) { field[idx] = -1; continue; }
         if (y > h + 12) { field[idx] = h - y; continue; } // well above ground: skip noise
-        field[idx] = T.density(x, y, z, h, mm, vi);
+        field[idx] = T.density(x, y, z, h, mm, vi, lake);
       }
     }
   }
@@ -530,7 +639,7 @@ function surfaceNets(field, nx, ny, nz, scale, x0 = 1, x1 = nx - 1, z0 = 1, z1 =
 const TEX_SIZE = QUALITY === 'low' ? 512 : 1024;
 const TEX_LAYERS = [
   // size: metres covered by one repeat of the texture
-  { id: 'grass', size: 3.0, assets: ['leafy_grass', 'aerial_grass_rock', 'sparse_grass'] },
+  { id: 'grass', size: 2.5, assets: ['leafy_grass', 'grass_ground', 'sparse_grass'] },
   { id: 'forest', size: 3.0, assets: ['forrest_ground_01', 'forest_leaves_02', 'brown_mud_leaves_01'] },
   { id: 'dirt', size: 3.0, assets: ['brown_mud_02', 'dry_ground_01', 'rocky_trail'] },
   { id: 'sand', size: 3.0, assets: ['coast_sand_01', 'aerial_beach_01', 'gravelly_sand'] },
@@ -764,8 +873,21 @@ const TEX_GLSL = /* glsl */`
     if (bw.y > 0.01) {
       vec2 uv = p.xz * sc, gx = dpx.xz * sc, gy = dpy.xz * sc;
       vec4 n = textureGrad(tNormal, vec3(uv, layer), gx, gy);
+      vec4 a = textureGrad(tAlbedo, vec3(uv, layer), gx, gy);
       vec2 t = n.xy * 2.0 - 1.0;
-      alb += textureGrad(tAlbedo, vec3(uv, layer), gx, gy) * bw.y * wt;
+      // Flat ground shows a texture's repeat the most: blend in a turned, shifted copy in
+      // irregular patches, so the same tile isn't seen in rows.
+      float other = smoothstep(0.36, 0.64, vnoise(p * 0.09 + layer * 7.3));
+      if (other > 0.01) {
+        const mat2 R = mat2(0.8, 0.6, -0.6, 0.8);
+        vec2 uv2 = R * uv * 0.83 + vec2(0.37, 0.71);
+        vec4 n2 = textureGrad(tNormal, vec3(uv2, layer), R * gx * 0.83, R * gy * 0.83);
+        vec4 a2 = textureGrad(tAlbedo, vec3(uv2, layer), R * gx * 0.83, R * gy * 0.83);
+        a = mix(a, a2, other);
+        t = mix(t, transpose(R) * (n2.xy * 2.0 - 1.0), other);
+        n.z = mix(n.z, n2.z, other);
+      }
+      alb += a * bw.y * wt;
       nrm += vec3(t.x, 0.0, t.y * sign(wn.y)) * bw.y * wt;
       ao += n.z * bw.y * wt;
     }
@@ -810,8 +932,8 @@ function buildRenderGeometry(colliderGeo, T) {
   geo.setIndex(colliderGeo.index);
   const pos = posAttr.array, count = pos.length / 3;
   const normals = new Float32Array(count * 3), tint = new Float32Array(count * 3);
-  const splat = new Float32Array(count * 4), info = new Float32Array(count * 4);
-  const W = WORLD.waterLevel, nrm = new THREE.Vector3();
+  const splat = new Float32Array(count * 4), info = new Float32Array(count * 4), extra = new Float32Array(count * 2);
+  const nrm = new THREE.Vector3();
 
   for (let v = 0; v < count; v++) {
     const x = pos[v * 3], y = pos[v * 3 + 1], z = pos[v * 3 + 2];
@@ -822,6 +944,7 @@ function buildRenderGeometry(colliderGeo, T) {
     const nb = T.noise2(x * 0.03 + 50, z * 0.03 - 20); // low-frequency noise that wobbles biome borders
     const surface = T.surfaceHeight(x, z);
     const vi = T.volcanoInfluence(x, z);
+    const lake = T.lakeAt(x, z, T.LAKE_EDGE + 0.15), W = lake ? lake.level : WORLD.waterLevel;
     let g = 0, f = 0, d = 0, s = 0, stone = 0, glow = 0, tr = 1, tg = 1, tb = 1;
     const cave = smoothstep(surface - 3, surface - 8, y);
     const edited = editedMaterialAt(x - nrm.x * 0.8, y - nrm.y * 0.8, z - nrm.z * 0.8);
@@ -846,6 +969,10 @@ function buildRenderGeometry(colliderGeo, T) {
       // blend into the grass at the foot of the volcano
       const foot = 1 - smoothstep(0.02, 0.5, vi + nb * 0.08);
       g = foot; d *= 1 - foot;
+    } else if (lake && y < W + 0.7 + nb * 0.5) {
+      // muddy lake shore and bed
+      d = 1; s = 0.35 + 0.3 * n; f = 0.2;
+      if (y < W - 0.3) { tr = tg = 0.8; tb = 0.75; }
     } else if (y < W + 1.6 + nb * 1.2) {
       s = 1;
       if (y < W - 0.5) { tr = tg = tb = 0.72; } // wet sand under the water
@@ -864,17 +991,20 @@ function buildRenderGeometry(colliderGeo, T) {
     if (g + f + d + s < 0.01) splat[v * 4 + 2] = 0.01;
     info[v * 4] = cave; info[v * 4 + 1] = vi; info[v * 4 + 2] = glow; info[v * 4 + 3] = stone;
     tint[v * 3] = tr; tint[v * 3 + 1] = tg; tint[v * 3 + 2] = tb;
+    extra[v * 2] = vi < 0.3 && !(glow < 0) ? T.oreAt(x, y, z) : 0;
+    extra[v * 2 + 1] = W;
   }
   geo.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
   geo.setAttribute('color', new THREE.BufferAttribute(tint, 3));
   geo.setAttribute('splat', new THREE.BufferAttribute(splat, 4));
   geo.setAttribute('tinfo', new THREE.BufferAttribute(info, 4));
+  geo.setAttribute('extra', new THREE.BufferAttribute(extra, 2));
   return geo;
 }
 
 const terrainUniforms = {
   uTime: { value: 0 },
-  uWater: { value: WORLD.waterLevel },
+  uRainWet: { value: 0 },  // how wet the ground is from rain, 0..1
   uSnowLine: { value: 84 },
   uVolc: { value: [0, 1, 2, 3].map(() => new THREE.Vector4(-1e4, -1e4, 1, 0)) }, // x, z, crater radius, lava height
   uTexScale: { value: TEX_LAYERS.map((l) => 1 / l.size) },
@@ -888,23 +1018,27 @@ function makeTerrainMaterial() {
       .replace('#include <common>', `#include <common>
         attribute vec4 splat;
         attribute vec4 tinfo;
+        attribute vec2 extra;
         varying vec4 vSplat;
         varying vec4 vInfo;
+        varying vec2 vExtra;
         varying vec3 vWorldPos;
         varying vec3 vWorldNormal;`)
       .replace('#include <project_vertex>', `#include <project_vertex>
         vSplat = splat;
         vInfo = tinfo;
+        vExtra = extra;
         vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
         vWorldNormal = normalize(mat3(modelMatrix) * objectNormal);`);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
         ${TEX_GLSL}
-        uniform float uTime, uWater, uSnowLine;
+        uniform float uTime, uRainWet, uSnowLine;
         uniform float uTexScale[${TEX_LAYERS.length}];
         uniform vec4 uVolc[4];
         varying vec4 vSplat;
         varying vec4 vInfo;
+        varying vec2 vExtra; // iron ore amount, water level here
         varying vec3 vWorldPos;
         varying vec3 vWorldNormal;
         vec3 srgb(vec3 c) { return pow(c, vec3(2.2)); }`)
@@ -950,11 +1084,16 @@ function makeTerrainMaterial() {
         col *= mix(0.78, 1.15, macro);
         // basalt: rock on the volcano is nearly black
         col *= mix(vec3(1.0), vec3(0.3, 0.28, 0.27), smoothstep(0.08, 0.45, volc) * W[4] / max(total, 1e-4));
-        // wet, darker ground right at the waterline
-        float wet = (1.0 - smoothstep(uWater - 0.3, uWater + 0.9, vWorldPos.y)) * surf;
-        col *= mix(1.0, 0.62, wet);
+        // iron ore: rusty brown speckles in the rock
+        float rockFrac = W[4] / max(total, 1e-4);
+        float ore = vExtra.x * rockFrac * (0.45 + 0.55 * smoothstep(0.4, 0.7, vnoise(vWorldPos * 2.1)));
+        col = mix(col, srgb(vec3(0.62, 0.3, 0.14)) * (0.55 + 0.9 * tAlb.r), ore * 0.85);
+        // wet, darker ground right at the waterline, and after rain on open ground
+        float wet = (1.0 - smoothstep(vExtra.y - 0.3, vExtra.y + 0.9, vWorldPos.y)) * surf;
+        float rainWet = uRainWet * surf * smoothstep(0.3, 0.8, wN.y);
+        col *= mix(1.0, 0.62, wet) * mix(1.0, 0.72, rainWet);
         diffuseColor.rgb = col;
-        float tRough = mix(tAlb.a, 0.25, wet * 0.8);
+        float tRough = mix(mix(tAlb.a, 0.25, wet * 0.8), 0.3, rainWet * 0.75) - ore * 0.25;
         vec3 tNW = normalize(wN + tN * 1.2);`)
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
         roughnessFactor = clamp(tRough, 0.05, 1.0);`)
@@ -1296,18 +1435,18 @@ const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerH
 // Sky dome: a gradient from the horizon haze to deep blue overhead, with a glow around the sun.
 function makeSkyMaterial(disc) {
   return new THREE.ShaderMaterial({
-    uniforms: { uSun: { value: SUN_DIR }, uZenith: { value: sky.zenith }, uHorizon: { value: sky.horizon }, uGround: { value: disc ? sky.horizon : sky.ground }, uSunCol: { value: sky.sun }, uDisc: { value: disc ? 1 : 0 } },
+    uniforms: { uSun: { value: SUN_DIR }, uZenith: { value: sky.zenith }, uHorizon: { value: sky.horizon }, uGround: { value: disc ? sky.horizon : sky.ground }, uSunCol: { value: sky.sun }, uDisc: { value: disc ? 1 : 0 }, uSunGlow: { value: 1 } },
     vertexShader: `varying vec3 vDir;
       void main() { vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); gl_Position.z = gl_Position.w; }`,
-    fragmentShader: `uniform vec3 uSun, uZenith, uHorizon, uGround, uSunCol; uniform float uDisc;
+    fragmentShader: `uniform vec3 uSun, uZenith, uHorizon, uGround, uSunCol; uniform float uDisc, uSunGlow;
       varying vec3 vDir;
       void main() {
         vec3 d = normalize(vDir);
         vec3 col = mix(uHorizon, uZenith, pow(clamp(d.y, 0.0, 1.0), 0.55));
         col = mix(col, uGround, smoothstep(0.0, -0.2, d.y));
         float s = max(dot(d, uSun), 0.0);
-        col += uSunCol * (0.12 * pow(s, 6.0) + 0.45 * pow(s, 90.0)) * (0.4 + 0.6 * uDisc);
-        col += uSunCol * smoothstep(0.99965, 0.9998, s) * 30.0 * uDisc;
+        col += uSunCol * (0.12 * pow(s, 6.0) + 0.45 * pow(s, 90.0)) * (0.4 + 0.6 * uDisc) * uSunGlow;
+        col += uSunCol * smoothstep(0.99965, 0.9998, s) * 30.0 * uDisc * uSunGlow * uSunGlow;
         gl_FragColor = vec4(col, 1.0);
         #include <colorspace_fragment>
       }`,
@@ -1320,14 +1459,20 @@ skyDome.frustumCulled = false;
 skyDome.renderOrder = -10;
 scene.add(skyDome);
 
-// Light from the whole sky (image-based lighting): the dome without the sun disc, pre-filtered once.
-{
-  const pmrem = new THREE.PMREMGenerator(renderer);
-  const envScene = new THREE.Scene();
-  envScene.add(new THREE.Mesh(new THREE.SphereGeometry(100, 32, 16), makeSkyMaterial(false)));
-  scene.environment = pmrem.fromScene(envScene, 0, 0.1, 1000).texture;
-  pmrem.dispose();
+// Light from the whole sky (image-based lighting): the dome without the sun disc, pre-filtered.
+// Re-made when clouds change the sky's colours.
+const pmrem = new THREE.PMREMGenerator(renderer);
+const envScene = new THREE.Scene();
+const envSky = makeSkyMaterial(false);
+envScene.add(new THREE.Mesh(new THREE.SphereGeometry(100, 32, 16), envSky));
+let envTarget = null;
+function bakeSkyLight() {
+  const old = envTarget;
+  envTarget = pmrem.fromScene(envScene, 0, 0.1, 1000);
+  scene.environment = envTarget.texture;
+  old?.dispose();
 }
+bakeSkyLight();
 
 // Sunlight with cascaded shadow maps: a sharp map near the player and a coarser one further out.
 const csm = new CSM({
@@ -1413,6 +1558,7 @@ function disposeWorld() {
   vegTiles.length = 0;
   animals.length = 0; bolts.length = 0;
   resetBlocks();
+  clearGrass();
 }
 
 const chunkWidth = () => CHUNK * WORLD.voxel;
@@ -1527,7 +1673,7 @@ function makeWater() {
         vec2 wave(vec2 p, vec2 d, float k, float w, float a) { return d * (a * k * cos(dot(d, p) * k + uTime * w)); }`)
       .replace('#include <color_fragment>', `#include <color_fragment>
         float groundH = texture2D(uGroundH, vWPos.xz / uWorld.x).r * uWorld.y;
-        float depth = uWorld.z - groundH;
+        float depth = vWPos.y - groundH; // the surface is at the water level (sea or lake)
         float shallow = 1.0 - smoothstep(0.2, 3.5, depth);
         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.05, 0.2, 0.19), shallow * 0.7);
         float foam = (1.0 - smoothstep(0.0, 0.3, depth + (wnoise(vWPos.xz * 1.7 + uTime * 0.4) - 0.5) * 0.3)) * step(-0.4, depth) * 0.7;
@@ -1552,7 +1698,27 @@ function makeWater() {
   water.position.set(WORLD.size / 2, WORLD.waterLevel, WORLD.size / 2);
   water.receiveShadow = false; // shadows on a moving mirror look wrong, and cost a lookup
   water.renderOrder = 1;
-  return water;
+  const group = new THREE.Group();
+  group.add(water);
+  // lakes: a flat fan following each lake's wobbly outline, out to where the shore is above the water
+  for (const lk of terrainFns.lakes) {
+    const n = 72, pos = [0, 0, 0], idx = [];
+    for (let k = 0; k < n; k++) {
+      const a = (k / n) * Math.PI * 2, r = terrainFns.lakeRadius(lk, a) * terrainFns.LAKE_EDGE;
+      pos.push(Math.cos(a) * r, -Math.sin(a) * r, 0); // the plane is turned flat, so local -y is world +z
+      idx.push(0, 1 + k, 1 + ((k + 1) % n));
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setIndex(idx);
+    g.computeVertexNormals();
+    const m = new THREE.Mesh(g, mat);
+    m.rotation.x = -Math.PI / 2;
+    m.position.set(lk.x, lk.level, lk.z);
+    m.renderOrder = 1;
+    group.add(m);
+  }
+  return group;
 }
 
 const raycaster = new THREE.Raycaster();
@@ -1596,8 +1762,8 @@ function naturalMaterial(x, y, z, ny = 1) {
   const T = terrainFns;
   if (T.volcanoInfluence(x, z) > 0.3) return 'stone';
   const surf = T.surfaceHeight(x, z);
-  if (y < surf - 3.5 || y > 72 || ny < 0.5) return 'stone';
-  return y < WORLD.waterLevel + 1.8 ? 'sand' : 'dirt';
+  if (y < surf - 3.5 || y > 72 || ny < 0.5) return T.oreAt(x, y, z) > 0.5 ? 'iron' : 'stone';
+  return y < T.waterAt(x, z) + 1.8 ? 'sand' : 'dirt';
 }
 
 // Returns how many grid points flipped between ground and air.
@@ -1627,6 +1793,7 @@ function editTerrain(center, radius, add, material = 'dirt') {
     minX = Math.min(minX, ix); maxX = Math.max(maxX, ix); minZ = Math.min(minZ, iz); maxZ = Math.max(maxZ, iz);
   }
   if (minX === Infinity) return 0;
+  invalidateGrass(minX * vx, maxX * vx, minZ * vx, maxZ * vx);
   // a changed grid point affects the faces owned by its neighbours too
   const i0 = Math.max(0, Math.floor((minX - 1) / CHUNK)), i1 = Math.min(chunkCount - 1, Math.floor((maxX + 1) / CHUNK));
   const j0 = Math.max(0, Math.floor((minZ - 1) / CHUNK)), j1 = Math.min(chunkCount - 1, Math.floor((maxZ + 1) / CHUNK));
@@ -1635,7 +1802,10 @@ function editTerrain(center, radius, add, material = 'dirt') {
 }
 
 function addVolcanoEffects() {
+  lavaFlows.length = 0;
+  const rand = mulberry32(Math.round(terrainFns.volcanoes[0]?.x * 1000 || 1));
   for (const v of terrainFns.volcanoes) {
+    addLavaFlows(v, rand);
     const lavaMat = new THREE.MeshBasicMaterial({ color: 0xff5a1a });
     const lava = new THREE.Mesh(new THREE.CircleGeometry(v.crater * 0.75, 10), lavaMat);
     lava.rotation.x = -Math.PI / 2;
@@ -1655,7 +1825,107 @@ function addVolcanoEffects() {
   }
 }
 
+// Lava flows: glowing rivers running from each crater rim down the volcano's side. Each follows the
+// slope downhill (with a little wander) until the ground flattens out at the foot of the cone.
+const lavaFlows = [];   // { pts: [{x, y, z, w}], minX, maxX, minZ, maxZ }
+const lavaUniforms = { uTime: { value: 0 } };
+function lavaFlowMaterial() {
+  const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+  mat.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, lavaUniforms);
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec2 vLavaUv;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvLavaUv = uv;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>
+        uniform float uTime;
+        varying vec2 vLavaUv;
+        float lh(vec2 p) { p = fract(p * vec2(0.3183, 0.3679) + 0.1) * 17.0; return fract(p.x * p.y * (p.x + p.y)); }
+        float ln(vec2 x) { vec2 i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f);
+          return mix(mix(lh(i), lh(i + vec2(1, 0)), f.x), mix(lh(i + vec2(0, 1)), lh(i + vec2(1, 1)), f.x), f.y); }`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+        // u runs across the flow (0..1), v along it in metres; the pattern slides downhill
+        float along = vLavaUv.y * 0.35 - uTime * 0.5;
+        float n = ln(vec2(vLavaUv.x * 4.0, along)) * 0.6 + ln(vec2(vLavaUv.x * 11.0, along * 2.7)) * 0.4;
+        float middle = 1.0 - abs(vLavaUv.x - 0.5) * 2.0;
+        float hot = smoothstep(0.35, 0.75, n * 0.6 + middle * 0.7);
+        vec3 crust = vec3(0.09, 0.035, 0.02), glow = vec3(1.6, 0.55, 0.1), white = vec3(2.2, 1.4, 0.5);
+        diffuseColor.rgb = mix(crust, mix(glow, white, smoothstep(0.85, 1.0, hot)), hot);`);
+  };
+  return mat;
+}
+
+function addLavaFlows(v, rand) {
+  const T = terrainFns, mat = lavaFlowMaterial();
+  const n = 3 + Math.floor(rand() * 2);
+  for (let f = 0; f < n; f++) {
+    const a0 = (f / n) * Math.PI * 2 + rand() * 1.2;
+    let x = v.x + Math.cos(a0) * v.crater * 1.05, z = v.z + Math.sin(a0) * v.crater * 1.05;
+    let dx = Math.cos(a0), dz = Math.sin(a0);
+    const pts = [];
+    for (let k = 0; k < 120; k++) {
+      // downhill direction from the height field, blended with the current heading so it bends smoothly
+      const e = 1.5, gx = T.surfaceHeight(x + e, z) - T.surfaceHeight(x - e, z), gz = T.surfaceHeight(x, z + e) - T.surfaceHeight(x, z - e);
+      const g = Math.hypot(gx, gz);
+      if (k > 6 && (g < 0.12 || T.volcanoInfluence(x, z) < 0.3)) break;
+      const wander = T.noise2(x * 0.05 + f * 9, z * 0.05) * 0.5;
+      dx = dx * 0.6 - (gx / (g || 1)) * 0.4 + -dz * wander * 0.3; dz = dz * 0.6 - (gz / (g || 1)) * 0.4 + dx * wander * 0.3;
+      const dl = Math.hypot(dx, dz) || 1; dx /= dl; dz /= dl;
+      const w = (1.6 + rand() * 0.4) * (1 - k / 160);
+      pts.push({ x, z, w, dx, dz });
+      x += dx * 1.6; z += dz * 1.6;
+    }
+    if (pts.length < 8) continue;
+    // a strip of three vertices across the flow at each point, each draped on the ground
+    const pos = [], uv = [], idx = [];
+    let along = 0;
+    pts.forEach((p, k) => {
+      if (k) along += Math.hypot(p.x - pts[k - 1].x, p.z - pts[k - 1].z);
+      const px = -p.dz, pz = p.dx;
+      for (let c = 0; c < 3; c++) {
+        const off = (c - 1) * p.w, cx = p.x + px * off, cz = p.z + pz * off;
+        const hit = groundAt(cx, cz);
+        const y = (hit ? hit.point.y : T.surfaceHeight(cx, cz)) + 0.12;
+        pos.push(cx, y, cz); uv.push(c / 2, along);
+        if (c === 1) p.y = y;
+      }
+      if (k) for (let c = 0; c < 2; c++) { const a = (k - 1) * 3 + c, b = k * 3 + c; idx.push(a, b, a + 1, a + 1, b, b + 1); }
+    });
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    geo.setIndex(idx);
+    geo.computeBoundingSphere();
+    const mesh = new THREE.Mesh(geo, mat);
+    world.add(mesh);
+    const xs = pts.map((p) => p.x), zs = pts.map((p) => p.z);
+    lavaFlows.push({ pts, minX: Math.min(...xs) - 3, maxX: Math.max(...xs) + 3, minZ: Math.min(...zs) - 3, maxZ: Math.max(...zs) + 3 });
+  }
+}
+
+// Height of the lava lake in a crater at (x, z), or -Infinity.
+function craterLavaAt(x, z) {
+  for (const v of terrainFns.volcanoes) if (Math.hypot(x - v.x, z - v.z) < v.crater * 0.8) return v.lavaY;
+  return -Infinity;
+}
+// Is a point (feet height y) in lava: the crater lake or a flow? `margin` widens the flows (metres).
+function lavaAt(x, y, z, margin = 0) {
+  if (y < craterLavaAt(x, z) + 0.4) return true;
+  for (const fl of lavaFlows) {
+    if (x < fl.minX || x > fl.maxX || z < fl.minZ || z > fl.maxZ) continue;
+    const p = fl.pts;
+    for (let k = 1; k < p.length; k++) {
+      const a = p[k - 1], b = p[k], ex = b.x - a.x, ez = b.z - a.z;
+      const t = Math.max(0, Math.min(1, ((x - a.x) * ex + (z - a.z) * ez) / (ex * ex + ez * ez || 1)));
+      const d = Math.hypot(x - (a.x + ex * t), z - (a.z + ez * t));
+      if (d < (a.w + margin) * 0.95 && y < lerp(a.y, b.y, t) + 0.7 + margin && y > lerp(a.y, b.y, t) - 2.5) return true;
+    }
+  }
+  return false;
+}
+
 function updateVolcanoes(dt, time) {
+  lavaUniforms.uTime.value = time;
   for (const fx of volcanoFx) {
     const pulse = 0.5 + 0.5 * Math.sin(time * 1.7);
     fx.lavaMat.color.setRGB(1, 0.32 + pulse * 0.12, 0.08);
@@ -1690,8 +1960,10 @@ function placeVegetation(seed) {
       if (!hit) continue;
       const y = hit.point.y, ny = hit.face.normal.y;
       if (Math.abs(y - T.surfaceHeight(x, z)) > 4) continue; // not on cave floors
-      if (wantRock) { if (y > W + 0.5 && ny > 0.6) rocks.push({ x, y, z, s: 0.6 + rand() * 1.4, rot: rand() * 6.28 }); continue; }
-      if (ny < 0.72 || y < W + 1.8 || y > 76 || vi > 0.35) continue;
+      const wl = T.waterAt(x, z);
+      if (wantRock) { if (y > wl + 0.5 && ny > 0.6) rocks.push({ x, y, z, s: 0.6 + rand() * 1.4, rot: rand() * 6.28, iron: rand() < 0.14 }); continue; }
+      if (ny < 0.72 || y < wl + (wl > W ? 1.0 : 1.8) || y > 76 || vi > 0.35) continue;
+      if (vi > 0.2 && lavaAt(x, y, z, 1.5)) continue;
       const scale = 0.75 + rand() * 0.7;
       if (wantBush) { bushes.push({ x, y, z, s: 0.5 + rand() * 0.6 }); continue; }
       // pines dominate up high, mixed forest lower down
@@ -1796,13 +2068,14 @@ function buildVegTile({ trees, bushes, rocks, i: ti, j: tj }, nearGeo, farGeo, m
     addTarget({ kind: 'bush', x: b.x, y: b.y, z: b.z, parts: [[bushMesh, i]], spheres: [[b.x, b.y + 0.3 * b.s, b.z, 0.95 * b.s]] });
   });
   rocks.forEach((r, i) => {
-    rockMesh.setColorAt(i, col.setHSL(0.08, 0.06, 0.62 + hash1(r.x * 3.1 + r.z) * 0.2));
+    if (r.iron) rockMesh.setColorAt(i, col.setHSL(0.05, 0.42, 0.5 + hash1(r.x * 3.1 + r.z) * 0.1)); // rusty: iron inside
+    else rockMesh.setColorAt(i, col.setHSL(0.08, 0.06, 0.62 + hash1(r.x * 3.1 + r.z) * 0.2));
     q.setFromEuler(new THREE.Euler(r.rot, r.rot * 2, 0));
     m.compose(p.set(r.x, r.y + r.s * 0.3, r.z), q, s.set(r.s * 1.2, r.s, r.s));
     rockMesh.setMatrixAt(i, m);
     const ob = { type: 'sphere', x: r.x, y: r.y + r.s * 0.3, z: r.z, r: r.s * 0.95 };
     addObstacle(ob);
-    addTarget({ kind: 'rock', x: r.x, y: r.y, z: r.z, s: r.s, obstacle: ob, parts: [[rockMesh, i]], spheres: [[r.x, r.y + r.s * 0.3, r.z, r.s * 1.05]] });
+    addTarget({ kind: 'rock', x: r.x, y: r.y, z: r.z, s: r.s, iron: r.iron, obstacle: ob, parts: [[rockMesh, i]], spheres: [[r.x, r.y + r.s * 0.3, r.z, r.s * 1.05]] });
   });
   pines.count = pi; crowns.count = ci; birches.count = bi;
   trunks.count = trees.length; bushMesh.count = bushes.length; rockMesh.count = rocks.length;
@@ -1827,11 +2100,13 @@ function buildVegTile({ trees, bushes, rocks, i: ti, j: tj }, nearGeo, farGeo, m
   vegTiles.push({ near: nearGroup, far: farGroup, cx: (ti + 0.5) * VEG_TILE, cz: (tj + 0.5) * VEG_TILE });
 }
 
+const cloudMats = { top: null, under: null };
 function addClouds(seed) {
   const rand = mulberry32(seed * 31 + 9);
   clouds = new THREE.Group();
-  const mat = new THREE.SpriteMaterial({ map: puffTexture(), color: 0xffffff, transparent: true, opacity: 0.9, depthWrite: false });
-  const shade = new THREE.SpriteMaterial({ map: puffTexture(), color: 0xc4ccd6, transparent: true, opacity: 0.85, depthWrite: false });
+  const mat = new THREE.SpriteMaterial({ map: puffTexture(), color: 0xffffff, transparent: true, opacity: 0.9, depthWrite: false, fog: false });
+  const shade = new THREE.SpriteMaterial({ map: puffTexture(), color: 0xc4ccd6, transparent: true, opacity: 0.85, depthWrite: false, fog: false });
+  cloudMats.top = mat; cloudMats.under = shade;
   const n = Math.min(160, Math.round(22 * (WORLD.size / 256) ** 2));
   for (let i = 0; i < n; i++) {
     const c = new THREE.Group();
@@ -1852,46 +2127,285 @@ function addClouds(seed) {
 }
 
 // ---------------------------------------------------------------------------
+// Grass blades: tufts of crossed cards around the player, swaying in the wind and shrinking away
+// with distance. They take their colour from the grass texture under them, so they blend into the
+// ground, and are built in 16 m patches as you walk (and rebuilt when you dig).
+// ---------------------------------------------------------------------------
+const GRASS_PATCH = 16, GRASS_RADIUS = QUALITY === 'low' ? 28 : 44, GRASS_PER_PATCH = QUALITY === 'low' ? 320 : 620;
+const grassGroup = new THREE.Group();
+const grassPatches = new Map();  // "i,j" -> InstancedMesh
+const grassUniforms = { uWind: { value: 0.3 }, uGrassCam: { value: new THREE.Vector3() } };
+let grassGeo = null, grassMat = null;
+
+function grassTexture() {
+  return canvasTexture(128, (g, S) => {
+    const rand = mulberry32(23);
+    for (let i = 0; i < 46; i++) {
+      // a blade: a thin curved wedge, darker at its root
+      const x0 = S * (0.08 + rand() * 0.84), h = S * (0.45 + rand() * 0.53), lean = (rand() - 0.5) * S * 0.3, w = 2.2 + rand() * 2.6;
+      const grd = g.createLinearGradient(0, S, 0, S - h);
+      const l = 62 + rand() * 30;
+      grd.addColorStop(0, `hsl(85, 20%, ${l * 0.45}%)`); grd.addColorStop(1, `hsl(${70 + rand() * 20}, 25%, ${l}%)`);
+      g.fillStyle = grd;
+      g.beginPath();
+      g.moveTo(x0 - w, S);
+      g.quadraticCurveTo(x0 - w * 0.5 + lean * 0.3, S - h * 0.6, x0 + lean, S - h);
+      g.quadraticCurveTo(x0 + w * 0.5 + lean * 0.3, S - h * 0.6, x0 + w, S);
+      g.fill();
+    }
+  });
+}
+
+// three cards crossed at 60 degrees; normals point up, so the tufts are lit like the ground they stand on
+function grassGeometry() {
+  const pos = [], uv = [], nrm = [], idx = [], W = 0.42, H = 0.55;
+  for (let k = 0; k < 3; k++) {
+    const a = (k / 3) * Math.PI, c = Math.cos(a) * W, sn = Math.sin(a) * W, b = pos.length / 3;
+    pos.push(-c, 0, -sn, c, 0, sn, c, H, sn, -c, H, -sn);
+    uv.push(0, 0, 1, 0, 1, 1, 0, 1);
+    for (let v = 0; v < 4; v++) nrm.push(0, 1, 0);
+    idx.push(b, b + 1, b + 2, b, b + 2, b + 3);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  return g;
+}
+
+function grassMaterial() {
+  const mat = new THREE.MeshStandardMaterial({ map: grassTexture(), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.92 });
+  mat.alphaToCoverage = true;
+  mat.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, texUniforms, grassUniforms, { uTime: terrainUniforms.uTime });
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', `#include <common>
+        precision highp sampler2DArray;
+        uniform sampler2DArray tAlbedo;
+        uniform float uTime, uWind;
+        uniform vec3 uGrassCam;
+        varying vec3 vGrassCol;`)
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        vec3 root = instanceMatrix[3].xyz;
+        // shrink away towards the edge of the grass area, so patches don't pop in
+        float fade = 1.0 - smoothstep(${(GRASS_RADIUS * 0.6).toFixed(1)}, ${GRASS_RADIUS.toFixed(1)}, length(root.xz - uGrassCam.xz));
+        transformed *= fade;
+        float gust = sin(uTime * 1.7 + root.x * 0.35 + root.z * 0.27) + 0.5 * sin(uTime * 3.3 + root.x * 0.9 - root.z * 0.4);
+        transformed.xz += vec2(0.9, 0.5) * gust * (0.06 + uWind * 0.2) * uv.y * uv.y;
+        // the colour of the grass texture under this tuft (a blurry mip, so a smooth average)
+        vGrassCol = textureLod(tAlbedo, vec3(root.xz * ${(1 / TEX_LAYERS[LAYER.grass].size).toFixed(4)}, ${LAYER.grass}.0), 5.0).rgb;`);
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vGrassCol;')
+      .replace('#include <map_fragment>', `#include <map_fragment>
+        diffuseColor.rgb *= vGrassCol * 1.6;`)
+      // both sides of a card face up (a back face would otherwise get a downward normal and go dark)
+      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+        normal = normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz);`);
+  };
+  return mat;
+}
+
+// Ground height under (x, z) from the density field (where it crosses zero), or null.
+function fieldSurfaceY(x, z) {
+  const h = terrainFns.surfaceHeight(x, z);
+  let hi = h + 3, lo = h - 3;
+  if (sampleField(x, hi, z) > 0 || sampleField(x, lo, z) < 0) return null; // overhang, or dug away
+  for (let k = 0; k < 9; k++) { const mid = (hi + lo) * 0.5; if (sampleField(x, mid, z) > 0) lo = mid; else hi = mid; }
+  return (hi + lo) * 0.5;
+}
+
+// How much grass grows here (0..1), following the same rules as the ground texture.
+const _gn = new THREE.Vector3();
+function grassAmount(x, y, z) {
+  const T = terrainFns;
+  if (y < T.waterAt(x, z) + 1.3 || y > 74) return 0;
+  if (T.volcanoInfluence(x, z) > 0.02) return 0;
+  fieldNormal(x, y, z, _gn);
+  if (_gn.y < 0.8) return 0;
+  if (editedMat.size && editedMaterialAt(x, y - 0.8, z)) return 0; // dug or built ground stays bare
+  const nb = T.noise2(x * 0.03 + 50, z * 0.03 - 20);
+  const forest = smoothstep(0, 1, T.forestMask(x, z) + nb * 0.25);
+  return (1 - forest * 0.75) * (1 - smoothstep(50, 70, y)) * smoothstep(0.8, 0.9, _gn.y);
+}
+
+function buildGrassPatch(i, j) {
+  if (!grassGeo) { grassGeo = grassGeometry(); grassMat = grassMaterial(); }
+  const rand = mulberry32((i * 7919 + j * 104729) ^ (worldStats?.seed || 1));
+  const im = new THREE.InstancedMesh(grassGeo, grassMat, GRASS_PER_PATCH);
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), p = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0), c = new THREE.Color();
+  const T = terrainFns;
+  let n = 0;
+  for (let k = 0; k < GRASS_PER_PATCH * 1.5 && n < GRASS_PER_PATCH; k++) {
+    const x = (i + rand()) * GRASS_PATCH, z = (j + rand()) * GRASS_PATCH, r = rand();
+    if (x < 2 || z < 2 || x > WORLD.size - 2 || z > WORLD.size - 2) continue;
+    const y = fieldSurfaceY(x, z);
+    if (y === null || r > grassAmount(x, y, z)) continue;
+    const size = 0.7 + rand() * 0.6, tall = 0.8 + rand() * 0.7;
+    m.compose(p.set(x, y - 0.08, z), q.setFromAxisAngle(up, rand() * Math.PI), sc.set(size, size * tall, size));
+    im.setMatrixAt(n, m);
+    // dry, yellower grass on open sunny patches, as on the ground texture
+    const dry = smoothstep(0.35, 0.7, T.noise3(x * 0.06, y * 0.06, z * 0.06) + T.noise2(x * 0.03 + 50, z * 0.03 - 20)) * 0.6;
+    const v = 0.85 + rand() * 0.3;
+    im.setColorAt(n, c.setRGB(v * (1 + dry * 0.35), v * (1 + dry * 0.1), v * (1 - dry * 0.45)));
+    n++;
+  }
+  im.count = n;
+  im.castShadow = false; im.receiveShadow = true;
+  im.frustumCulled = true;
+  im.instanceMatrix.needsUpdate = true;
+  if (im.instanceColor) im.instanceColor.needsUpdate = true;
+  im.computeBoundingSphere();
+  if (im.boundingSphere) im.boundingSphere.radius += 1;
+  return im;
+}
+
+// Keeps patches built around (cx, cz); builds at most `budget` new ones per call, nearest first.
+function updateGrass(cx, cz, budget = 2) {
+  grassUniforms.uGrassCam.value.set(cx, 0, cz);
+  const R = GRASS_RADIUS + GRASS_PATCH * 0.75, P = GRASS_PATCH;
+  for (const [key, im] of grassPatches) {
+    const [i, j] = key.split(',').map(Number);
+    if (Math.hypot((i + 0.5) * P - cx, (j + 0.5) * P - cz) > R + P) { grassGroup.remove(im); im.dispose(); grassPatches.delete(key); }
+  }
+  const want = [];
+  for (let j = Math.floor((cz - R) / P); j <= Math.floor((cz + R) / P); j++) for (let i = Math.floor((cx - R) / P); i <= Math.floor((cx + R) / P); i++) {
+    if (i < 0 || j < 0 || i * P >= WORLD.size || j * P >= WORLD.size || grassPatches.has(`${i},${j}`)) continue;
+    const d = Math.hypot((i + 0.5) * P - cx, (j + 0.5) * P - cz);
+    if (d < R) want.push([d, i, j]);
+  }
+  want.sort((a, b) => a[0] - b[0]);
+  for (const [, i, j] of want.slice(0, budget)) {
+    const im = buildGrassPatch(i, j);
+    litMaterial(im.material);
+    grassPatches.set(`${i},${j}`, im);
+    grassGroup.add(im);
+  }
+}
+// Drop the patches over an area (rebuilt next frame), after digging or filling ground there.
+function invalidateGrass(x0, x1, z0, z1) {
+  for (const [key, im] of grassPatches) {
+    const [i, j] = key.split(',').map(Number);
+    if ((i + 1) * GRASS_PATCH < x0 - 1 || i * GRASS_PATCH > x1 + 1 || (j + 1) * GRASS_PATCH < z0 - 1 || j * GRASS_PATCH > z1 + 1) continue;
+    grassGroup.remove(im); im.dispose(); grassPatches.delete(key);
+  }
+}
+function clearGrass() { invalidateGrass(-Infinity, Infinity, -Infinity, Infinity); }
+
+// ---------------------------------------------------------------------------
 // Character
 // ---------------------------------------------------------------------------
+// The explorer: jointed arms (shoulder, elbow) and legs (hip, knee, ankle), a body that leans and
+// twists, a head that turns towards where you look, a backpack and hat, armour that shows when
+// worn, and the selected tool or block in the right hand. Feet at y = 0, facing -Z.
 function buildCharacter() {
-  const g = new THREE.Group();
-  const mat = (color) => new THREE.MeshStandardMaterial({ color, roughness: 0.8 });
-  const skin = mat(0xf0c49a), shirt = mat(0xc8463d), pants = mat(0x2f4a7a), dark = mat(0x222222), pack = mat(0x8a6a3a);
+  const g = new THREE.Group(), root = new THREE.Group();
+  g.add(root);
+  const mat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.8, ...extra });
+  const skin = mat(0xf0c49a), shirt = mat(0xc8463d), pants = mat(0x34507e), boots = mat(0x3b2a1e), hair = mat(0x3a2618);
+  const dark = mat(0x1a1a1a), pack = mat(0x8a6a3a), strap = mat(0x5a4326), belt = mat(0x2e2218), white = mat(0xf4f1ea), hatM = mat(0x9c7a46);
+  const M = (geo, m, x = 0, y = 0, z = 0, parent) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); parent.add(o); return o; };
+  const cap = (r, len) => new THREE.CapsuleGeometry(r, len, 4, 10);
+  const joint = (parent, x, y, z) => { const j = new THREE.Group(); j.position.set(x, y, z); parent.add(j); return j; };
 
-  // feet at y = 0 in local space, facing -Z
-  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.26, 0.4, 3, 8), shirt);
-  torso.position.y = 1.12;
-  const head = new THREE.Mesh(new THREE.IcosahedronGeometry(0.22, 1), skin);
-  head.position.y = 1.6;
-  const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.035, 6, 4), dark);
-  eyeL.position.set(-0.08, 1.63, -0.19);
-  const eyeR = eyeL.clone(); eyeR.position.x = 0.08;
-  const hat = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.25, 0.12, 8), pack);
-  hat.position.y = 1.78;
-  const backpack = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.42, 0.18), pack);
-  backpack.position.set(0, 1.18, 0.28);
+  // legs: hip -> thigh -> knee -> shin -> ankle -> boot
+  const legs = [-1, 1].map((side) => {
+    const hip = joint(root, side * 0.115, 0.93, 0);
+    M(cap(0.085, 0.28), pants, 0, -0.22, 0, hip);
+    const knee = joint(hip, 0, -0.44, 0);
+    M(cap(0.075, 0.27), pants, 0, -0.2, 0, knee);
+    const ankle = joint(knee, 0, -0.42, 0);
+    M(new THREE.BoxGeometry(0.15, 0.12, 0.28), boots, 0, -0.01, -0.05, ankle);
+    M(new THREE.CylinderGeometry(0.085, 0.085, 0.1, 10), boots, 0, 0.06, 0, ankle);
+    return { hip, knee, ankle };
+  });
+  M(new THREE.BoxGeometry(0.36, 0.2, 0.22), pants, 0, 0.98, 0, root); // pelvis
 
-  const limb = (m, w, len) => {
-    const pivot = new THREE.Group();
-    const mesh = new THREE.Mesh(new THREE.CapsuleGeometry(w, len, 2, 6), m);
-    mesh.position.y = -len / 2 - w;
-    pivot.add(mesh);
-    return pivot;
-  };
-  const armL = limb(shirt, 0.08, 0.42); armL.position.set(-0.36, 1.38, 0);
-  const armR = limb(shirt, 0.08, 0.42); armR.position.set(0.36, 1.38, 0);
-  const legL = limb(pants, 0.1, 0.5); legL.position.set(-0.13, 0.78, 0);
-  const legR = limb(pants, 0.1, 0.5); legR.position.set(0.13, 0.78, 0);
+  // upper body: everything above the waist turns and leans together
+  const spine = joint(root, 0, 1.02, 0);
+  const chest = M(cap(0.19, 0.24), shirt, 0, 0.26, 0, spine);
+  chest.scale.set(1.18, 1, 0.78);
+  M(new THREE.BoxGeometry(0.38, 0.06, 0.24), belt, 0, 0.04, 0, spine);
+  M(new THREE.BoxGeometry(0.07, 0.06, 0.03), mat(0xc9a64a, { metalness: 0.6, roughness: 0.4 }), 0, 0.04, -0.125, spine); // buckle
+  const armour = M(cap(0.205, 0.2), mat(0x7a4a26), 0, 0.28, 0, spine);
+  armour.scale.set(1.2, 1, 0.82); armour.visible = false;
+  // backpack with a bedroll on top, and its straps
+  M(new THREE.BoxGeometry(0.34, 0.4, 0.17), pack, 0, 0.28, 0.21, spine);
+  M(new THREE.BoxGeometry(0.26, 0.14, 0.05), strap, 0, 0.2, 0.31, spine);
+  M(new THREE.CylinderGeometry(0.07, 0.07, 0.4, 10).rotateZ(Math.PI / 2), mat(0x5d7a52), 0, 0.53, 0.2, spine);
+  for (const side of [-1, 1]) M(new THREE.BoxGeometry(0.05, 0.36, 0.03), strap, side * 0.1, 0.32, -0.15, spine);
 
-  g.add(torso, head, eyeL, eyeR, hat, backpack, armL, armR, legL, legR);
+  // head: neck, face, hair and the explorer's hat
+  M(new THREE.CylinderGeometry(0.06, 0.07, 0.1, 8), skin, 0, 0.5, 0, spine);
+  const head = joint(spine, 0, 0.56, 0);
+  M(new THREE.SphereGeometry(0.135, 16, 12), skin, 0, 0.1, 0, head).scale.set(1, 1.1, 1);
+  const hairCap = M(new THREE.SphereGeometry(0.142, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.55), hair, 0, 0.115, 0.012, head);
+  hairCap.rotation.x = 0.25;
+  for (const side of [-1, 1]) {
+    M(new THREE.SphereGeometry(0.024, 8, 6), white, side * 0.05, 0.12, -0.118, head);
+    M(new THREE.SphereGeometry(0.013, 6, 4), dark, side * 0.05, 0.12, -0.137, head);
+    M(new THREE.BoxGeometry(0.05, 0.012, 0.012), hair, side * 0.05, 0.158, -0.128, head);    // brows
+    M(new THREE.SphereGeometry(0.03, 8, 6), skin, side * 0.135, 0.1, 0, head).scale.set(0.5, 1, 0.8); // ears
+  }
+  M(new THREE.BoxGeometry(0.03, 0.04, 0.035), skin, 0, 0.085, -0.14, head); // nose
+  M(new THREE.BoxGeometry(0.05, 0.008, 0.01), mat(0x9a4a40), 0, 0.045, -0.128, head); // mouth
+  M(new THREE.CylinderGeometry(0.24, 0.25, 0.025, 20), hatM, 0, 0.22, 0, head);
+  M(new THREE.CylinderGeometry(0.12, 0.15, 0.12, 16), hatM, 0, 0.29, 0, head);
+  M(new THREE.CylinderGeometry(0.152, 0.152, 0.03, 16), strap, 0, 0.25, 0, head);
+
+  // arms: shoulder -> upper arm -> elbow -> forearm -> hand (the right hand holds things)
+  const arms = [-1, 1].map((side) => {
+    const shoulder = joint(spine, side * 0.255, 0.42, 0);
+    M(new THREE.SphereGeometry(0.075, 10, 8), shirt, 0, -0.01, 0, shoulder);
+    M(cap(0.065, 0.2), shirt, 0, -0.15, 0, shoulder);
+    const elbow = joint(shoulder, 0, -0.29, 0);
+    M(cap(0.056, 0.18), skin, 0, -0.12, 0, elbow);
+    const hand = joint(elbow, 0, -0.27, 0);
+    M(new THREE.SphereGeometry(0.062, 10, 8), skin, 0, 0, 0, hand).scale.set(0.9, 1.1, 0.9);
+    return { shoulder, elbow, hand };
+  });
+  const held = joint(arms[1].hand, 0, -0.02, 0);
+
   g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
-  g.userData = { armL, armR, legL, legR };
+  g.userData = { root, spine, head, legs, arms, held, armour, heldId: null, phase: 0, land: 0, air: 0, swing: 0 };
+  return g;
+}
+
+// A simple model of a held item: tools by type and material, blocks as a small textured cube.
+const TIER_COLOR = [0x9c6b3c, 0x9c6b3c, 0x8d8a85, 0xdfe3e8];
+function heldItemModel(id) {
+  const def = id && ITEMS[id];
+  if (!def) return null;
+  const g = new THREE.Group();
+  const M = (geo, color, x, y, z, metal = false) => {
+    const o = new THREE.Mesh(geo, color.isMaterial ? color : new THREE.MeshStandardMaterial({ color, roughness: metal ? 0.35 : 0.8, metalness: metal ? 0.7 : 0 }));
+    o.position.set(x, y, z); o.castShadow = true; g.add(o); return o;
+  };
+  const head = TIER_COLOR[def.tier || 0], metal = def.tier === 3;
+  if (def.tool) {
+    if (def.tool === 'sword') {
+      M(new THREE.BoxGeometry(0.03, 0.12, 0.03), 0x5a3c22, 0, 0, 0);
+      M(new THREE.BoxGeometry(0.16, 0.03, 0.04), 0x5a3c22, 0, 0.07, 0);
+      M(new THREE.BoxGeometry(0.06, 0.55, 0.015), head, 0, 0.36, 0, metal);
+    } else {
+      M(new THREE.CylinderGeometry(0.018, 0.02, 0.6, 6), 0x7a5230, 0, 0.2, 0);
+      if (def.tool === 'pickaxe') { const b = M(new THREE.BoxGeometry(0.42, 0.05, 0.05), head, 0, 0.47, 0, metal); b.scale.y = 1; }
+      if (def.tool === 'axe') M(new THREE.BoxGeometry(0.03, 0.16, 0.14), head, 0, 0.44, -0.07, metal);
+      if (def.tool === 'shovel') M(new THREE.BoxGeometry(0.13, 0.17, 0.02), head, 0, 0.56, 0, metal);
+    }
+  } else if (def.wand) {
+    M(new THREE.CylinderGeometry(0.012, 0.016, 0.4, 6), 0x6b4a2f, 0, 0.12, 0);
+    const c = M(new THREE.OctahedronGeometry(0.05), 0x9fe8ff, 0, 0.35, 0);
+    c.material.emissive.set(0x3aa8d0);
+  } else if (def.place && BLOCKS[def.place] && !BLOCKS[def.place].station) {
+    const b = M(shapeGeometry('block'), blockMaterial(def.place), 0, 0.08, -0.04);
+    b.scale.setScalar(0.2);
+  } else return null;
   return g;
 }
 
 const character = buildCharacter();
-scene.add(character);
+scene.add(character, grassGroup);
 
 // `player.position` is the centre of the top sphere of the capsule.
 const player = {
@@ -1914,7 +2428,7 @@ function findSpawn() {
   for (const back of [7, 6, 8, 5, 9, 4, 10]) {
     const x = t[0].x - dir.x * back, z = t[0].z - dir.z * back;
     const hit = groundAt(x, z);
-    if (hit && hit.point.y > WORLD.waterLevel + 0.3 && hit.face.normal.y > SLOPE_Y) {
+    if (hit && hit.point.y > terrainFns.waterAt(x, z) + 0.3 && hit.face.normal.y > SLOPE_Y) {
       player.spawn.set(x, hit.point.y + FOOT_OFFSET + 0.3, z);
       return Math.atan2(-dir.x, -dir.z);
     }
@@ -1935,7 +2449,8 @@ function respawn() {
 // (pushed out sideways only, so it can't lift you up), or a ceiling.
 // ---------------------------------------------------------------------------
 const _box = new THREE.Box3(), _seg = new THREE.Line3(), _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3(), _off = new THREE.Vector3();
-const contact = { ground: false, steep: false, ceiling: false, steepN: new THREE.Vector3() };
+// steep: pushed sideways by a slope, wall, trunk or block; slope: by a slope too steep to stand on
+const contact = { ground: false, steep: false, slope: false, ceiling: false, steepN: new THREE.Vector3() };
 
 function applyPush(dir, depth) {
   if (dir.y >= SLOPE_Y) {
@@ -1946,7 +2461,7 @@ function applyPush(dir, depth) {
     // steep: resolve the overlap horizontally, never upwards
     const h2 = Math.max(dir.x * dir.x + dir.z * dir.z, 0.2);
     _off.set(dir.x * depth / h2, 0, dir.z * depth / h2);
-    contact.steep = true;
+    contact.steep = contact.slope = true;
     contact.steepN.x += dir.x; contact.steepN.z += dir.z;
   } else {
     _off.copy(dir).multiplyScalar(depth);
@@ -1989,6 +2504,12 @@ function collideCapsule() {
           _seg.start.add(_off); _seg.end.add(_off);
           contact.steep = true; contact.steepN.x += ox / d; contact.steepN.z += oz / d;
         }
+      } else if (o.type === 'tris') {
+        if (_seg.end.y - r > o.max.y || _seg.start.y + r < o.min.y) continue;
+        for (const tri of o.tris) {
+          const distance = tri.closestPointToSegment(_seg, _v1, _v2);
+          if (distance < r) applyPush(_v2.sub(_v1).normalize(), r - distance);
+        }
       } else if (o.type === 'box') {
         // closest points between the capsule segment and a placed block, found by alternating projection
         _v3.copy(_seg.start).clamp(o.min, o.max);
@@ -2022,7 +2543,7 @@ const camState = { dist: 6 };
 let gameTime = 0;
 
 function stepPhysics(dt, inputDir, speed) {
-  const W = WORLD.waterLevel;
+  const W = Math.max(terrainFns.waterAt(player.position.x, player.position.z), craterLavaAt(player.position.x, player.position.z));
   const feet = player.position.y - FOOT_OFFSET;
   const depth = W - feet;
   player.inWater = depth > 0.3;
@@ -2047,15 +2568,16 @@ function stepPhysics(dt, inputDir, speed) {
   player.position.addScaledVector(player.velocity, dt);
   const fallSpeed = -player.velocity.y;
 
-  contact.ground = contact.steep = contact.ceiling = false;
+  contact.ground = contact.steep = contact.slope = contact.ceiling = false;
   contact.steepN.set(0, 0, 0);
   collideCapsule();
   player.position.copy(_seg.start);
 
   player.onGround = contact.ground;
+  // fall damage: hitting the ground faster than after about a 5 m drop hurts, on flat ground and
+  // on slopes alike (sliding down a slope is capped below that speed, so it never hurts)
+  if ((contact.ground || contact.slope) && fallSpeed > 16 && !player.inWater && !creative) damagePlayer((fallSpeed - 16) * 6, 'fell too far');
   if (contact.ground) {
-    // fall damage: landing faster than about a 5 m drop hurts
-    if (fallSpeed > 16 && !player.inWater && !creative) damagePlayer((fallSpeed - 16) * 6, 'fell too far');
     player.lastGroundTime = gameTime;
     if (player.velocity.y < 0) player.velocity.y = creative ? 0 : -2.5; // keeps you stuck to the ground going downhill
   }
@@ -2091,6 +2613,7 @@ function updatePlayer(dt) {
   player.sprinting = (keys.ShiftLeft || keys.ShiftRight) && moving && !creative;
   let speed = creative ? PLAYER.flySpeed : player.sprinting ? PLAYER.sprintSpeed : PLAYER.walkSpeed;
   if (player.inWater && !creative) speed *= 0.55;
+  if (player.inLava && !creative) speed *= 0.5;
 
   // jump only from walkable ground (with a short grace period after leaving it)
   const canJump = player.onGround || gameTime - player.lastGroundTime < 0.12;
@@ -2104,11 +2627,11 @@ function updatePlayer(dt) {
   for (let i = 0; i < steps; i++) stepPhysics(dt / steps, _input, speed);
 
   if (player.position.y < -20) respawn();
-  for (const v of terrainFns.volcanoes) {
-    if (Math.hypot(player.position.x - v.x, player.position.z - v.z) < v.crater * 0.8 && player.position.y - FOOT_OFFSET < v.lavaY + 0.4) {
-      if (creative) { player.velocity.y = 12; continue; }
-      damagePlayer(1000, 'fell into the lava');
-    }
+  // lava burns while you're in it (and a little longer); creative mode just bounces you out
+  player.inLava = lavaAt(player.position.x, player.position.y - FOOT_OFFSET, player.position.z);
+  if (player.inLava) {
+    if (creative) player.velocity.y = 12;
+    else burning = Math.max(burning, 3);
   }
 
   // Character visuals
@@ -2121,21 +2644,132 @@ function updatePlayer(dt) {
     diff = Math.atan2(Math.sin(diff), Math.cos(diff));
     player.facing += diff * Math.min(1, dt * 12);
   }
-  const grounded = gameTime - player.lastGroundTime < 0.15;
-  const hSpeed = Math.hypot(player.velocity.x, player.velocity.z);
-  player.walkPhase += dt * hSpeed * 2.2;
-  const swing = grounded ? Math.sin(player.walkPhase) * Math.min(1, hSpeed / 5) * 0.8 : 0.5;
-  const { armL, armR, legL, legR } = character.userData;
-  legL.rotation.x = swing; legR.rotation.x = grounded ? -swing : -0.3;
-  armL.rotation.x = -swing * 0.8; armR.rotation.x = grounded ? swing * 0.8 : -2.4;
-  if (swingTime > 0 || mouse.left) armR.rotation.x = -1.3 - Math.sin(gameTime * 14) * 0.7;
-
-  character.position.set(player.position.x, player.position.y - FOOT_OFFSET + (grounded ? Math.abs(Math.sin(player.walkPhase)) * 0.04 * Math.min(1, hSpeed / 5) : 0), player.position.z);
-  character.rotation.y = player.facing;
-  character.visible = thirdPerson;
+  animateCharacter(dt);
 
   lantern.position.set(player.position.x, player.position.y + 0.3, player.position.z);
 }
+
+// Poses the character each frame: walk and run cycles with bending knees and elbows, a forward lean
+// when sprinting, jumping and landing, swimming strokes, tool swings, breathing and head turns.
+// Every joint eases towards its target angle, so moving between poses is smooth.
+function animateCharacter(dt) {
+  const C = character.userData, [legL, legR] = C.legs, [armL, armR] = C.arms;
+  const grounded = gameTime - player.lastGroundTime < 0.15;
+  const hSpeed = Math.hypot(player.velocity.x, player.velocity.z);
+  const depth = terrainFns.waterAt(player.position.x, player.position.z) - (player.position.y - FOOT_OFFSET);
+  const swimming = !creative && depth > 1.1, flying = creative && !grounded;
+  const walk = Math.min(1, hSpeed / 4), run = smoothstep(PLAYER.walkSpeed, PLAYER.sprintSpeed, hSpeed);
+  if (!grounded) C.air += dt; else { if (C.air > 0.35) C.land = 0.22; C.air = 0; }
+  C.land = Math.max(0, C.land - dt);
+  C.phase += dt * (grounded ? hSpeed * 1.75 : swimming ? 3.5 : 0);
+  const p = C.phase, t = gameTime;
+  const attacking = swingTime > 0 || (mouse.left && (locked || testMode));
+  if (attacking) C.swing = (C.swing + dt * 3.2) % 1; else C.swing = 0;
+
+  // targets (radians): + on x swings a limb forward, - bends a knee back
+  const T = { rootX: 0, rootY: 0, spineX: 0, spineY: 0, headX: 0, headY: 0,
+    hip: [0, 0], knee: [0, 0], ankle: [0, 0], shX: [0, 0], shZ: [0.08, -0.08], elbow: [0.15, 0.15] };
+  if (swimming) {
+    const moving = hSpeed > 0.5;
+    T.rootX = moving ? -1.2 : -0.25;
+    for (let i = 0; i < 2; i++) {
+      const s = Math.sin(t * 7 + i * Math.PI);
+      T.hip[i] = s * 0.35; T.knee[i] = -0.25 - Math.max(0, s) * 0.3;
+      T.shX[i] = moving ? -2.4 + Math.sin(p) * 0.9 : 0.4 + Math.sin(t * 2 + i) * 0.4;
+      T.shZ[i] = (i ? -1 : 1) * (moving ? 0.5 + Math.cos(p) * 0.4 : 0.9);
+      T.elbow[i] = 0.4;
+    }
+    T.headX = moving ? 0.9 : 0;
+  } else if (flying) {
+    T.spineX = -0.15; T.hip = [0.15, -0.1]; T.knee = [-0.35, -0.2]; T.shZ = [0.35, -0.35]; T.elbow = [0.3, 0.3];
+  } else if (!grounded) {
+    // jumping or falling: knees up, arms out for balance
+    const fall = player.velocity.y < 0 ? 1 : 0.5;
+    T.hip = [0.75, -0.15]; T.knee = [-1.1, -0.55 * fall]; T.ankle = [0.3, 0.2];
+    T.shX = [-0.5, -0.9]; T.shZ = [0.55, -0.55]; T.elbow = [0.4, 0.5]; T.spineX = 0.05;
+  } else {
+    const amp = walk * (0.5 + run * 0.35);
+    for (let i = 0; i < 2; i++) {
+      const ph = p + i * Math.PI, s = Math.sin(ph);
+      T.hip[i] = s * amp;
+      T.knee[i] = -Math.max(0, Math.sin(ph - 1.2)) * (0.75 + run * 0.75) * walk - 0.04;   // knee bends as the leg swings forward
+      T.ankle[i] = Math.max(0, -Math.cos(ph)) * 0.25 * walk;
+      T.shX[i] = -s * (0.45 + run * 0.4) * walk;                                         // arms swing opposite the legs
+      T.elbow[i] = 0.15 + walk * (0.25 + run * 0.9);
+      T.shZ[i] = (i ? -1 : 1) * (0.06 + 0.02 * Math.sin(t * 1.6));
+    }
+    T.spineX = -0.06 * walk - 0.22 * run;
+    T.spineY = Math.sin(p) * 0.12 * walk;
+    if (C.land > 0) { const k = C.land / 0.22; T.hip = [0.5 * k, 0.5 * k]; T.knee = [-1 * k, -1 * k]; T.spineX -= 0.25 * k; }
+  }
+  // the head turns and tilts towards where the camera looks (within what a neck can do)
+  const look = Math.atan2(Math.sin(yaw - player.facing), Math.cos(yaw - player.facing));
+  T.headY += THREE.MathUtils.clamp(look, -1, 1) * 0.8;
+  T.headX += THREE.MathUtils.clamp(pitch + 0.25, -0.5, 0.5) * 0.7;
+  // swinging a tool: the right arm comes down from over the shoulder, the body twists into it
+  if (attacking) {
+    const k = C.swing < 0.35 ? C.swing / 0.35 : 1 - (C.swing - 0.35) / 0.65, e = k * k * (3 - 2 * k);
+    T.shX[1] = THREE.MathUtils.lerp(-2.7, 0.3, 1 - e); T.elbow[1] = 0.3 + 0.5 * e; T.shZ[1] = -0.15;
+    T.spineY += -0.35 * e + 0.2;
+  }
+  // breathing
+  C.spine.scale.y = 1 + Math.sin(t * 2.1) * 0.012;
+
+  const k = 1 - Math.exp(-dt * (attacking ? 22 : 13)), ease = (o, axis, v) => { o.rotation[axis] += (v - o.rotation[axis]) * k; };
+  ease(C.root, 'x', T.rootX); ease(C.spine, 'x', T.spineX); ease(C.spine, 'y', T.spineY); ease(C.head, 'x', T.headX); ease(C.head, 'y', T.headY);
+  [legL, legR].forEach((L, i) => { ease(L.hip, 'x', T.hip[i]); ease(L.knee, 'x', T.knee[i]); ease(L.ankle, 'x', T.ankle[i]); });
+  [armL, armR].forEach((A, i) => { ease(A.shoulder, 'x', T.shX[i]); ease(A.shoulder, 'z', T.shZ[i]); ease(A.elbow, 'x', T.elbow[i]); });
+
+  // body height: a little bob when walking, crouch on landing; lifted when swimming so the head is above water
+  const bob = grounded ? Math.abs(Math.sin(p)) * 0.045 * walk - (C.land / 0.22) * 0.12 : 0;
+  C.root.position.y = swimming ? 0.7 : bob;
+  character.position.set(player.position.x, player.position.y - FOOT_OFFSET, player.position.z);
+  character.rotation.y = player.facing;
+  character.visible = thirdPerson;
+
+  // what's in the right hand, and armour when worn
+  const id = slots[selectedSlot]?.id || null;
+  if (id !== C.heldId) {
+    C.heldId = id;
+    C.held.clear();
+    const m = heldItemModel(id);
+    if (m) { m.rotation.x = -Math.PI / 2 + 0.25; C.held.add(m); prepareLighting(m); }
+    viewModel.setItem(id);
+  }
+  const arm = stats.armour;
+  C.armour.visible = arm > 0;
+  if (arm > 0) { C.armour.material.color.set(arm >= 0.5 ? 0xa9afb7 : 0x7a4a26); C.armour.material.metalness = arm >= 0.5 ? 0.75 : 0; C.armour.material.roughness = arm >= 0.5 ? 0.35 : 0.85; }
+}
+
+// First person: your right hand and the held item at the bottom right of the view, swinging when you use it.
+const viewModel = (() => {
+  const g = new THREE.Group();
+  const fist = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.1, 0.24), new THREE.MeshStandardMaterial({ color: 0xf0c49a, roughness: 0.8 }));
+  fist.position.set(0, -0.02, 0.06);
+  const sleeve = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.12, 0.2), new THREE.MeshStandardMaterial({ color: 0xc8463d, roughness: 0.8 }));
+  sleeve.position.set(0, -0.02, 0.26);
+  const item = new THREE.Group();
+  g.add(fist, sleeve, item);
+  g.position.set(0.3, -0.27, -0.45);
+  g.visible = false;
+  camera.add(g);
+  scene.add(camera);
+  let t = 0;
+  return {
+    group: g,
+    setItem(id) { item.clear(); const m = heldItemModel(id); if (m) { m.rotation.set(-Math.PI / 2 + 0.6, 0.3, 0); m.position.set(0, 0, -0.03); m.scale.setScalar(0.6); item.add(m); prepareLighting(m); } },
+    update(dt) {
+      g.visible = !thirdPerson && gameState === 'playing';
+      if (!g.visible) return;
+      const hs = Math.hypot(player.velocity.x, player.velocity.z), grounded = player.onGround;
+      t += dt * (grounded ? hs * 1.75 : 0);
+      const attacking = swingTime > 0 || (mouse.left && (locked || testMode));
+      const sw = attacking ? Math.sin((gameTime * 3.2 % 1) * Math.PI) : 0;
+      g.position.set(0.3 + Math.cos(t) * 0.012 * Math.min(1, hs / 4), -0.27 + Math.abs(Math.sin(t)) * 0.012 * Math.min(1, hs / 4) - sw * 0.05, -0.45 - sw * 0.08);
+      g.rotation.set(-sw * 0.9, 0.08, sw * 0.2);
+    },
+  };
+})();
 
 const _target = new THREE.Vector3(), _camDir = new THREE.Vector3(), _back = new THREE.Vector3();
 
@@ -2330,6 +2964,8 @@ const SWATCH = {
   leather: 'linear-gradient(160deg, #a8703c, #6e4421)',
   dirt: 'radial-gradient(circle at 35% 30%, #8d6a46, #5e4228)',
   sand: 'radial-gradient(circle at 35% 30%, #eadbb0, #c7b07c)',
+  iron_ore: 'radial-gradient(circle at 30% 35%, #c7713a 0 3px, transparent 4px), radial-gradient(circle at 68% 60%, #b5622e 0 3px, transparent 4px), radial-gradient(circle at 45% 75%, #d08048 0 2px, transparent 3px), radial-gradient(circle at 35% 30%, #a19d97, #6a6762)',
+  iron_ingot: 'linear-gradient(160deg, #f1f2f4 0%, #b9bcc2 45%, #8b8f96 100%)',
 };
 function defineItems() {
   const reg = (id, name, look, extra = {}) =>
@@ -2345,14 +2981,21 @@ function defineItems() {
   reg('glass', 'Glass', SWATCH.glass, { place: 'glass' });
   reg('wool', 'Wool', SWATCH.wool, { place: 'wool' });
   reg('workbench', 'Workbench', '🛠️', { place: 'workbench' });
+  reg('furnace', 'Furnace', '🧱', { place: 'furnace' });
+  reg('iron_ore', 'Iron ore', SWATCH.iron_ore);
+  reg('iron_ingot', 'Iron ingot', SWATCH.iron_ingot);
   reg('campfire', 'Campfire', '🔥', { place: 'campfire' });
-  reg('apple', 'Apple', '🍎', { food: 15 });
-  reg('berries', 'Berries', '🫐', { food: 8 });
+  reg('apple', 'Apple', '🍎', { food: 15, drink: 6 });
+  reg('berries', 'Berries', '🫐', { food: 8, drink: 4 });
   reg('raw_meat', 'Raw meat', '🥩', { food: 10 });
-  reg('cooked_meat', 'Cooked meat', '🍖', { food: 35, heal: 5 });
+  reg('cooked_meat', 'Cooked meat', '🍖', { food: 35, heal: 10 });
+  reg('bread', 'Trail bread', '🍞', { food: 25 });
+  reg('bottle', 'Empty bottle', '🫙', { maxStack: 16 });
+  reg('water_bottle', 'Water bottle', '💧', { drink: 40, leaves: 'bottle', maxStack: 16 });
+  reg('silk', 'Spider silk', '🕸️');
   reg('feather', 'Feather', '🪶');
   reg('leather', 'Leather', SWATCH.leather);
-  for (const [mat, Mat, tier, badge] of [['wood', 'Wooden', 1, '#c08a4c'], ['stone', 'Stone', 2, '#9a9893']]) {
+  for (const [mat, Mat, tier, badge] of [['wood', 'Wooden', 1, '#c08a4c'], ['stone', 'Stone', 2, '#9a9893'], ['iron', 'Iron', 3, '#e4e6ea']]) {
     reg(`${mat}_pickaxe`, `${Mat} pickaxe`, '⛏️', { tool: 'pickaxe', tier, badge, maxStack: 1, damage: 2 + tier });
     reg(`${mat}_axe`, `${Mat} axe`, '🪓', { tool: 'axe', tier, badge, maxStack: 1, damage: 3 + tier });
     reg(`${mat}_shovel`, `${Mat} shovel`, '🪏', { tool: 'shovel', tier, badge, maxStack: 1, damage: 2 + tier });
@@ -2362,17 +3005,21 @@ function defineItems() {
   reg('mana_tonic', 'Mana tonic', '🧪', { mana: 50, maxStack: 16 });
   reg('bandage', 'Bandage', '🩹', { heal: 30, maxStack: 16 });
   reg('leather_armour', 'Leather armour', '🦺', { armour: 0.35, maxStack: 1 });
+  reg('iron_armour', 'Iron armour', '🛡️', { armour: 0.6, maxStack: 1 });
 }
 
 function itemHint(def) {
-  if (def.place) return 'Right click to place';
+  if (def.place) return BLOCKS[def.place]?.station ? 'Right click to place' : 'Right click to place · B changes the shape (block, slab, slope, stairs, prism, pillar)';
   if (def.terrain) return 'Right click to add ground';
-  if (def.food) return `Right click to eat (+${def.food} hunger)`;
+  if (def.food) return `Right click to eat (+${def.food} hunger${def.drink ? `, +${def.drink} thirst` : ''})`;
+  if (def.drink) return `Right click to drink (+${def.drink} thirst)`;
+  if (def.id === 'bottle') return 'Right click on water to fill it';
+  if (def.id === 'iron_ore') return 'Smelt it at a furnace';
   if (def.heal) return `Right click to use (+${def.heal} health)`;
   if (def.mana) return `Right click to drink (+${def.mana} mana)`;
   if (def.wand) return `Right click to cast a bolt (${BOLT_COST} mana)`;
   if (def.armour) return `Right click to wear (takes ${Math.round(def.armour * 100)}% less damage)`;
-  if (def.tool === 'pickaxe') return 'Breaks stone, boulders and crystal';
+  if (def.tool === 'pickaxe') return def.tier >= 2 ? 'Breaks stone, iron ore, boulders and crystal' : 'Breaks stone, boulders and crystal (iron ore needs stone or better)';
   if (def.tool === 'axe') return 'Chops trees and wood faster';
   if (def.tool === 'shovel') return 'Digs dirt and sand faster';
   if (def.tool === 'sword') return `Attack: ${def.damage} damage`;
@@ -2394,12 +3041,21 @@ const RECIPES = [
   { out: 'stone_shovel', in: { stone: 1, stick: 2 }, at: 'workbench' },
   { out: 'stone_sword', in: { stone: 2, stick: 1 }, at: 'workbench' },
   { out: 'stone_bricks', n: 4, in: { stone: 4 }, at: 'workbench' },
+  { out: 'furnace', in: { stone: 8 }, at: 'workbench' },
+  { out: 'iron_ingot', n: 2, in: { iron_ore: 2, log: 1 }, at: 'furnace' },
+  { out: 'iron_pickaxe', in: { iron_ingot: 3, stick: 2 }, at: 'workbench' },
+  { out: 'iron_axe', in: { iron_ingot: 3, stick: 2 }, at: 'workbench' },
+  { out: 'iron_shovel', in: { iron_ingot: 1, stick: 2 }, at: 'workbench' },
+  { out: 'iron_sword', in: { iron_ingot: 2, stick: 1 }, at: 'workbench' },
   { out: 'leather_armour', in: { leather: 5 }, at: 'workbench' },
+  { out: 'iron_armour', in: { iron_ingot: 6, leather: 2 }, at: 'workbench' },
+  { out: 'bottle', n: 2, in: { glass: 1 }, at: 'workbench' },
   { out: 'crystal_wand', in: { stick: 1, crystal: 3, feather: 1 }, at: 'workbench' },
   { out: 'cooked_meat', in: { raw_meat: 1 }, at: 'campfire' },
   { out: 'glass', in: { sand: 2 }, at: 'campfire' },
   { out: 'mana_tonic', in: { crystal: 1, berries: 2 }, at: 'campfire' },
   { out: 'bandage', n: 2, in: { wool: 2 } },
+  { out: 'bandage', n: 2, in: { silk: 3 } },
 ];
 
 // How many of an item would still fit in the inventory.
@@ -2500,12 +3156,19 @@ const BLOCKS = {
   wool:         { name: 'Wool', colors: [0xf2efe6], mat: 'soft' },
   workbench:    { name: 'Workbench', colors: [0x8a6238, 0xd0a466], mat: 'wood', station: true },
   campfire:     { name: 'Campfire', mat: 'soft', solid: false, station: true },
+  furnace:      { name: 'Furnace', mat: 'stone', station: true, facing: true },
 };
-const MAX_BLOCKS = 4096;
-const blockTypes = {};          // type -> { meshes: InstancedMesh[], keys: string[] }
-const blocks = new Map();       // "x,y,z" -> { type, x, y, z, idx, obstacle }
+const MAX_BLOCKS = 4096;       // per block type and shape
+const blockGroups = {};         // "type|shape" -> { meshes: InstancedMesh[], keys: string[] }
+const blocks = new Map();       // "x,y,z" -> { type, shape, x, y, z, idx, obstacles }
 const blockKey = (x, y, z) => `${x},${y},${z}`;
-function resetBlocks() { blocks.clear(); for (const k in blockTypes) delete blockTypes[k]; }
+function resetBlocks() { blocks.clear(); for (const k in blockGroups) delete blockGroups[k]; }
+
+// Shapes you can build with; B switches the shape of the blocks you place. Slopes, stairs and roof
+// prisms turn to face the way you look (a slope rises away from you).
+const SHAPES = ['block', 'slab', 'slope', 'stairs', 'prism', 'pillar'];
+const SHAPE_NAMES = { block: 'Block', slab: 'Half slab', slope: 'Slope', stairs: 'Stairs', prism: 'Roof prism', pillar: 'Pillar' };
+let buildShape = 'block';
 
 // Merges [geometry, colour] pairs into one flat-shaded, vertex-coloured geometry.
 function mergeColored(parts) {
@@ -2523,15 +3186,172 @@ function mergeColored(parts) {
   return geo;
 }
 
-function blockGeometry(def) {
-  const geo = new THREE.BoxGeometry(1, 1, 1).toNonIndexed();
-  const colors = new Float32Array(geo.attributes.position.count * 3), c = new THREE.Color();
-  for (let f = 0; f < 6; f++) { // faces: +x, -x, +y, -y, +z, -z
-    c.set(f === 2 || f === 3 ? def.colors[1] ?? def.colors[0] : def.colors[0]).multiplyScalar(0.92 + hash1(f * 3.7 + def.colors[0] % 97) * 0.12);
-    for (let v = 0; v < 6; v++) colors.set([c.r, c.g, c.b], (f * 6 + v) * 3);
+// Triangles [[a, b, c], ...] -> geometry with flat normals; each triangle is turned to face away from
+// `inside`, so the faces don't have to be listed in a particular winding order.
+function trianglesGeometry(tris, inside) {
+  const pos = [], A = new THREE.Vector3(), B = new THREE.Vector3(), C = new THREE.Vector3(), n = new THREE.Vector3(), m = new THREE.Vector3();
+  for (const [a, b, c] of tris) {
+    A.fromArray(a); B.fromArray(b); C.fromArray(c);
+    n.subVectors(C, B).cross(m.subVectors(A, B));
+    m.copy(A).add(B).add(C).divideScalar(3).sub(inside);
+    if (n.dot(m) < 0) pos.push(...a, ...c, ...b); else pos.push(...a, ...b, ...c);
   }
-  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  return geo;
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.computeVertexNormals();
+  return g;
+}
+function mergeGeometries(list) {
+  const out = { position: [], normal: [] };
+  for (let g of list) { g = g.index ? g.toNonIndexed() : g; for (const k in out) out[k].push(...g.attributes[k].array); }
+  const g = new THREE.BufferGeometry();
+  for (const k in out) g.setAttribute(k, new THREE.Float32BufferAttribute(out[k], 3));
+  return g;
+}
+// Texture coordinates projected along each face's main axis; sides use the left half of a block's
+// texture and tops/bottoms the right half (a log's rings, a workbench's top).
+function boxUVs(g) {
+  const p = g.attributes.position, uv = new Float32Array(p.count * 2), a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), n = new THREE.Vector3();
+  for (let i = 0; i < p.count; i += 3) {
+    a.fromBufferAttribute(p, i); b.fromBufferAttribute(p, i + 1); c.fromBufferAttribute(p, i + 2);
+    n.subVectors(c, b).cross(b.clone().sub(a)).normalize();
+    const ax = Math.abs(n.x), ay = Math.abs(n.y), az = Math.abs(n.z);
+    for (let k = 0; k < 3; k++) {
+      const v = [a, b, c][k];
+      let u, w, top = false;
+      if (ay >= 0.75) { u = v.x + 0.5; w = v.z + 0.5; top = true; }
+      else if (ax > az) { u = v.z + 0.5; w = v.y + 0.5; }
+      else { u = v.x + 0.5; w = v.y + 0.5; }
+      u = 0.01 + Math.min(1, Math.max(0, u)) * 0.98;
+      uv[(i + k) * 2] = top ? 0.5 + u * 0.5 : u * 0.5; uv[(i + k) * 2 + 1] = Math.min(1, Math.max(0, w));
+    }
+  }
+  g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  return g;
+}
+const _shapeGeos = {};
+function shapeGeometry(shape) {
+  if (_shapeGeos[shape]) return _shapeGeos[shape];
+  const l = -0.5, h = 0.5;
+  let g;
+  if (shape === 'slab') g = new THREE.BoxGeometry(1, 0.5, 1).translate(0, -0.25, 0).toNonIndexed();
+  else if (shape === 'pillar') g = new THREE.CylinderGeometry(0.3, 0.3, 1, 10).toNonIndexed();
+  else if (shape === 'stairs') g = mergeGeometries([new THREE.BoxGeometry(1, 0.5, 1).translate(0, -0.25, 0), new THREE.BoxGeometry(1, 0.5, 0.5).translate(0, 0.25, -0.25)]);
+  else if (shape === 'slope' || shape === 'prism') {
+    // bottom corners A B (front) C D (back); top edge E F: at the back for a slope, along the middle for a prism
+    const A = [l, l, h], B = [h, l, h], C = [h, l, l], D = [l, l, l];
+    const zt = shape === 'slope' ? l : 0, E = [l, h, zt], F = [h, h, zt];
+    const tris = [[A, B, C], [A, C, D], [A, B, F], [A, F, E], [D, C, F], [D, F, E], [A, D, E], [B, C, F]];
+    g = trianglesGeometry(tris, new THREE.Vector3(0, -0.2, shape === 'slope' ? -0.2 : 0));
+  } else g = new THREE.BoxGeometry(1, 1, 1).toNonIndexed();
+  return (_shapeGeos[shape] = boxUVs(g));
+}
+
+// Block textures, drawn once on canvases: [side | top], 128 x 128 pixels each.
+function drawBlockTexture(type) {
+  return canvasTexture(256, (g, S) => {
+    const rand = mulberry32(type.length * 131 + type.charCodeAt(0));
+    const H = S / 2; // the canvas is square; only the top half (256 x 128) is used, stretched over v 0..1
+    g.canvas.height = H;
+    const speckle = (x0, w, alpha, light = false) => {
+      for (let i = 0; i < w * H / 6; i++) {
+        g.fillStyle = light ? `rgba(255,255,255,${alpha * rand()})` : `rgba(0,0,0,${alpha * rand()})`;
+        g.fillRect(x0 + rand() * w, rand() * H, 1 + rand() * 1.5, 1 + rand() * 1.5);
+      }
+    };
+    const planks = (x0, w, hue = 32, lit = 52) => {
+      const rows = 4, bh = H / rows;
+      for (let r = 0; r < rows; r++) {
+        const l = lit + (rand() - 0.5) * 10;
+        g.fillStyle = `hsl(${hue + (rand() - 0.5) * 6}, 42%, ${l}%)`; g.fillRect(x0, r * bh, w, bh);
+        for (let k = 0; k < 9; k++) { // grain
+          g.strokeStyle = `hsla(${hue - 6}, 45%, ${l - 14 - rand() * 10}%, ${0.25 + rand() * 0.35})`; g.lineWidth = 0.8 + rand();
+          const y = r * bh + 2 + rand() * (bh - 4), amp = 0.6 + rand() * 1.5, ph = rand() * 6;
+          g.beginPath(); for (let x = 0; x <= w; x += 4) g.lineTo(x0 + x, y + Math.sin(x * 0.05 + ph) * amp); g.stroke();
+        }
+        g.fillStyle = 'rgba(30, 18, 8, 0.75)'; g.fillRect(x0, r * bh, w, 1.5);  // gap between boards
+        const j = x0 + 12 + rand() * (w - 24); g.fillRect(j, r * bh, 1.5, bh);     // end joint
+        g.fillStyle = 'rgba(25,20,15,0.8)'; for (const nx of [j - 5, j + 5]) g.fillRect(nx, r * bh + bh / 2 - 1, 2, 2); // nails
+      }
+    };
+    const stoneBase = (x0, w) => {
+      g.fillStyle = '#56534f'; g.fillRect(x0, 0, w, H);
+      for (let i = 0; i < 22; i++) { // rounded stones with darker gaps between them
+        const cx = x0 + rand() * w, cy = rand() * H, rx = 14 + rand() * 16, ry = 10 + rand() * 12, l = 46 + rand() * 18;
+        g.save(); g.beginPath(); g.rect(x0, 0, w, H); g.clip();
+        const grd = g.createRadialGradient(cx - rx * 0.3, cy - ry * 0.3, 2, cx, cy, Math.max(rx, ry));
+        grd.addColorStop(0, `hsl(30, 4%, ${l + 10}%)`); grd.addColorStop(1, `hsl(30, 4%, ${l - 8}%)`);
+        g.fillStyle = grd; g.beginPath(); g.ellipse(cx, cy, rx, ry, rand() * 3, 0, Math.PI * 2); g.fill(); g.restore();
+      }
+      speckle(x0, w, 0.25); speckle(x0, w, 0.12, true);
+    };
+    const halves = (fn) => { fn(0, H); fn(H, H); };
+    switch (type) {
+      case 'planks': halves((x0, w) => planks(x0, w)); break;
+      case 'workbench':
+        planks(0, H, 28, 44);
+        g.fillStyle = 'rgba(40, 30, 20, 0.85)'; // a saw and a hammer hanging on the side
+        g.fillRect(20, 36, 44, 10); g.beginPath(); g.moveTo(64, 36); g.lineTo(84, 36); g.lineTo(64, 58); g.fill();
+        g.fillRect(96, 30, 6, 46); g.fillRect(86, 28, 26, 10);
+        planks(H, H, 34, 58);
+        g.strokeStyle = 'rgba(50, 32, 16, 0.8)'; g.lineWidth = 2; // crafting grid on top
+        for (let k = 1; k < 3; k++) { g.beginPath(); g.moveTo(H + 20 + k * 29, 20); g.lineTo(H + 20 + k * 29, H - 20); g.moveTo(H + 20, 20 + k * 29); g.lineTo(H + 107, 20 + k * 29); g.stroke(); }
+        g.strokeRect(H + 20, 20, 87, 87);
+        break;
+      case 'log': {
+        g.fillStyle = '#5e4129'; g.fillRect(0, 0, H, H);
+        for (let i = 0; i < 26; i++) { // bark furrows
+          const x = rand() * H; g.strokeStyle = `rgba(${20 + rand() * 20}, 12, 6, ${0.5 + rand() * 0.4})`; g.lineWidth = 1.5 + rand() * 3;
+          g.beginPath(); for (let y = 0; y <= H; y += 8) g.lineTo(x + Math.sin(y * 0.08 + i) * 3, y); g.stroke();
+        }
+        speckle(0, H, 0.2, true);
+        g.fillStyle = '#c99d63'; g.fillRect(H, 0, H, H);
+        for (let r = 6; r < 56; r += 5 + rand() * 4) { g.strokeStyle = `rgba(120, 78, 38, ${0.4 + rand() * 0.3})`; g.lineWidth = 1 + rand(); g.beginPath(); g.arc(H * 1.5, H / 2, r, 0, Math.PI * 2); g.stroke(); }
+        g.strokeStyle = '#4a3220'; g.lineWidth = 9; g.beginPath(); g.arc(H * 1.5, H / 2, 60, 0, Math.PI * 2); g.stroke();
+        g.lineWidth = 8; g.strokeRect(H + 4, 4, H - 8, H - 8);
+        break;
+      }
+      case 'stone': halves(stoneBase); break;
+      case 'stone_bricks': halves((x0, w) => {
+        g.fillStyle = '#8f8b85'; g.fillRect(x0, 0, w, H);
+        const rows = 4, bh = H / rows;
+        for (let r = 0; r < rows; r++) for (let c = -1; c < 3; c++) {
+          const bx = x0 + c * 64 + (r % 2) * 32, l = 52 + rand() * 12;
+          g.save(); g.beginPath(); g.rect(x0, 0, w, H); g.clip();
+          g.fillStyle = `hsl(35, 5%, ${l}%)`; g.fillRect(bx + 2, r * bh + 2, 60, bh - 4);
+          g.fillStyle = 'rgba(255,255,255,0.18)'; g.fillRect(bx + 2, r * bh + 2, 60, 2);
+          g.fillStyle = 'rgba(0,0,0,0.2)'; g.fillRect(bx + 2, r * bh + bh - 4, 60, 2);
+          g.restore();
+        }
+        speckle(x0, w, 0.2);
+      }); break;
+      case 'wool': halves((x0, w) => {
+        g.fillStyle = '#efebe1'; g.fillRect(x0, 0, w, H);
+        for (let i = 0; i < 500; i++) { // little curls of fibre
+          g.strokeStyle = `rgba(150, 140, 120, ${0.15 + rand() * 0.2})`; g.lineWidth = 1;
+          const x = x0 + rand() * w, y = rand() * H; g.beginPath(); g.arc(x, y, 2 + rand() * 3, rand() * 6, rand() * 6 + 3); g.stroke();
+        }
+      }); break;
+      case 'glass': halves((x0, w) => {
+        g.clearRect(x0, 0, w, H);
+        g.fillStyle = 'rgba(200, 230, 240, 0.18)'; g.fillRect(x0, 0, w, H);
+        g.strokeStyle = 'rgba(235, 248, 255, 0.9)'; g.lineWidth = 6; g.strokeRect(x0 + 3, 3, w - 6, H - 6);
+        g.strokeStyle = 'rgba(255, 255, 255, 0.35)'; g.lineWidth = 5;
+        for (const o of [30, 48]) { g.beginPath(); g.moveTo(x0 + o, 12); g.lineTo(x0 + 12, o); g.stroke(); }
+      }); break;
+      default: halves((x0, w) => { g.fillStyle = '#999'; g.fillRect(x0, 0, w, H); speckle(x0, w, 0.2); });
+    }
+  });
+}
+const _blockMats = {};
+function blockMaterial(type) {
+  if (_blockMats[type]) return _blockMats[type];
+  const glass = !!BLOCKS[type].glass, map = drawBlockTexture(type);
+  map.anisotropy = 8;
+  return (_blockMats[type] = new THREE.MeshStandardMaterial({
+    map, bumpMap: map, bumpScale: glass ? 0 : 1.6, roughness: glass ? 0.05 : type === 'stone' || type === 'stone_bricks' ? 0.9 : 0.8,
+    transparent: glass, depthWrite: !glass, side: glass ? THREE.DoubleSide : THREE.FrontSide,
+  }));
 }
 
 function campfireParts() {
@@ -2552,31 +3372,73 @@ function campfireParts() {
   return [base, flame];
 }
 
-function initBlocks() {
-  for (const [type, def] of Object.entries(BLOCKS)) {
-    const templates = type === 'campfire' ? campfireParts() : [new THREE.Mesh(blockGeometry(def), new THREE.MeshStandardMaterial({
-      vertexColors: true, roughness: def.glass ? 0.1 : 0.85,
-      transparent: !!def.glass, opacity: def.glass ? 0.38 : 1, depthWrite: !def.glass,
-    }))];
-    const meshes = templates.map((t) => {
-      const im = new THREE.InstancedMesh(t.geometry, t.material, MAX_BLOCKS);
-      im.setColorAt(0, new THREE.Color(1, 1, 1));
-      im.count = 0;
-      im.castShadow = !def.glass; im.receiveShadow = true;
-      im.frustumCulled = false; // instances are added later, so the bounding sphere would be stale
-      world.add(im);
-      return im;
-    });
-    blockTypes[type] = { meshes, keys: [] };
+// A stone furnace with a glowing fire door on its front (+z) and a little chimney; base at y = 0.
+function furnaceParts() {
+  const B = (w, h, d, x, y, z) => new THREE.BoxGeometry(w, h, d).translate(x, y, z);
+  const base = new THREE.Mesh(mergeColored([
+    [B(1, 0.92, 1, 0, 0.46, 0), 0x86827c], [B(1.02, 0.1, 1.02, 0, 0.95, 0), 0x6f6c67],
+    [B(0.56, 0.4, 0.04, 0, 0.36, 0.5), 0x2a2522], [B(0.26, 0.34, 0.26, 0.25, 1.15, -0.2), 0x75716b],
+  ]), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 }));
+  const glow = new THREE.Mesh(B(0.46, 0.22, 0.03, 0, 0.3, 0.515), new THREE.MeshStandardMaterial({ color: 0xff8a30, emissive: 0xff5a10, emissiveIntensity: 2 }));
+  return [base, glow];
+}
+
+// The instanced meshes for one block type in one shape, made the first time one is placed.
+function blockGroup(type, shape) {
+  const k = `${type}|${shape}`;
+  if (blockGroups[k]) return blockGroups[k];
+  const def = BLOCKS[type];
+  const templates = type === 'campfire' ? campfireParts() : type === 'furnace' ? furnaceParts() : [new THREE.Mesh(shapeGeometry(shape), blockMaterial(type))];
+  const meshes = templates.map((t) => {
+    const im = new THREE.InstancedMesh(t.geometry, t.material, MAX_BLOCKS);
+    im.setColorAt(0, new THREE.Color(1, 1, 1));
+    im.count = 0;
+    im.castShadow = !def.glass; im.receiveShadow = true;
+    im.frustumCulled = false; // instances are added later, so the bounding sphere would be stale
+    litMaterial(im.material);
+    world.add(im);
+    return im;
+  });
+  return (blockGroups[k] = { meshes, keys: [] });
+}
+function initBlocks() {}
+
+// Collision shapes for a placed block, in world space: boxes, or triangles for slopes and prisms.
+function blockObstacles(shape, x, y, z, m) {
+  const box = (x0, y0, z0, x1, y1, z1) => ({ type: 'box', x: x + 0.5, z: z + 0.5, min: new THREE.Vector3(x0, y0, z0), max: new THREE.Vector3(x1, y1, z1) });
+  if (shape === 'slab') return [box(x, y, z, x + 1, y + 0.5, z + 1)];
+  if (shape === 'pillar') return [box(x + 0.2, y, z + 0.2, x + 0.8, y + 1, z + 0.8)];
+  if (shape === 'stairs') {
+    // the upper step sits on the local -z half, turned with the block
+    const c = new THREE.Vector3(0, 0.25, -0.25).applyMatrix4(m), e = new THREE.Vector3(0.5, 0.25, 0.25).transformDirection(m);
+    const ex = Math.abs(e.x) > Math.abs(e.z) ? 0.5 : 0.25, ez = 0.75 - ex;
+    return [box(x, y, z, x + 1, y + 0.5, z + 1), box(c.x - ex, y + 0.5, c.z - ez, c.x + ex, y + 1, c.z + ez)];
   }
+  if (shape === 'slope' || shape === 'prism') {
+    const p = shapeGeometry(shape).attributes.position, tris = [];
+    for (let i = 0; i < p.count; i += 3) {
+      const t = new ExtendedTriangle();
+      t.a.fromBufferAttribute(p, i).applyMatrix4(m); t.b.fromBufferAttribute(p, i + 1).applyMatrix4(m); t.c.fromBufferAttribute(p, i + 2).applyMatrix4(m);
+      t.needsUpdate = true;
+      tris.push(t);
+    }
+    return [{ type: 'tris', x: x + 0.5, z: z + 0.5, tris, min: new THREE.Vector3(x, y, z), max: new THREE.Vector3(x + 1, y + 1, z + 1) }];
+  }
+  return [box(x, y, z, x + 1, y + 1, z + 1)];
 }
 
 const _bm = new THREE.Matrix4(), _bc = new THREE.Color();
-function placeBlock(type, x, y, z) {
-  const key = blockKey(x, y, z), bt = blockTypes[type], def = BLOCKS[type];
+function placeBlock(type, x, y, z, shape = 'block') {
+  const def = BLOCKS[type];
+  if (def.station || def.solid === false) shape = 'block';
+  const key = blockKey(x, y, z), bt = blockGroup(type, shape);
   if (blocks.has(key) || bt.keys.length >= MAX_BLOCKS) return false;
   const idx = bt.keys.length;
-  _bm.makeRotationY(type === 'campfire' ? hash1(x + z * 7) * 6 : 0).setPosition(x + 0.5, type === 'campfire' ? y : y + 0.5, z + 0.5);
+  // campfires get a random turn; furnaces, slopes, stairs and prisms turn with the way you look
+  const facing = Math.round(yaw / (Math.PI / 2)) * (Math.PI / 2);
+  const turn = type === 'campfire' ? hash1(x + z * 7) * 6 : def.facing || ['slope', 'stairs', 'prism'].includes(shape) ? facing : 0;
+  const based = type === 'campfire' || type === 'furnace'; // these models stand on y = 0 instead of being centred
+  _bm.makeRotationY(turn).setPosition(x + 0.5, based ? y : y + 0.5, z + 0.5);
   _bc.setScalar(0.93 + hash1(x * 7.1 + y * 3.3 + z * 1.7) * 0.1);
   for (const im of bt.meshes) {
     im.setMatrixAt(idx, _bm); im.setColorAt(idx, _bc);
@@ -2584,11 +3446,8 @@ function placeBlock(type, x, y, z) {
     im.instanceMatrix.needsUpdate = true; im.instanceColor.needsUpdate = true;
   }
   bt.keys.push(key);
-  const b = { type, x, y, z, idx, obstacle: null };
-  if (def.solid !== false) {
-    b.obstacle = { type: 'box', x: x + 0.5, z: z + 0.5, min: new THREE.Vector3(x, y, z), max: new THREE.Vector3(x + 1, y + 1, z + 1) };
-    addObstacle(b.obstacle);
-  }
+  const b = { type, shape, x, y, z, idx, obstacles: def.solid === false ? [] : blockObstacles(shape, x, y, z, _bm) };
+  for (const o of b.obstacles) addObstacle(o);
   blocks.set(key, b);
   return true;
 }
@@ -2596,7 +3455,7 @@ function placeBlock(type, x, y, z) {
 function removeBlock(key) {
   const b = blocks.get(key);
   if (!b) return null;
-  const bt = blockTypes[b.type], last = bt.keys.length - 1;
+  const bt = blockGroups[`${b.type}|${b.shape}`], last = bt.keys.length - 1;
   if (b.idx !== last) { // move the last instance into the freed slot
     const lastKey = bt.keys[last];
     for (const im of bt.meshes) {
@@ -2608,13 +3467,13 @@ function removeBlock(key) {
   }
   bt.keys.pop();
   for (const im of bt.meshes) { im.count = last; im.instanceMatrix.needsUpdate = true; im.instanceColor.needsUpdate = true; }
-  if (b.obstacle) gridRemove(obstacleGrid, b.obstacle);
+  for (const o of b.obstacles) gridRemove(obstacleGrid, o);
   blocks.delete(key);
   return b;
 }
 
 function updateCampfires(time) {
-  const bt = blockTypes.campfire;
+  const bt = blockGroups['campfire|block'];
   if (!bt || !bt.keys.length) return;
   const flame = bt.meshes[1];
   bt.keys.forEach((key, i) => {
@@ -2647,45 +3506,68 @@ function voxelRay(o, d, t0, t1) {
 }
 
 // ---------------------------------------------------------------------------
-// Health, hunger and mana
+// Health, hunger, thirst and mana
 // ---------------------------------------------------------------------------
 let creative = false;
-const stats = { health: 100, hunger: 100, mana: 100, armour: 0 };
-let regenTimer = 0, starveTimer = 0;
+const MAX_HEALTH = 150;
+const stats = { health: MAX_HEALTH, hunger: 100, thirst: 100, mana: 100, armour: 0 };
+const fullStats = () => ({ health: MAX_HEALTH, hunger: 100, thirst: 100, mana: 100 });
+let regenTimer = 0, starveTimer = 0, thirstTimer = 0, burning = 0, burnTimer = 0;
 const BOLT_COST = 15;
 
 function damagePlayer(amount, reason) {
-  if (creative || amount <= 0 || stats.health <= 0) return;
+  if (creative || amount <= 0 || stats.health <= 0 || gameState !== 'playing') return;
   stats.health -= amount * (1 - stats.armour);
   flashDamage();
   if (stats.health <= 0) die(reason);
 }
 
 function die(reason) {
+  burning = 0;
   toast(`You ${reason}. Back to the start, you keep your things.`);
-  Object.assign(stats, { health: 100, hunger: 100, mana: 100 });
+  Object.assign(stats, fullStats());
   respawn();
 }
 
+// Starting supplies for a new survival game
+function giveStarterKit() {
+  addItem('bread', 4); addItem('apple', 3); addItem('cooked_meat', 2); addItem('water_bottle', 3);
+}
+
 function updateStats(dt) {
-  if (creative) { Object.assign(stats, { health: 100, hunger: 100, mana: 100 }); return; }
-  // about 15 minutes from full to empty when standing still; sprinting burns food 3x faster
+  if (creative) { Object.assign(stats, fullStats()); return; }
+  // food: about 15 minutes from full to empty standing still; sprinting burns it 3x faster
   const drain = (player.sprinting ? 3 : 1) * (player.inWater ? 1.5 : 1) * 100 / 900;
   stats.hunger = Math.max(0, stats.hunger - drain * dt);
+  // water: about 10 minutes; faster when sprinting or near a volcano's heat
+  const heat = terrainFns.volcanoInfluence(player.position.x, player.position.z) > 0.3 ? 2 : 1;
+  stats.thirst = Math.max(0, stats.thirst - (player.sprinting ? 2 : 1) * heat * (100 / 600) * dt);
   stats.mana = Math.min(100, stats.mana + 3 * dt);
   if (stats.hunger <= 0) {
     starveTimer += dt;
     if (starveTimer > 1.5) { starveTimer = 0; damagePlayer(2, 'starved'); }
-  } else if (stats.hunger > 45 && stats.health < 100) {
-    regenTimer += dt; // a well-fed player heals slowly
-    if (regenTimer > 0.8) { regenTimer = 0; stats.health = Math.min(100, stats.health + 1); stats.hunger -= 0.3; }
+  }
+  // fire: 24 health a second in lava, 6 a second while still burning after stepping out; water puts it out
+  if (player.inWater && !player.inLava) burning = 0;
+  if (burning > 0) {
+    burning -= dt; burnTimer += dt;
+    if (burnTimer > 0.25) { burnTimer = 0; damagePlayer(player.inLava ? 6 : 1.5, 'burned to death in the lava'); }
+  }
+  if (stats.thirst <= 0) {
+    thirstTimer += dt;
+    if (thirstTimer > 1.5) { thirstTimer = 0; damagePlayer(2, 'died of thirst'); }
+  }
+  if (stats.hunger > 45 && stats.thirst > 30 && stats.health < MAX_HEALTH) {
+    regenTimer += dt; // a well-fed, watered player heals slowly
+    if (regenTimer > 0.6) { regenTimer = 0; stats.health = Math.min(MAX_HEALTH, stats.health + 1); stats.hunger -= 0.25; stats.thirst -= 0.15; }
   }
 }
 
 // ---------------------------------------------------------------------------
-// Animals: livestock and wildlife that wander, graze, flee, and (wolves) hunt you
+// Animals: livestock and wildlife that wander, graze and flee, and predators that hunt you
 // ---------------------------------------------------------------------------
-// per: how many live on a 256 x 256 m map. shy: runs from you inside this range. hostile: chases you inside this range.
+// per: how many live on a 256 x 256 m map. shy: runs from you inside this range. hostile: chases you
+// inside this range. bite: damage per attack, knock: how hard it shoves you. home 'cave' lives underground.
 const SPECIES = {
   cow:     { name: 'Cow', hp: 30, walk: 1.3, run: 4.5, r: 0.75, h: 1.5, graze: true, home: 'meadow', herd: [2, 4], per: 7, drops: [['raw_meat', 2, 3], ['leather', 1, 2]] },
   pig:     { name: 'Pig', hp: 20, walk: 1.2, run: 4.2, r: 0.55, h: 1.0, graze: true, home: 'meadow', herd: [2, 3], per: 5, drops: [['raw_meat', 2, 3]] },
@@ -2693,7 +3575,10 @@ const SPECIES = {
   chicken: { name: 'Chicken', hp: 8, walk: 1.0, run: 3.8, r: 0.3, h: 0.75, graze: true, home: 'meadow', herd: [3, 4], per: 7, drops: [['raw_meat', 1, 1], ['feather', 1, 2]] },
   deer:    { name: 'Deer', hp: 24, walk: 1.5, run: 8, r: 0.6, h: 1.9, graze: true, shy: 11, home: 'forest', herd: [2, 3], per: 6, drops: [['raw_meat', 2, 3], ['leather', 1, 2]] },
   rabbit:  { name: 'Rabbit', hp: 6, walk: 1.4, run: 6.5, r: 0.25, h: 0.6, shy: 6, hop: true, home: 'any', herd: [1, 2], per: 7, drops: [['raw_meat', 1, 1], ['leather', 0, 1]] },
-  wolf:    { name: 'Wolf', hp: 24, walk: 1.7, run: 6.4, r: 0.5, h: 1.15, hostile: 12, bite: 9, home: 'forest', herd: [2, 2], per: 2, drops: [['leather', 1, 2]] },
+  wolf:    { name: 'Wolf', hp: 26, walk: 1.7, run: 7.2, r: 0.5, h: 1.15, hostile: 16, bite: 11, home: 'forest', herd: [2, 4], per: 2.5, drops: [['leather', 1, 2], ['raw_meat', 0, 1]] },
+  bear:    { name: 'Bear', hp: 80, walk: 1.3, run: 6.6, r: 0.95, h: 1.75, hostile: 11, bite: 24, knock: 10, attackEvery: 1.6, home: 'forest', herd: [1, 1], per: 1.2, drops: [['raw_meat', 3, 5], ['leather', 2, 3]] },
+  boar:    { name: 'Boar', hp: 32, walk: 1.2, run: 7.5, r: 0.6, h: 1.0, graze: true, hostile: 4.5, bite: 13, knock: 8, home: 'forest', herd: [2, 3], per: 2, drops: [['raw_meat', 2, 3], ['leather', 1, 1]] },
+  spider:  { name: 'Cave spider', hp: 18, walk: 1.8, run: 6.2, r: 0.6, h: 0.6, hostile: 13, bite: 8, home: 'cave', herd: [1, 3], per: 2.5, drops: [['silk', 1, 2]] },
 };
 const animals = [];
 const population = {};
@@ -2802,6 +3687,48 @@ function buildAnimal(kind, rand) {
       box(head, 0.06, 0.04, 0.02, eye, -0.09, 0.05, -0.27); box(head, 0.06, 0.04, 0.02, eye, 0.09, 0.05, -0.27);
       break;
     }
+    case 'bear': {
+      const fur = M(rand() < 0.3 ? 0x3b2c22 : 0x5c4130), muzzle = M(0x9a7a5c), dark = M(0x1c1612), eye = M(0x120c08);
+      for (const [x, z] of [[-0.32, -0.55], [0.32, -0.55], [-0.32, 0.55], [0.32, 0.55]]) leg(fur, 0.28, 0.62, x, 0.62, z);
+      body = box(g, 0.96, 0.86, 1.65, fur, 0, 1.05, 0);
+      box(g, 0.9, 0.3, 0.6, fur, 0, 1.52, -0.38); // shoulder hump
+      head.position.set(0, 1.3, -0.88);
+      box(head, 0.6, 0.54, 0.52, fur, 0, 0, -0.14); box(head, 0.32, 0.26, 0.3, muzzle, 0, -0.1, -0.5);
+      box(head, 0.12, 0.08, 0.06, dark, 0, -0.02, -0.66);
+      box(head, 0.14, 0.14, 0.08, fur, -0.22, 0.32, -0.04); box(head, 0.14, 0.14, 0.08, fur, 0.22, 0.32, -0.04);
+      box(head, 0.06, 0.06, 0.02, eye, -0.14, 0.08, -0.41); box(head, 0.06, 0.06, 0.02, eye, 0.14, 0.08, -0.41);
+      break;
+    }
+    case 'boar': {
+      const hide = M(0x4e3d33), bristle = M(0x2c221d), snout = M(0x8a6a5c), tusk = M(0xefe6d2);
+      for (const [x, z] of [[-0.2, -0.4], [0.2, -0.4], [-0.2, 0.4], [0.2, 0.4]]) leg(hide, 0.15, 0.38, x, 0.38, z);
+      body = box(g, 0.6, 0.62, 1.15, hide, 0, 0.7, 0);
+      box(g, 0.14, 0.18, 0.9, bristle, 0, 1.06, -0.05);
+      head.position.set(0, 0.78, -0.58);
+      box(head, 0.44, 0.44, 0.42, hide, 0, 0, -0.14); box(head, 0.26, 0.2, 0.14, snout, 0, -0.08, -0.4);
+      box(head, 0.05, 0.14, 0.05, tusk, -0.15, -0.04, -0.42); box(head, 0.05, 0.14, 0.05, tusk, 0.15, -0.04, -0.42);
+      box(head, 0.1, 0.12, 0.06, bristle, -0.16, 0.26, -0.06); box(head, 0.1, 0.12, 0.06, bristle, 0.16, 0.26, -0.06);
+      break;
+    }
+    case 'spider': {
+      const black = M(0x1d1b1e), hair = M(0x3a3236), eye = M(0xff2a1a);
+      eye.emissive.set(0xc01000);
+      body = box(g, 0.62, 0.42, 0.7, black, 0, 0.5, 0.32);
+      box(g, 0.46, 0.32, 0.42, hair, 0, 0.45, -0.18);
+      // eight legs: each pivots at the body side, splayed out and down
+      for (let i = 0; i < 4; i++) for (const side of [-1, 1]) {
+        const p = new THREE.Group();
+        p.position.set(side * 0.22, 0.52, -0.3 + i * 0.2);
+        p.rotation.y = side * (i - 1.5) * -0.35; // fanned out from front to back
+        box(p, 0.5, 0.07, 0.07, black, side * 0.25, 0.12, 0).rotation.z = side * 0.45; // up and out from the body
+        box(p, 0.06, 0.7, 0.06, black, side * 0.5, -0.15, 0).rotation.z = side * 0.25;  // down to the ground
+        g.add(p); legs.push(p);
+      }
+      head.position.set(0, 0.48, -0.42);
+      box(head, 0.3, 0.24, 0.2, black, 0, 0, -0.04);
+      for (const [x, y] of [[-0.07, 0.05], [0.07, 0.05], [-0.12, 0.0], [0.12, 0.0]]) box(head, 0.045, 0.045, 0.02, eye, x, y, -0.15);
+      break;
+    }
   }
   body.castShadow = true;
   return { group: g, legs, head, mats };
@@ -2819,11 +3746,31 @@ function spawnAnimal(kind, x, y, z, rand) {
   return a;
 }
 
+// A spot on a cave floor under (x, z), or null: scans up from the cave floor for air with ground below.
+function caveFloorAt(x, z) {
+  const T = terrainFns, top = T.surfaceHeight(x, z) - 6;
+  for (let y = WORLD.caveFloor + 1.5; y < top; y += 1.5) {
+    if (sampleField(x, y, z) < -0.6 && sampleField(x, y + 1.5, z) < -0.6) {
+      const g = groundAt(x, z, y);
+      if (g && y - g.point.y < 6 && g.face.normal.y > 0.7) return g;
+      return null;
+    }
+  }
+  return null;
+}
+
 function findAnimalSpot(home, rand, awayFromPlayer) {
-  const T = terrainFns, S = WORLD.size, W = WORLD.waterLevel, L = T.ledge;
-  for (let tries = 0; tries < 50; tries++) {
+  const T = terrainFns, S = WORLD.size, L = T.ledge;
+  for (let tries = 0; tries < (home === 'cave' ? 160 : 50); tries++) {
     const x = 10 + rand() * (S - 20), z = 10 + rand() * (S - 20);
     if (awayFromPlayer && Math.hypot(x - player.position.x, z - player.position.z) < 50) continue;
+    if (home === 'cave') {
+      if (Math.hypot(x - L.x, z - L.z) < 40 || T.volcanoInfluence(x, z) > 0.2) continue; // not right at the start
+      const g = caveFloorAt(x, z);
+      if (g) return { x, y: g.point.y, z };
+      continue;
+    }
+    const W = T.waterAt(x, z);
     const g = groundAt(x, z);
     if (!g) continue;
     const y = g.point.y;
@@ -2845,8 +3792,8 @@ function spawnHerd(kind, rand, awayFromPlayer) {
   let made = 0;
   for (let i = 0; i < n * 3 && made < n; i++) {
     const x = spot.x + (rand() - 0.5) * 8, z = spot.z + (rand() - 0.5) * 8;
-    const g = groundAt(x, z);
-    if (!g || g.point.y < WORLD.waterLevel + 1 || g.face.normal.y < 0.7 || Math.abs(g.point.y - spot.y) > 4) continue;
+    const g = sp.home === 'cave' ? groundAt(x, z, spot.y + 2.5) : groundAt(x, z);
+    if (!g || g.point.y < terrainFns.waterAt(x, z) + 1 || g.face.normal.y < 0.7 || Math.abs(g.point.y - spot.y) > 4) continue;
     spawnAnimal(kind, x, g.point.y, z, rand);
     made++;
   }
@@ -2868,11 +3815,12 @@ function tryMoveAnimal(a, mx, mz) {
   const S = WORLD.size, nx = a.x + mx, nz = a.z + mz;
   if (nx < 3 || nz < 3 || nx > S - 3 || nz > S - 3) return false;
   const g = groundAt(nx, nz, a.y + 2.2);
-  if (!g || g.point.y < WORLD.waterLevel + 0.2 || g.face.normal.y < 0.6 || Math.abs(g.point.y - a.y) > 0.9) return false;
+  if (!g || g.point.y < terrainFns.waterAt(nx, nz) + 0.2 || g.face.normal.y < 0.6 || Math.abs(g.point.y - a.y) > 0.9) return false;
   const gy = g.point.y;
+  if (lavaFlows.length && terrainFns.volcanoInfluence(nx, nz) > 0.25 && lavaAt(nx, gy, nz, 0.5)) return false;
   const list = obstacleGrid.get(cellKey(Math.floor(nx / CELL), Math.floor(nz / CELL)));
   if (list) for (const o of list) {
-    if (o.type === 'box') { if (nx > o.min.x - a.sp.r * 0.5 && nx < o.max.x + a.sp.r * 0.5 && nz > o.min.z - a.sp.r * 0.5 && nz < o.max.z + a.sp.r * 0.5 && gy + 0.3 < o.max.y && gy + a.sp.h > o.min.y) return false; }
+    if (o.min) { if (nx > o.min.x - a.sp.r * 0.5 && nx < o.max.x + a.sp.r * 0.5 && nz > o.min.z - a.sp.r * 0.5 && nz < o.max.z + a.sp.r * 0.5 && gy + 0.3 < o.max.y && gy + a.sp.h > o.min.y) return false; }
     else if (Math.hypot(nx - o.x, nz - o.z) < o.r + a.sp.r * 0.6 && (o.type !== 'sphere' || o.y + o.r > gy + 0.3)) return false;
   }
   a.x = nx; a.z = nz; a.y = gy;
@@ -2911,13 +3859,14 @@ function updateAnimals(dt) {
     a.timer -= dt; a.hurtT -= dt; a.attackCd -= dt; a.flee -= dt; a.aggro -= dt;
 
     let wx = 0, wz = 0, speed = 0;
-    const hunting = sp.hostile && !creative && Math.abs(dy) < 6 && (dist < sp.hostile || (a.aggro > 0 && dist < 30));
+    const hunting = sp.hostile && !creative && gameState === 'playing' && Math.abs(dy) < 6 && (dist < sp.hostile || (a.aggro > 0 && dist < 30));
     if (hunting) {
       a.mode = 'chase'; wx = dx / dist; wz = dz / dist; speed = sp.run;
       if (dist < 1.3 + sp.r && Math.abs(dy) < 1.8 && a.attackCd <= 0) {
-        a.attackCd = 1.1;
+        a.attackCd = sp.attackEvery || 1.1;
         damagePlayer(sp.bite, `were killed by a ${sp.name.toLowerCase()}`);
-        player.velocity.x += dx / dist * 6; player.velocity.z += dz / dist * 6; player.velocity.y = Math.max(player.velocity.y, 3);
+        const k = sp.knock || 6;
+        player.velocity.x += dx / dist * k; player.velocity.z += dz / dist * k; player.velocity.y = Math.max(player.velocity.y, 3);
       }
       if (dist < 1.1 + sp.r) speed = 0;
     } else if (a.flee > 0 || (sp.shy && dist < sp.shy && Math.abs(dy) < 5)) {
@@ -2995,7 +3944,7 @@ function updateAnimals(dt) {
 const mouse = { left: false, right: false };
 let testMode = false;                // lets headless tests act without pointer lock
 let swingTime = 0, breakProgress = 0, breakKey = null, attackCd = 0, useCd = 0, warnCd = 0;
-let currentTarget = null;
+let currentTarget = null, aimWater = null;
 const _aimO = new THREE.Vector3(), _aimD = new THREE.Vector3(), _eye = new THREE.Vector3(), _tv = new THREE.Vector3();
 
 const outline = new THREE.LineSegments(
@@ -3042,6 +3991,22 @@ function pickTarget() {
   return best;
 }
 
+// Where the aim ray first meets a water surface (sea or a lake) from above, or null.
+function waterRay(o, d, t0, t1) {
+  if (d.y > -1e-3) return null;
+  const T = terrainFns, levels = [WORLD.waterLevel];
+  for (const lk of T.lakes) if (Math.abs(lk.x - o.x) < lk.R * 2 + t1 && Math.abs(lk.z - o.z) < lk.R * 2 + t1) levels.push(lk.level);
+  let best = null;
+  for (const L of levels) {
+    const t = (L - o.y) / d.y;
+    if (t < t0 || t > t1 || (best && t > best.t)) continue;
+    const x = o.x + d.x * t, z = o.z + d.z * t;
+    if (Math.abs(T.waterAt(x, z) - L) > 0.01) continue;
+    best = { t, point: new THREE.Vector3(x, L, z) };
+  }
+  return best;
+}
+
 function terrainMaterialAt(hit) {
   const p = hit.point, n = hit.face.normal;
   const edited = editedMaterialAt(p.x - n.x * 0.8, p.y - n.y * 0.8, p.z - n.z * 0.8);
@@ -3067,10 +4032,10 @@ function targetName(t) {
   switch (t.kind) {
     case 'tree': return { pine: 'Pine tree', oak: 'Oak tree', birch: 'Birch tree' }[t.target.species];
     case 'bush': return 'Berry bush';
-    case 'rock': return 'Boulder';
+    case 'rock': return t.target.iron ? 'Iron-rich boulder' : 'Boulder';
     case 'block': return BLOCKS[t.type].name;
     case 'animal': return `${t.animal.sp.name}  ${Math.max(0, Math.ceil(t.animal.hp))}/${t.animal.sp.hp}`;
-    case 'terrain': return { dirt: 'Dirt', sand: 'Sand', stone: 'Stone', crystal: 'Crystal' }[materialOf(t)];
+    case 'terrain': return { dirt: 'Dirt', sand: 'Sand', stone: 'Stone', crystal: 'Crystal', iron: 'Iron ore' }[materialOf(t)];
   }
   return '';
 }
@@ -3078,13 +4043,14 @@ function targetName(t) {
 // Seconds to break something with the item in hand (Infinity = can't).
 function breakTime(mat, def) {
   if (creative) return 0.12;
-  const tool = def?.tool, fast = (def?.tier || 0) >= 2;
+  const tool = def?.tool, tier = def?.tier || 0, speed = [1, 1, 1.6, 2.6][tier];
   switch (mat) {
-    case 'wood': return tool === 'axe' ? (fast ? 0.7 : 1.1) : 2.6;
+    case 'wood': return tool === 'axe' ? 1.1 / speed : 2.6;
     case 'plant': return 0.35;
     case 'soft': return 0.5;
-    case 'dirt': case 'sand': return tool === 'shovel' ? (fast ? 0.25 : 0.4) : 0.9;
-    case 'stone': case 'crystal': return tool === 'pickaxe' ? (fast ? 0.8 : 1.4) : Infinity;
+    case 'dirt': case 'sand': return tool === 'shovel' ? 0.4 / speed : 0.9;
+    case 'stone': case 'crystal': return tool === 'pickaxe' ? 1.4 / speed : Infinity;
+    case 'iron': return tool === 'pickaxe' && tier >= 2 ? 2 / speed : Infinity;
   }
   return 1;
 }
@@ -3118,7 +4084,7 @@ function harvest(tg) {
   } else if (tg.kind === 'bush') {
     give([['berries', r() < 0.8 ? 1 + Math.floor(r() * 3) : 0], ['stick', 1]]);
   } else if (tg.kind === 'rock') {
-    give([['stone', 2 + Math.round(tg.s * 2)]]);
+    give(tg.iron ? [['stone', 1 + Math.round(tg.s)], ['iron_ore', 1 + Math.round(tg.s * 1.5)]] : [['stone', 2 + Math.round(tg.s * 2)]]);
   }
 }
 
@@ -3137,7 +4103,7 @@ function doBreak(t) {
         if (Math.hypot(tg.x - center.x, tg.y - center.y, tg.z - center.z) < 2.6) harvest(tg);
       }
     }
-    give(mat === 'crystal' ? [['crystal', 1 + Math.floor(Math.random() * 2)]] : [[mat, 1]]);
+    give(mat === 'crystal' ? [['crystal', 1 + Math.floor(Math.random() * 2)]] : mat === 'iron' ? [['iron_ore', 1], ['stone', Math.random() < 0.5 ? 1 : 0]] : [[mat, 1]]);
   }
 }
 
@@ -3171,15 +4137,32 @@ function consumeSelected() {
   renderInventory();
 }
 
+// Right click on water: fill an empty bottle, or drink a few sips
+function useWater() {
+  const s = slots[selectedSlot];
+  if (s?.id === 'bottle') {
+    consumeSelected();
+    give([['water_bottle', 1]]);
+    useCd = 0.4;
+    return;
+  }
+  if (stats.thirst > 99 && !creative) { toast("You're not thirsty"); return; }
+  stats.thirst = Math.min(100, stats.thirst + 15);
+  toast('Drank some water');
+  useCd = 0.6;
+}
+
 // Right click
 function useItem(t) {
   const s = slots[selectedSlot], def = s && ITEMS[s.id];
+  // water in front of whatever you're aiming at: drink or fill a bottle, unless you're building
+  if (aimWater && !(def && (def.place || def.terrain || def.food || def.drink || def.heal || def.mana || def.armour || def.wand))) { useWater(); return; }
   if (t?.kind === 'block' && BLOCKS[t.type].station && !(def && (def.place || def.terrain))) { setInventoryOpen(true); return; }
   if (!def) return;
   if (def.place) {
     const cell = placementCell(t);
     if (!cell || !cellFree(cell)) return;
-    if (placeBlock(def.place, ...cell)) consumeSelected();
+    if (placeBlock(def.place, ...cell, buildShape)) consumeSelected();
   } else if (def.terrain) {
     if (!t || (t.kind !== 'terrain' && t.kind !== 'block')) return;
     const p = t.kind === 'terrain' ? t.point : new THREE.Vector3(t.cell[0] + 0.5, t.cell[1] + 0.5, t.cell[2] + 0.5).addScaledVector(t.normal, 0.5);
@@ -3191,13 +4174,21 @@ function useItem(t) {
   } else if (def.food) {
     if (stats.hunger > 99 && !creative) { toast("You're not hungry"); return; }
     stats.hunger = Math.min(100, stats.hunger + def.food);
-    if (def.heal) stats.health = Math.min(100, stats.health + def.heal);
+    if (def.drink) stats.thirst = Math.min(100, stats.thirst + def.drink);
+    if (def.heal) stats.health = Math.min(MAX_HEALTH, stats.health + def.heal);
     consumeSelected();
     toast(`Ate ${def.name.toLowerCase()}`);
     useCd = 0.5;
+  } else if (def.drink) {
+    if (stats.thirst > 99 && !creative) { toast("You're not thirsty"); return; }
+    stats.thirst = Math.min(100, stats.thirst + def.drink);
+    consumeSelected();
+    if (def.leaves && !creative) addItem(def.leaves, 1);
+    toast(`Drank ${def.name.toLowerCase()}`);
+    useCd = 0.5;
   } else if (def.heal) {
-    if (stats.health >= 100) { toast('Health is already full'); return; }
-    stats.health = Math.min(100, stats.health + def.heal);
+    if (stats.health >= MAX_HEALTH) { toast('Health is already full'); return; }
+    stats.health = Math.min(MAX_HEALTH, stats.health + def.heal);
     consumeSelected();
     useCd = 0.5;
   } else if (def.mana) {
@@ -3264,9 +4255,17 @@ function targetId(t) {
 function updateInteraction(dt) {
   swingTime = Math.max(0, swingTime - dt);
   attackCd -= dt; useCd -= dt; warnCd -= dt;
-  const active = (locked || testMode) && !inventoryOpen;
+  const active = (locked || testMode) && !inventoryOpen && gameState === 'playing';
   currentTarget = active ? pickTarget() : null;
   const t = currentTarget;
+  // water between you and what you're aiming at (only from above the surface)
+  aimWater = null;
+  if (active && !cameraUnderwater) {
+    camera.getWorldDirection(_aimD);
+    _eye.set(player.position.x, player.position.y + EYE_OFFSET, player.position.z);
+    const t0 = Math.max(0, _tv.subVectors(_eye, camera.position).dot(_aimD));
+    aimWater = waterRay(camera.position, _aimD, t0, t ? Math.min(t.t, t0 + PLAYER.reach) : t0 + PLAYER.reach);
+  }
   const held = slots[selectedSlot], def = held && ITEMS[held.id];
 
   // outline: where a held block would go, otherwise the block you're looking at
@@ -3278,7 +4277,7 @@ function updateInteraction(dt) {
     outline.position.set(t.cell[0] + 0.5, t.cell[1] + 0.5, t.cell[2] + 0.5);
     outline.material.color.set(0x000000); outline.visible = true;
   } else outline.visible = false;
-  targetEl.textContent = t ? targetName(t) : '';
+  targetEl.textContent = aimWater ? (held?.id === 'bottle' ? 'Water: right click to fill the bottle' : 'Water: right click to drink') : t ? targetName(t) : '';
 
   if (active && mouse.left) {
     if (t?.kind === 'animal') {
@@ -3292,7 +4291,7 @@ function updateInteraction(dt) {
       if (id !== breakKey) { breakKey = id; breakProgress = 0; }
       const time = breakTime(materialOf(t), def);
       if (!isFinite(time)) {
-        if (warnCd <= 0) { toast(`You need a pickaxe to break ${materialOf(t) === 'crystal' ? 'crystal' : 'stone'}`); warnCd = 2.5; }
+        if (warnCd <= 0) { const m = materialOf(t); toast(m === 'iron' ? 'Iron ore needs a stone or iron pickaxe' : `You need a pickaxe to break ${m === 'crystal' ? 'crystal' : 'stone'}`); warnCd = 2.5; }
         breakProgress = 0;
       } else {
         breakProgress += dt / time;
@@ -3315,25 +4314,216 @@ const underwaterEl = document.getElementById('underwater');
 let cameraUnderwater = false;
 function updateUnderwater() {
   const p = camera.position, S = WORLD.size;
-  const under = p.y < WORLD.waterLevel - 0.05 && p.x > 1 && p.z > 1 && p.x < S - 1 && p.z < S - 1;
+  const under = p.x > 1 && p.z > 1 && p.x < S - 1 && p.z < S - 1 && p.y < terrainFns.waterAt(p.x, p.z) - 0.05;
   if (under === cameraUnderwater) return;
   cameraUnderwater = under;
   scene.fog.color.copy(under ? waterFogColor : skyColor);
-  scene.fog.density = under ? 0.075 : FOG_DENSITY;
+  scene.fog.density = under ? 0.075 : FOG_DENSITY; // the weather adjusts it again above water
   scene.background = under ? waterFogColor : skyColor;
   skyDome.visible = !under;
   underwaterEl.style.display = under ? 'block' : 'none';
 }
 
-const statEls = { hp: document.querySelector('#hp i'), food: document.querySelector('#food i'), mana: document.querySelector('#mana i') };
+// ---------------------------------------------------------------------------
+// Weather: clear, cloudy, rain and thunderstorms come and go. Clouds grey the sky and dim the sun,
+// rain falls around the camera (snow up in the mountains), fog thickens, the ground gets wet and
+// dark, and storms flash and rumble. Rain stops where something is over your head (a cave, a roof).
+// ---------------------------------------------------------------------------
+const WEATHER = {
+  clear:  { name: 'Clear', cloud: 0.1, rain: 0, storm: 0, chance: 0.4, wind: 0.2 },
+  cloudy: { name: 'Cloudy', cloud: 0.6, rain: 0, storm: 0, chance: 0.27, wind: 0.45 },
+  rain:   { name: 'Rain', cloud: 0.88, rain: 0.7, storm: 0, chance: 0.21, wind: 0.6 },
+  storm:  { name: 'Thunderstorm', cloud: 1, rain: 1, storm: 1, chance: 0.12, wind: 1 },
+};
+const weather = { state: 'clear', timer: 200, cloud: 0.1, rain: 0, storm: 0, wind: 0.2, snow: 0, covered: 0, coverT: 0, flash: 0, nextBolt: 6, baked: 0.1 };
+const skyClear = { zenith: sky.zenith.clone(), horizon: sky.horizon.clone(), sun: sky.sun.clone(), ground: sky.ground.clone() };
+const skyStorm = { zenith: new THREE.Color(0x4a525c), horizon: new THREE.Color(0x7d858d), sun: new THREE.Color(0x9aa0a8), ground: new THREE.Color(0x2c2e2c) };
+const cloudColors = { top: [new THREE.Color(0xffffff), new THREE.Color(0x8d939b)], under: [new THREE.Color(0xc4ccd6), new THREE.Color(0x5c636c)] };
+const flashEl = document.getElementById('flash');
+const flashLight = new THREE.HemisphereLight(0xdde6ff, 0x50505a, 0);
+scene.add(flashLight);
+
+function setWeather(state, quick = false) {
+  weather.state = state;
+  weather.timer = 120 + Math.random() * 180;
+  if (quick) Object.assign(weather, { cloud: WEATHER[state].cloud, rain: WEATHER[state].rain, storm: WEATHER[state].storm });
+}
+function nextWeather() {
+  let r = Math.random() * 0.999, pick = 'clear';
+  const options = Object.keys(WEATHER).filter((k) => k !== weather.state);
+  const total = options.reduce((a, k) => a + WEATHER[k].chance, 0);
+  for (const k of options) { r -= WEATHER[k].chance / total; if (r < 0) { pick = k; break; } }
+  setWeather(pick);
+}
+
+// Rain: streaks that fall through a box around the camera. Each drop keeps its place in the world
+// (the box just wraps around you), so walking doesn't drag the rain along.
+const RAIN_DROPS = QUALITY === 'low' ? 3500 : 9000, SNOW_FLAKES = QUALITY === 'low' ? 2500 : 6000;
+const precipUniforms = { uTime: { value: 0 }, uCam: { value: new THREE.Vector3() }, uWindXZ: { value: new THREE.Vector2(2, 1) }, uAlpha: { value: 0 } };
+function makePrecipitation(count, snow) {
+  const rand = mulberry32(snow ? 77 : 33);
+  const verts = snow ? 1 : 2, pos = new Float32Array(count * verts * 3), end = new Float32Array(count * verts);
+  for (let i = 0; i < count; i++) {
+    const x = rand(), y = rand(), z = rand();
+    for (let v = 0; v < verts; v++) { pos.set([x, y, z], (i * verts + v) * 3); end[i * verts + v] = v; }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('aEnd', new THREE.BufferAttribute(end, 1));
+  const box = snow ? [50, 30, 50] : [56, 34, 56], speed = snow ? 1.6 : 22, len = 0.6;
+  const mat = new THREE.ShaderMaterial({
+    uniforms: { ...precipUniforms, uAlpha: { value: 0 } },
+    transparent: true, depthWrite: false, fog: false,
+    vertexShader: `
+      uniform float uTime; uniform vec3 uCam; uniform vec2 uWindXZ;
+      attribute float aEnd;
+      varying float vFade;
+      void main() {
+        vec3 box = vec3(${box.map((b) => b.toFixed(1)).join(', ')});
+        vec3 vel = vec3(uWindXZ.x, -${speed.toFixed(1)}, uWindXZ.y);
+        vec3 p = position * box + vel * uTime;
+        ${snow ? 'p.x += sin(uTime * 0.9 + position.y * 40.0) * 0.6; p.z += cos(uTime * 0.7 + position.x * 40.0) * 0.6;' : ''}
+        vec3 lo = uCam - box * 0.5;
+        p = lo + mod(p - lo, box);
+        ${snow ? '' : `p -= normalize(vel) * ${len.toFixed(2)} * aEnd; // the streak's tail`}
+        float d = length(p - uCam);
+        vFade = (1.0 - smoothstep(box.x * 0.3, box.x * 0.5, d)) * smoothstep(0.5, 2.0, d);
+        vec4 mv = modelViewMatrix * vec4(p, 1.0);
+        gl_Position = projectionMatrix * mv;
+        ${snow ? 'gl_PointSize = clamp(90.0 / -mv.z, 1.0, 9.0);' : ''}
+      }`,
+    fragmentShader: `
+      uniform float uAlpha;
+      varying float vFade;
+      void main() {
+        ${snow ? 'vec2 c = gl_PointCoord - 0.5; float a = smoothstep(0.5, 0.2, length(c));' : 'float a = 1.0;'}
+        gl_FragColor = vec4(${snow ? 'vec3(1.0)' : 'vec3(0.72, 0.76, 0.82)'}, a * vFade * uAlpha);
+      }`,
+  });
+  const obj = snow ? new THREE.Points(geo, mat) : new THREE.LineSegments(geo, mat);
+  obj.frustumCulled = false;
+  obj.renderOrder = 2;
+  obj.userData.count = count; obj.userData.verts = verts;
+  return obj;
+}
+const rainFx = makePrecipitation(RAIN_DROPS, false), snowFx = makePrecipitation(SNOW_FLAKES, true);
+scene.add(rainFx, snowFx);
+
+// Sound: rain is looping filtered noise, thunder a low noise burst. Made with Web Audio, no files.
+const sound = { ctx: null, rain: null, noise: null, on: true };
+function initSound() {
+  if (sound.ctx || !sound.on) return;
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return;
+  const ctx = new AC(), n = ctx.sampleRate * 3, buf = ctx.createBuffer(1, n, ctx.sampleRate), d = buf.getChannelData(0);
+  let b0 = 0, b1 = 0, b2 = 0;
+  for (let i = 0; i < n; i++) { // pink-ish noise
+    const w = Math.random() * 2 - 1;
+    b0 = 0.99765 * b0 + w * 0.099046; b1 = 0.963 * b1 + w * 0.2965164; b2 = 0.57 * b2 + w * 1.0526913;
+    d[i] = (b0 + b1 + b2 + w * 0.1848) * 0.17;
+  }
+  const src = ctx.createBufferSource(); src.buffer = buf; src.loop = true;
+  const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 500;
+  const gain = ctx.createGain(); gain.gain.value = 0;
+  src.connect(hp).connect(gain).connect(ctx.destination);
+  src.start();
+  Object.assign(sound, { ctx, rain: gain, noise: buf });
+}
+function setSound(on) {
+  sound.on = on;
+  if (on) initSound();
+  if (sound.ctx) on ? sound.ctx.resume() : sound.ctx.suspend();
+}
+function thunder(delay, strength) {
+  const ctx = sound.ctx;
+  if (!ctx || !sound.on) return;
+  const t = ctx.currentTime + delay;
+  const src = ctx.createBufferSource(); src.buffer = sound.noise; src.playbackRate.value = 0.3;
+  const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 180 + strength * 120;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(1.6 * strength, t + 0.06 + delay * 0.05);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 2.5 + strength * 2);
+  src.connect(lp).connect(g).connect(ctx.destination);
+  src.start(t, Math.random() * 2); src.stop(t + 5);
+}
+
+const _up = new THREE.Vector3(0, 1, 0);
+function updateWeather(dt) {
+  weather.timer -= dt;
+  if (weather.timer <= 0) nextWeather();
+  const tgt = WEATHER[weather.state], k = 1 - Math.exp(-dt / 10);
+  for (const key of ['cloud', 'rain', 'storm', 'wind']) weather[key] += (tgt[key] - weather[key]) * k;
+  const c = smoothstep(0.15, 1, weather.cloud), cam = camera.position;
+
+  // sky, sun and fog
+  for (const key of ['zenith', 'horizon', 'sun', 'ground']) sky[key].copy(skyClear[key]).lerp(skyStorm[key], c * 0.9);
+  if (weather.flash > 0) sky.horizon.lerp(new THREE.Color(0xd8e0f0), weather.flash * 0.5);
+  skyDome.material.uniforms.uSunGlow.value = 1 - c * 0.85;
+  for (const l of csm.lights) l.intensity = 3.4 * (1 - 0.7 * c);
+  if (!cameraUnderwater) {
+    scene.fog.color.copy(skyColor);
+    scene.fog.density = FOG_DENSITY * (1 + c * 0.6 + weather.rain * 1.4);
+  }
+  if (Math.abs(c - weather.baked) > 0.04) { weather.baked = c; bakeSkyLight(); }
+  if (cloudMats.top) {
+    cloudMats.top.color.copy(cloudColors.top[0]).lerp(cloudColors.top[1], c);
+    cloudMats.under.color.copy(cloudColors.under[0]).lerp(cloudColors.under[1], c);
+    const n = clouds.children.length, show = Math.round(n * (0.3 + 0.7 * weather.cloud));
+    clouds.children.forEach((g, i) => { g.visible = i < show; });
+  }
+
+  // is something over the camera's head? (checked a few times a second)
+  weather.coverT -= dt;
+  if (weather.coverT <= 0) {
+    weather.coverT = 0.25;
+    const above = !!raycastTerrain(cam, _up, 0, 60) || !!voxelRay(cam, _up, 0, 24);
+    weather.coveredTarget = above || cameraUnderwater ? 1 : 0;
+  }
+  weather.covered += ((weather.coveredTarget || 0) - weather.covered) * Math.min(1, dt * 4);
+  weather.snow = smoothstep(58, 74, cam.y);
+  const open = 1 - weather.covered;
+  precipUniforms.uTime.value = gameTime;
+  precipUniforms.uCam.value.copy(cam);
+  precipUniforms.uWindXZ.value.set(1 + weather.wind * 5, 0.5 + weather.wind * 2);
+  rainFx.material.uniforms.uAlpha.value = 0.38 * open * (1 - weather.snow);
+  snowFx.material.uniforms.uAlpha.value = 0.9 * open * weather.snow;
+  rainFx.geometry.setDrawRange(0, Math.floor(rainFx.userData.count * weather.rain) * 2);
+  snowFx.geometry.setDrawRange(0, Math.floor(snowFx.userData.count * weather.rain));
+  rainFx.visible = weather.rain > 0.01 && weather.snow < 0.99;
+  snowFx.visible = weather.rain > 0.01 && weather.snow > 0.01;
+  terrainUniforms.uRainWet.value += ((weather.rain > 0.2 ? 1 : 0) - terrainUniforms.uRainWet.value) * Math.min(1, dt / (weather.rain > 0.2 ? 25 : 60));
+  grassUniforms.uWind.value = weather.wind;
+
+  // lightning
+  if (weather.storm > 0.6) {
+    weather.nextBolt -= dt;
+    if (weather.nextBolt <= 0) {
+      weather.nextBolt = 4 + Math.random() * 12;
+      weather.flash = 1;
+      const dist = Math.random();
+      thunder(0.3 + dist * 2.5, 1 - dist * 0.6);
+    }
+  }
+  weather.flash = Math.max(0, weather.flash - dt * 4);
+  const flicker = weather.flash > 0 ? weather.flash * (0.6 + 0.4 * Math.sin(gameTime * 60)) : 0;
+  flashLight.intensity = flicker * 5 * open;
+  flashEl.style.opacity = (flicker * 0.35 * open).toFixed(3);
+
+  if (sound.rain) sound.rain.gain.setTargetAtTime(sound.on ? weather.rain * (1 - weather.snow) * (0.12 + 0.18 * open) : 0, sound.ctx.currentTime, 0.4);
+}
+
+const statEls = { hp: document.querySelector('#hp i'), hpText: document.querySelector('#hp span'), food: document.querySelector('#food i'), water: document.querySelector('#water i'), mana: document.querySelector('#mana i') };
 function renderStats() {
-  statEls.hp.style.width = `${Math.max(0, stats.health)}%`;
+  statEls.hp.style.width = `${Math.max(0, stats.health) / MAX_HEALTH * 100}%`;
+  statEls.hpText.textContent = `Health ${Math.max(0, Math.ceil(stats.health))}`;
   statEls.food.style.width = `${stats.hunger}%`;
+  statEls.water.style.width = `${stats.thirst}%`;
   statEls.mana.style.width = `${stats.mana}%`;
 }
 
 function setCreative(on) {
   creative = on;
+  if (on) Object.assign(stats, fullStats());
   document.getElementById('stats').style.display = on ? 'none' : 'flex';
   document.getElementById('mode').style.display = on ? 'block' : 'none';
   if (!on) player.velocity.y = 0;
@@ -3346,7 +4536,7 @@ defineItems();
 // ---------------------------------------------------------------------------
 // Input + UI
 // ---------------------------------------------------------------------------
-const overlay = document.getElementById('overlay');
+const menuEl = document.getElementById('menu');
 const hud = document.getElementById('hud');
 const crosshair = document.getElementById('crosshair');
 const toastEl = document.getElementById('toast');
@@ -3365,11 +4555,83 @@ function flashDamage() {
   damageEl.style.transition = 'none'; damageEl.style.opacity = 1;
   requestAnimationFrame(() => { damageEl.style.transition = 'opacity 0.8s'; damageEl.style.opacity = 0; });
 }
+// ---------------------------------------------------------------------------
+// Main menu (title screen) and pause menu
+// ---------------------------------------------------------------------------
+let gameState = 'menu';   // 'menu': title screen, the camera circles the world; 'playing'
+let gameStarted = false;  // a game is under way that "Continue" goes back to
+let spawnFacing = 0;
+const $ = (id) => document.getElementById(id);
+for (const el of document.querySelectorAll('#menu .controls')) el.innerHTML = $('controls-text').innerHTML;
+$('quality-select').value = QUALITY;
+$('seed-input').value = urlParams.get('seed') || '';
+
 function updateOverlay() {
-  overlay.style.display = locked || inventoryOpen ? 'none' : 'flex';
+  const hidden = gameState === 'playing' && (locked || inventoryOpen || testMode);
+  menuEl.style.display = hidden ? 'none' : 'flex';
+  $('title-panel').style.display = gameState === 'menu' ? 'block' : 'none';
+  $('pause-panel').style.display = gameState === 'playing' ? 'block' : 'none';
+  $('btn-continue').style.display = gameStarted ? 'block' : 'none';
+  const ready = !!worldStats && !generating;
+  for (const id of ['btn-continue', 'btn-survival', 'btn-creative', 'btn-newworld']) $(id).disabled = !ready;
+  $('loading').style.display = ready ? 'none' : 'block';
+  if (gameState === 'playing') $('pause-info').textContent = `${creative ? 'Creative' : 'Survival'} · world ${worldStats.seed}`;
+  for (const id of ['hud', 'stats', 'hotbar']) $(id).style.visibility = gameState === 'playing' ? 'visible' : 'hidden';
+  $('mode').style.visibility = gameState === 'playing' ? 'visible' : 'hidden';
 }
 
-overlay.addEventListener('click', () => renderer.domElement.requestPointerLock());
+function lockPointer() { renderer.domElement.requestPointerLock()?.catch?.(() => {}); }
+
+// A fresh character: full health, empty inventory (a few supplies in survival), at the start.
+function startGame(mode) {
+  if (sound.on) initSound();
+  slots.fill(null); heldStack = null; selectedSlot = 0;
+  Object.assign(stats, fullStats(), { armour: 0 });
+  creative = mode === 'creative';
+  document.getElementById('mode').style.display = creative ? 'block' : 'none';
+  document.getElementById('stats').style.display = creative ? 'none' : 'flex';
+  if (!creative) giveStarterKit();
+  renderInventory();
+  respawn();
+  player.facing = yaw = spawnFacing; pitch = -0.25;
+  gameStarted = true;
+  enterGame();
+  toast(creative ? 'Creative mode: fly with Space and Shift, every item is in the inventory (E)' : 'You have some food and water to start with. Press E for the inventory.');
+}
+function enterGame() {
+  gameState = 'playing';
+  updateOverlay();
+  lockPointer();
+}
+function toMainMenu() {
+  gameState = 'menu';
+  if (inventoryOpen) setInventoryOpen(false);
+  document.exitPointerLock?.();
+  updateOverlay();
+}
+
+$('btn-survival').addEventListener('click', () => startGame('survival'));
+$('btn-creative').addEventListener('click', () => startGame('creative'));
+$('btn-continue').addEventListener('click', () => { if (sound.on) initSound(); enterGame(); });
+$('btn-resume').addEventListener('click', lockPointer);
+$('btn-mainmenu').addEventListener('click', toMainMenu);
+$('btn-random').addEventListener('click', () => { $('seed-input').value = Math.floor(Math.random() * 1e6); });
+$('btn-newworld').addEventListener('click', () => {
+  const seed = parseInt($('seed-input').value, 10) || Math.floor(Math.random() * 1e6);
+  $('seed-input').value = seed;
+  gameStarted = false;
+  newWorld(seed);
+});
+$('seed-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('btn-newworld').click(); });
+$('quality-select').addEventListener('change', (e) => {
+  // graphics quality sets texture and shadow sizes at start-up, so it reloads the page
+  const url = new URL(location.href);
+  if (e.target.value === 'low') url.searchParams.set('quality', 'low'); else url.searchParams.delete('quality');
+  if (worldStats) url.searchParams.set('seed', worldStats.seed);
+  location.href = url.toString();
+});
+$('sound-select').addEventListener('change', (e) => setSound(e.target.value === 'on'));
+
 document.addEventListener('pointerlockchange', () => {
   locked = document.pointerLockElement === renderer.domElement;
   if (!locked) mouse.left = mouse.right = false;
@@ -3386,7 +4648,7 @@ function clampPitch() {
   pitch = thirdPerson ? THREE.MathUtils.clamp(pitch, -1.35, 0.6) : THREE.MathUtils.clamp(pitch, -1.55, 1.55);
 }
 document.addEventListener('mousedown', (e) => {
-  if (!locked || inventoryOpen) return;
+  if (!locked || inventoryOpen || gameState !== 'playing') return;
   if (e.button === 0) mouse.left = true;
   if (e.button === 2) { mouse.right = true; useCd = Math.min(useCd, 0); }
 });
@@ -3400,6 +4662,8 @@ window.addEventListener('wheel', (e) => {
   selectSlot(selectedSlot + Math.sign(e.deltaY));
 }, { passive: true });
 window.addEventListener('keydown', (e) => {
+  if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
+  if (gameState !== 'playing') return;
   if (e.code === 'Tab') e.preventDefault();
   if (e.code === 'KeyE' || e.code === 'KeyI' || e.code === 'Tab') { if (!e.repeat) setInventoryOpen(!inventoryOpen); return; }
   if (inventoryOpen) { if (e.code === 'Escape') setInventoryOpen(false); return; }
@@ -3416,7 +4680,12 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyZ') camDistIndex = (camDistIndex + 1) % CAM_DISTANCES.length;
   if (e.code === 'KeyF') { lanternOn = !lanternOn; lantern.visible = lanternOn; }
   if (e.code === 'KeyR') respawn();
-  if (e.code === 'KeyN') newWorld(Math.floor(Math.random() * 1e6));
+  if (e.code === 'KeyB') {
+    buildShape = SHAPES[(SHAPES.indexOf(buildShape) + 1) % SHAPES.length];
+    toast(`Building shape: ${SHAPE_NAMES[buildShape]} (B to change)`);
+  }
+  if (e.code === 'KeyK') { nextWeather(); toast(`Weather: ${WEATHER[weather.state].name}`); }
+  if (e.code === 'KeyM') { setSound(!sound.on); $('sound-select').value = sound.on ? 'on' : 'off'; toast(sound.on ? 'Sound on' : 'Sound off'); }
 });
 window.addEventListener('keyup', (e) => { keys[e.code] = false; });
 window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; mouse.left = mouse.right = false; });
@@ -3430,21 +4699,41 @@ window.addEventListener('resize', () => {
 // ---------------------------------------------------------------------------
 // Main loop
 // ---------------------------------------------------------------------------
-let worldStats = null;
+let worldStats = null, generating = false;
+// Generating takes a few seconds and blocks the page, so show the message first and start a frame later.
 function newWorld(seed) {
-  document.getElementById('loading').style.display = 'block';
-  worldStats = generateWorld(seed);
-  const facing = findSpawn();
-  player.facing = facing;
-  yaw = facing;
-  respawn();
-  const url = new URL(location.href);
-  url.searchParams.set('seed', seed);
-  history.replaceState(null, '', url);
-  document.getElementById('loading').style.display = 'none';
+  generating = true;
+  updateOverlay();
+  setTimeout(() => {
+    worldStats = generateWorld(seed);
+    spawnFacing = findSpawn();
+    player.facing = yaw = spawnFacing;
+    respawn();
+    setWeather('clear', true);
+    const url = new URL(location.href);
+    url.searchParams.set('seed', seed);
+    history.replaceState(null, '', url);
+    $('seed-input').value = seed;
+    generating = false;
+    updateOverlay();
+  }, 40);
+}
+
+// Title screen: the camera slowly circles the starting point, high enough to clear the hills.
+let menuCamY = null;
+function updateMenuCamera(dt) {
+  const c = player.spawn, a = gameTime * 0.035, r = 75;
+  const x = THREE.MathUtils.clamp(c.x + Math.cos(a) * r, 5, WORLD.size - 5), z = THREE.MathUtils.clamp(c.z + Math.sin(a) * r, 5, WORLD.size - 5);
+  let ground = 0;
+  for (let k = 0; k <= 4; k++) ground = Math.max(ground, terrainFns.surfaceHeight(lerp(x, c.x, k / 6), lerp(z, c.z, k / 6)));
+  const want = Math.max(c.y + 28, ground + 16);
+  menuCamY = menuCamY === null ? want : menuCamY + (want - menuCamY) * Math.min(1, dt * 0.8);
+  camera.position.set(x, menuCamY, z);
+  camera.lookAt(c.x, c.y + 4, c.z);
 }
 
 const initialSeed = Number(urlParams.get('seed')) || Math.floor(Math.random() * 1e6);
+
 
 const clock = new THREE.Clock();
 let fpsAcc = 0, fpsFrames = 0, fps = 0, litCheck = 0;
@@ -3463,16 +4752,28 @@ function updateCulling() {
 }
 
 function frame() {
+  requestAnimationFrame(frame);
   const dt = Math.min(clock.getDelta(), 0.05);
+  if (generating || !worldStats) return;
+  // paused: in a game with the menu showing (not in the inventory, which keeps the world going)
+  const paused = gameState === 'playing' && !locked && !inventoryOpen && !testMode;
+  if (paused) { renderer.render(scene, camera); return; }
   gameTime += dt;
-  updatePlayer(dt);
-  updateCamera(dt);
-  updateInteraction(dt);
+  if (gameState === 'playing') {
+    updatePlayer(dt);
+    updateCamera(dt);
+    updateInteraction(dt);
+    updateStats(dt);
+    renderStats();
+  } else {
+    updateMenuCamera(dt);
+  }
   updateAnimals(dt);
   updateBolts(dt);
-  updateStats(dt);
-  renderStats();
   updateUnderwater();
+  updateWeather(dt);
+  viewModel.update(dt);
+  updateGrass(camera.position.x, camera.position.z, gameState === 'playing' ? 2 : 1);
   updateCampfires(gameTime);
   updateVolcanoes(dt, gameTime);
   terrainUniforms.uTime.value = gameTime;
@@ -3484,11 +4785,11 @@ function frame() {
   if (fpsAcc > 0.5) { fps = Math.round(fpsFrames / fpsAcc); fpsAcc = 0; fpsFrames = 0; }
   const feet = player.position.y - FOOT_OFFSET;
   const underground = feet < terrainFns.surfaceHeight(player.position.x, player.position.z) - 4;
-  const state = creative ? 'flying' : player.onGround ? 'grounded' : contact.steep ? 'sliding' : player.inWater ? 'in water' : 'airborne';
+  const state = creative ? 'flying' : player.inLava ? 'IN LAVA' : player.onGround ? 'grounded' : contact.steep ? 'sliding' : player.inWater ? 'in water' : 'airborne';
   hud.textContent =
-    `${thirdPerson ? 'Third person' : 'First person'}  ·  ${creative ? 'Creative' : 'Survival'}  ·  ${fps} fps  ·  seed ${worldStats.seed}  ·  map ${WORLD.size} m\n` +
+    `${thirdPerson ? 'Third person' : 'First person'}  ·  ${creative ? 'Creative' : 'Survival'}  ·  ${fps} fps  ·  seed ${worldStats.seed}  ·  map ${WORLD.size} m  ·  ${WEATHER[weather.state].name}\n` +
     `pos ${player.position.x.toFixed(1)}, ${feet.toFixed(1)}, ${player.position.z.toFixed(1)}  ·  ${state}${underground ? '  ·  in a cave' : ''}` +
-    `${stats.armour ? '  ·  armour' : ''}  ·  ${animals.length} animals`;
+    `${stats.armour ? `  ·  armour ${Math.round(stats.armour * 100)}%` : ''}  ·  ${animals.length} animals`;
 
   if (++litCheck % 30 === 0) prepareLighting(scene); // new animals, blocks, campfires
   if (litCheck % 8 === 0) updateCulling();
@@ -3496,13 +4797,11 @@ function frame() {
   camera.updateMatrixWorld();
   csm.update();
   renderer.render(scene, camera);
-  requestAnimationFrame(frame);
 }
 
 // let the loading text paint before the (synchronous) generation runs
 requestAnimationFrame(() => setTimeout(() => {
   newWorld(initialSeed);
-  document.getElementById('controls').style.display = 'block';
   // Public hooks, for adding items later and for testing
   window.game = { registerItem, addItem, removeItem, countItem, getSelectedItem, slots, ITEMS, WORLD, PLAYER };
   window.__game = {
@@ -3514,6 +4813,9 @@ requestAnimationFrame(() => setTimeout(() => {
     spawnAnimal: (kind, x, z) => { const g = groundAt(x, z); return g && spawnAnimal(kind, x, g.point.y, z, Math.random); },
     underwater: () => cameraUnderwater, time: () => gameTime, damagePlayer, targets: () => [...targetGrid.values()].flat(),
     renderer, scene, camera, csm, texInfo, QUALITY,
+    startGame, toMainMenu, state: () => gameState, ready: () => !!worldStats && !generating, weather, setWeather, WEATHER,
+    aimWater: () => aimWater, useWater, grassPatches, MAX_HEALTH, updateGrass,
+    lavaFlows, lavaAt, burning: () => burning, setShape: (sh) => { buildShape = sh; }, blockGroups, character, breakTime,
   };
   frame();
 }, 30));
