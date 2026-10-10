@@ -216,10 +216,10 @@ export function createTerrainFunctions(seed) {
   // Ores: veins in the rock, found in cliffs, caves and anywhere you dig into stone. Each kind has
   // its own noise field and depths: coal is common and fairly high up, copper in the middle, gold
   // rare and deep. oreAt gives the amount of iron (0..1; above 0.5 is ore); oreKind the ore here.
-  const oreAt = (x, y, z) => smoothstep(0.42, 0.56, noise3(x * 0.09 + 500, y * 0.11, z * 0.09 - 200));
+  const oreAt = (x, y, z) => smoothstep(0.68, 0.8, noise3(x * 0.09 + 500, y * 0.11, z * 0.09 - 200));
   const ORES = [
     // [kind, offset, threshold, lowest y, highest y]
-    ['coal', 900, 0.4, 16, 128], ['copper', 1700, 0.45, 8, 64], ['gold', 2500, 0.52, 4, 26],
+    ['coal', 900, 0.75, 16, 128], ['copper', 1700, 0.8, 8, 64], ['gold', 2500, 0.88, 4, 26],
   ];
   // Returns null or [kind, amount]; the array is reused by the next call.
   const _ore = ['', 0];

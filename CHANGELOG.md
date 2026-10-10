@@ -138,8 +138,9 @@ About 250 new recipes go with them; the crafting page's search and categories he
   sandstone and basalt at the depths each is found, deepslate and blackstone near the bottom.
   Digging gives that stone.
 - **Ores**: coal (common, higher up), copper (middle depths, green-blue specks), gold (rare,
-  deep, needs a stone pickaxe or better) alongside iron. Ore shows as small nuggets with a dark
-  rim, rather than big orange blotches.
+  deep, needs a stone pickaxe or better) alongside iron. Ore is rarer than iron used to be (about
+  one rock face in ten has any, iron in about one in twenty-five), and shows as small nuggets with
+  a dark rim rather than big orange blotches.
 
 ### Water
 

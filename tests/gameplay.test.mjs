@@ -26,16 +26,18 @@ R.tree = await log('tree', async () => {
     }
   if (!best) return 'no tree found';
   const tg = best.target;
-  const before = count('log');
+  // any kind of log (each tree gives its own wood)
+  const logs = () => game.slots.reduce((n, s) => n + (s && game.ITEMS[s.id]?.tags?.includes('logs') ? s.count : 0), 0);
+  const before = logs();
   G.mouse.left = false;
   aimAt(tg.x, tg.y + 1.0, tg.z);
   await waitGame(0.1);
   const aimed = G.target()?.kind;
   // hold the button until the tree comes down (or 10 s of game time)
   G.mouse.left = true;
-  for (let i = 0; i < 50 && count('log') === before; i++) await waitGame(0.2);
+  for (let i = 0; i < 50 && logs() === before; i++) await waitGame(0.2);
   G.mouse.left = false;
-  return { aimed, logsBefore: before, logs: count('log'), sticks: count('stick'), apples: count('apple') };
+  return { aimed, species: tg.species, logsBefore: before, logs: logs(), sticks: count('stick'), apples: count('apple') };
 });
 
 // 2. craft: planks, sticks, workbench; place workbench; craft a wooden pickaxe
