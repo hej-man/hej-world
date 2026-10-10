@@ -11,6 +11,7 @@ import { FOOT_OFFSET, player } from '../player/character.js';
 import { damagePlayer } from '../player/survival.js';
 import { give } from '../player/interaction.js';
 import { gameState } from '../ui/menu.js';
+import { litMaterial } from '../render/scene.js';
 
 // ---------------------------------------------------------------------------
 // Animals: livestock and wildlife that wander, graze and flee, and predators that hunt you
@@ -32,27 +33,82 @@ export const SPECIES = {
 export const animals = [];
 const population = {};
 let animalRand = Math.random, animalRespawnTimer = 0;
-const _boxGeos = new Map();
-const boxGeo = (w, h, d) => {
-  const k = `${w},${h},${d}`;
-  if (!_boxGeos.has(k)) _boxGeos.set(k, new THREE.BoxGeometry(w, h, d));
-  return _boxGeos.get(k);
-};
+// All animals share two materials (normal, and red for the moment one is hit) plus an unlit one
+// for glowing eyes, and every animal of the same look shares its geometry: one mesh for the body,
+// one for the head and one per leg. (Hundreds of separate boxes and materials made spawning slow
+// and every frame heavier.)
+const animalMat = litMaterial(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85 }));
+const hurtMat = litMaterial(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, emissive: 0x991010 }));
+const glowMat = new THREE.MeshBasicMaterial({ vertexColors: true });
+const bakedGeos = new Map();   // look -> merged geometries, in build order
+const _boxGeo = new THREE.BoxGeometry(1, 1, 1).toNonIndexed();
+const _m4 = new THREE.Matrix4(), _col = new THREE.Color(), _v = new THREE.Vector3();
+// Merges the boxes in `parts` (placeholder objects under one parent) into one geometry with colours.
+function mergeBoxes(parts) {
+  const pos = [], nrm = [], col = [], P = _boxGeo.attributes.position, N = _boxGeo.attributes.normal, nm = new THREE.Matrix3();
+  for (const o of parts) {
+    o.updateMatrix();
+    _m4.copy(o.matrix).scale(_v.set(o.userData.w, o.userData.h, o.userData.d));
+    nm.getNormalMatrix(_m4);
+    _col.setHex(o.userData.color);
+    for (let i = 0; i < P.count; i++) {
+      _v.fromBufferAttribute(P, i).applyMatrix4(_m4); pos.push(_v.x, _v.y, _v.z);
+      _v.fromBufferAttribute(N, i).applyMatrix3(nm).normalize(); nrm.push(_v.x, _v.y, _v.z);
+      col.push(_col.r, _col.g, _col.b);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.computeBoundingSphere();
+  return g;
+}
+// Swaps the placeholder boxes under the body, head and each leg for merged meshes (geometry shared
+// between animals that look the same).
+function bakeAnimal(kind, g, head, legs) {
+  const roots = [g, head, ...legs], groups = [];
+  let look = kind;
+  for (const r of roots) {
+    const parts = r.children.filter((c) => c.userData.box);
+    for (const glow of [false, true]) {
+      const list = parts.filter((c) => !!c.userData.glow === glow);
+      groups.push({ r, glow, list });
+      look += '|' + list.map((c) => c.userData.color.toString(36)).join(',');
+    }
+    for (const c of parts) r.remove(c);
+  }
+  let geos = bakedGeos.get(look);
+  if (!geos) bakedGeos.set(look, (geos = groups.map((q) => (q.list.length ? mergeBoxes(q.list) : null))));
+  const meshes = [];
+  groups.forEach((q, i) => {
+    if (!geos[i]) return;
+    const m = new THREE.Mesh(geos[i], q.glow ? glowMat : animalMat);
+    q.r.add(m);
+    if (!q.glow) meshes.push(m);
+  });
+  meshes[0].castShadow = true; // the body
+  return meshes;
+}
 
 // Low-poly animals built from boxes. Local forward is -Z, feet at y = 0.
 function buildAnimal(kind, rand) {
-  const g = new THREE.Group(), mats = [], legs = [];
-  const M = (c) => { const m = new THREE.MeshStandardMaterial({ color: c, roughness: 0.85 }); mats.push(m); return m; };
-  const box = (parent, w, h, d, m, x, y, z, rx = 0) => { const b = new THREE.Mesh(boxGeo(w, h, d), m); b.position.set(x, y, z); b.rotation.x = rx; parent.add(b); return b; };
+  const g = new THREE.Group(), legs = [];
+  // a colour (glowing ones are unlit), and a placeholder box that bakeAnimal merges away
+  const M = (c) => ({ color: c, glow: false, emissive: { set() { this.glow = true; } } });
+  const box = (parent, w, h, d, m, x, y, z, rx = 0) => {
+    const b = new THREE.Object3D(); b.position.set(x, y, z); b.rotation.x = rx;
+    b.userData = { box: true, w, h, d, color: m.color, get glow() { return m.glow; } };
+    parent.add(b); return b;
+  };
   const leg = (m, w, len, x, y, z) => { const p = new THREE.Group(); p.position.set(x, y, z); box(p, w, len, w, m, 0, -len / 2, 0); g.add(p); legs.push(p); };
   const head = new THREE.Group();
   g.add(head);
-  let body;
   switch (kind) {
     case 'cow': {
       const white = M(0xf2eee6), black = M(0x2b2826), pink = M(0xe8a3a0), horn = M(0xe0d4b4);
       for (const [x, z] of [[-0.27, -0.5], [0.27, -0.5], [-0.27, 0.5], [0.27, 0.5]]) leg(white, 0.2, 0.62, x, 0.62, z);
-      body = box(g, 0.8, 0.7, 1.45, white, 0, 0.95, 0);
+      box(g, 0.8, 0.7, 1.45, white, 0, 0.95, 0);
       box(g, 0.82, 0.4, 0.45, black, 0, 1.08, 0.25); box(g, 0.82, 0.3, 0.3, black, 0, 0.9, -0.4);
       head.position.set(0, 1.2, -0.72);
       box(head, 0.48, 0.48, 0.5, white, 0, 0, -0.22); box(head, 0.5, 0.26, 0.2, black, 0, 0.12, -0.3);
@@ -63,7 +119,7 @@ function buildAnimal(kind, rand) {
     case 'pig': {
       const pink = M(0xeba4a0), dark = M(0xd0807e);
       for (const [x, z] of [[-0.2, -0.36], [0.2, -0.36], [-0.2, 0.36], [0.2, 0.36]]) leg(pink, 0.17, 0.34, x, 0.34, z);
-      body = box(g, 0.62, 0.52, 1.0, pink, 0, 0.6, 0);
+      box(g, 0.62, 0.52, 1.0, pink, 0, 0.6, 0);
       head.position.set(0, 0.72, -0.48);
       box(head, 0.46, 0.42, 0.38, pink, 0, 0, -0.14); box(head, 0.24, 0.17, 0.1, dark, 0, -0.06, -0.36);
       box(head, 0.1, 0.1, 0.06, dark, -0.16, 0.24, -0.12); box(head, 0.1, 0.1, 0.06, dark, 0.16, 0.24, -0.12);
@@ -73,7 +129,7 @@ function buildAnimal(kind, rand) {
     case 'sheep': {
       const wool = M(0xf0ede4), skin = M(0x3d3532);
       for (const [x, z] of [[-0.2, -0.34], [0.2, -0.34], [-0.2, 0.34], [0.2, 0.34]]) leg(skin, 0.13, 0.45, x, 0.45, z);
-      body = box(g, 0.74, 0.66, 1.0, wool, 0, 0.85, 0);
+      box(g, 0.74, 0.66, 1.0, wool, 0, 0.85, 0);
       box(g, 0.66, 0.2, 0.86, wool, 0, 1.2, 0);
       head.position.set(0, 1.0, -0.52);
       box(head, 0.3, 0.34, 0.4, skin, 0, 0, -0.14); box(head, 0.36, 0.14, 0.26, wool, 0, 0.2, -0.06);
@@ -83,7 +139,7 @@ function buildAnimal(kind, rand) {
     case 'chicken': {
       const white = M(0xf7f5ee), yellow = M(0xe8b030), red = M(0xd8332a);
       leg(yellow, 0.05, 0.26, -0.08, 0.26, 0); leg(yellow, 0.05, 0.26, 0.08, 0.26, 0);
-      body = box(g, 0.32, 0.32, 0.44, white, 0, 0.42, 0);
+      box(g, 0.32, 0.32, 0.44, white, 0, 0.42, 0);
       box(g, 0.2, 0.22, 0.1, white, 0, 0.56, 0.22, 0.4);
       box(g, 0.06, 0.2, 0.3, white, -0.18, 0.44, 0); box(g, 0.06, 0.2, 0.3, white, 0.18, 0.44, 0);
       head.position.set(0, 0.62, -0.18);
@@ -94,7 +150,7 @@ function buildAnimal(kind, rand) {
     case 'deer': {
       const brown = M(0xa86b3c), light = M(0xe8dcc8), antler = M(0xd9c9a3);
       for (const [x, z] of [[-0.16, -0.45], [0.16, -0.45], [-0.16, 0.45], [0.16, 0.45]]) leg(brown, 0.11, 0.85, x, 0.85, z);
-      body = box(g, 0.48, 0.52, 1.15, brown, 0, 1.1, 0);
+      box(g, 0.48, 0.52, 1.15, brown, 0, 1.1, 0);
       box(g, 0.36, 0.1, 0.8, light, 0, 0.84, 0);
       box(g, 0.14, 0.18, 0.08, light, 0, 1.25, 0.6, -0.4);
       head.position.set(0, 1.3, -0.5);
@@ -113,7 +169,7 @@ function buildAnimal(kind, rand) {
     case 'rabbit': {
       const fur = M(rand() < 0.5 ? 0x9a8470 : 0xb8b0a4), white = M(0xf4f1ea), pink = M(0xe0a8a8);
       for (const [x, z] of [[-0.08, -0.12], [0.08, -0.12], [-0.09, 0.13], [0.09, 0.13]]) leg(fur, 0.08, 0.12, x, 0.12, z);
-      body = box(g, 0.28, 0.28, 0.42, fur, 0, 0.25, 0);
+      box(g, 0.28, 0.28, 0.42, fur, 0, 0.25, 0);
       box(g, 0.12, 0.12, 0.1, white, 0, 0.3, 0.24);
       head.position.set(0, 0.4, -0.2);
       box(head, 0.2, 0.2, 0.22, fur, 0, 0, -0.05);
@@ -125,7 +181,7 @@ function buildAnimal(kind, rand) {
       const grey = M(0x6f6d6a), light = M(0xb8b4ad), dark = M(0x3a3836), eye = M(0xf2c230);
       eye.emissive.set(0x6a4a00);
       for (const [x, z] of [[-0.14, -0.38], [0.14, -0.38], [-0.14, 0.38], [0.14, 0.38]]) leg(grey, 0.13, 0.5, x, 0.5, z);
-      body = box(g, 0.42, 0.45, 1.0, grey, 0, 0.75, 0);
+      box(g, 0.42, 0.45, 1.0, grey, 0, 0.75, 0);
       box(g, 0.46, 0.5, 0.36, grey, 0, 0.8, -0.32);
       box(g, 0.3, 0.12, 0.7, light, 0, 0.53, 0);
       box(g, 0.12, 0.12, 0.48, grey, 0, 0.8, 0.66, -0.55);
@@ -139,7 +195,7 @@ function buildAnimal(kind, rand) {
     case 'bear': {
       const fur = M(rand() < 0.3 ? 0x3b2c22 : 0x5c4130), muzzle = M(0x9a7a5c), dark = M(0x1c1612), eye = M(0x120c08);
       for (const [x, z] of [[-0.32, -0.55], [0.32, -0.55], [-0.32, 0.55], [0.32, 0.55]]) leg(fur, 0.28, 0.62, x, 0.62, z);
-      body = box(g, 0.96, 0.86, 1.65, fur, 0, 1.05, 0);
+      box(g, 0.96, 0.86, 1.65, fur, 0, 1.05, 0);
       box(g, 0.9, 0.3, 0.6, fur, 0, 1.52, -0.38); // shoulder hump
       head.position.set(0, 1.3, -0.88);
       box(head, 0.6, 0.54, 0.52, fur, 0, 0, -0.14); box(head, 0.32, 0.26, 0.3, muzzle, 0, -0.1, -0.5);
@@ -151,7 +207,7 @@ function buildAnimal(kind, rand) {
     case 'boar': {
       const hide = M(0x4e3d33), bristle = M(0x2c221d), snout = M(0x8a6a5c), tusk = M(0xefe6d2);
       for (const [x, z] of [[-0.2, -0.4], [0.2, -0.4], [-0.2, 0.4], [0.2, 0.4]]) leg(hide, 0.15, 0.38, x, 0.38, z);
-      body = box(g, 0.6, 0.62, 1.15, hide, 0, 0.7, 0);
+      box(g, 0.6, 0.62, 1.15, hide, 0, 0.7, 0);
       box(g, 0.14, 0.18, 0.9, bristle, 0, 1.06, -0.05);
       head.position.set(0, 0.78, -0.58);
       box(head, 0.44, 0.44, 0.42, hide, 0, 0, -0.14); box(head, 0.26, 0.2, 0.14, snout, 0, -0.08, -0.4);
@@ -162,7 +218,7 @@ function buildAnimal(kind, rand) {
     case 'spider': {
       const black = M(0x1d1b1e), hair = M(0x3a3236), eye = M(0xff2a1a);
       eye.emissive.set(0xc01000);
-      body = box(g, 0.62, 0.42, 0.7, black, 0, 0.5, 0.32);
+      box(g, 0.62, 0.42, 0.7, black, 0, 0.5, 0.32);
       box(g, 0.46, 0.32, 0.42, hair, 0, 0.45, -0.18);
       // eight legs: each pivots at the body side, splayed out and down
       for (let i = 0; i < 4; i++) for (const side of [-1, 1]) {
@@ -179,8 +235,7 @@ function buildAnimal(kind, rand) {
       break;
     }
   }
-  body.castShadow = true;
-  return { group: g, legs, head, mats };
+  return { group: g, legs, head, meshes: bakeAnimal(kind, g, head, legs) };
 }
 
 export function spawnAnimal(kind, x, y, z, rand) {
@@ -296,7 +351,6 @@ export function hurtAnimal(a, dmg, dx, dz) {
 
 function removeAnimal(a) {
   world.remove(a.group);
-  a.mats.forEach((m) => m.dispose());
   animals.splice(animals.indexOf(a), 1);
   if (state.currentTarget?.animal === a) state.currentTarget = null;
 }
@@ -311,12 +365,16 @@ function killAnimal(a) {
   give(got);
 }
 
-export function updateAnimals(dt) {
+export function updateAnimals(frameDt) {
   const px = player.position.x, pz = player.position.z, pfeet = player.position.y - FOOT_OFFSET;
   for (const a of [...animals]) {
     const sp = a.sp;
     const dx = px - a.x, dz = pz - a.z, dist = Math.hypot(dx, dz) || 1e-3, dy = pfeet - a.y;
     if (dist > 140) continue; // far away animals stay put
+    // ones a little way off only think a few times a second (with the time saved up)
+    let dt = frameDt;
+    if (dist > 60) { a.lag = (a.lag || 0) + frameDt; if (a.lag < 0.15) continue; dt = a.lag; }
+    a.lag = 0;
     a.timer -= dt; a.hurtT -= dt; a.attackCd -= dt; a.flee -= dt; a.aggro -= dt; a.calm -= dt;
 
     // burning in poured lava
@@ -415,12 +473,12 @@ export function updateAnimals(dt) {
     const hop = sp.hop && hs > 0.2 ? Math.abs(Math.sin(a.phase)) * 0.25 : 0;
     a.group.position.set(a.x, a.y + hop, a.z);
     a.group.rotation.y = a.facing;
-    const flash = a.hurtT > 0 ? 0.6 : 0;
-    for (const m of a.mats) if (m.userData.flash !== flash) { m.userData.flash = flash; m.emissive.setRGB(flash, 0, 0); }
+    const mat = a.hurtT > 0 ? hurtMat : animalMat;
+    if (a.meshes[0].material !== mat) for (const m of a.meshes) m.material = mat;
   }
 
   // top populations back up now and then, out of sight (quickly while the world is still filling up)
-  animalRespawnTimer -= dt;
+  animalRespawnTimer -= frameDt;
   if (animalRespawnTimer <= 0) {
     const want = Object.values(population).reduce((a, b) => a + b, 0);
     animalRespawnTimer = animals.length < want * 0.7 ? 1.5 : 20;
