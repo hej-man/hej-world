@@ -52,12 +52,12 @@ the game uses them whenever it's served. Which Poly Haven texture each layer use
 | Shift             | Sprint / dive when swimming                                                               |
 | Space             | Jump (from walkable ground) / swim up in deep water                                       |
 | Mouse             | Look around                                                                               |
-| V (or C)          | Switch first / third person                                                               |
+| Tab (or V)        | Cycle the view: first person, behind you, in front of you                                 |
 | Z                 | Cycle third-person camera distance                                                        |
 | Left mouse (hold) | Break / harvest what you aim at, or attack an animal                                      |
 | Right mouse       | Place a block, eat, drink, cast, wear; on a workbench, campfire or furnace, open crafting |
 | 1–9, mouse wheel  | Select hotbar slot                                                                        |
-| E (or I / Tab)    | Open / close the inventory and crafting                                                   |
+| E (or I)          | Open / close the inventory (C opens it on the crafting page)                              |
 | G                 | Toggle creative mode (fly with Space / Shift)                                             |
 | F                 | Toggle the lantern (useful in caves)                                                      |
 | B                 | Cycle the building shape: block, slab, slope, stairs, roof prism, pillar                  |
@@ -67,12 +67,17 @@ the game uses them whenever it's served. Which Poly Haven texture each layer use
 | R                 | Respawn at the cave mouth                                                                 |
 | Esc               | Pause (resume or go back to the main menu)                                                |
 
+Every key except 1–9 and Esc can be changed under Keys… in the pause or main menu.
+
 A slot holds up to 100 of an item (tools, weapons, armour and buckets one each). In the
 inventory: click to pick up and drop a stack, right-click to split a stack or place one
 item, shift-click to move a stack between the hotbar and the backpack. Click a recipe on the
 right to craft it once, shift-click to craft as many as you can.
 
 ## Survival
+
+What's new in each round is in [CHANGELOG.md](CHANGELOG.md): biomes, ten woods, 200 new blocks,
+caves and more.
 
 - **Breaking.** Hold the left mouse button on something within reach (5.5 m). Trees give logs,
   sticks and sometimes apples; bushes give berries and a stick; boulders give stone. The ground
@@ -119,6 +124,16 @@ right to craft it once, shift-click to craft as many as you can.
   | Bandage ×2                            | 2 wool                                                          |
   | Bandage                               | 3 silk                                                          |
 
+  "Log" and "planks" mean any kind of wood, and the log burned at a furnace can be any fuel (logs,
+  planks or coal). The hundreds of recipes for the newer blocks are easiest to find with the
+  crafting page's search box and categories.
+
+- **Biomes.** Plains, forests, birch, dark and autumn forests, cherry groves, taigas, redwood
+  forests, snowy taigas and plains, ice spikes, deserts, savannas, mesas and jungles, each with its
+  own ground, trees, plants and animals (the table is in CHANGELOG.md).
+- **Caves** are huge: open caverns with pillars and long winding tunnels reach down near the
+  bedrock under hills, with pockets of granite, marble, tuff and other stones, and coal, copper,
+  iron and gold ore.
 - **Animals.** Cows, pigs, sheep and chickens graze in meadows; deer and rabbits live in forests
   and fields. Deer and rabbits run when you get close, others run once hit. Predators attack:
   wolves hunt in packs of two to four, bears roam the forests and hit very hard, boars charge if
@@ -290,11 +305,11 @@ Tests are plain scripts in `tests/` that drive the game through `window.__game` 
 | `src/config.js`               | World size, player and quality settings, URL parameters                                                |
 | `src/state.js`                | Shared game state that several modules change (view, mode, selected slot…)                             |
 | `src/noise.js`                | Noise, random numbers and small maths helpers                                                          |
-| `src/terrain/`                | Terrain shape (`generate`), meshing (`mesh`), textures, terrain shader (`material`)                    |
-| `src/world/`                  | Chunks and streaming (`world`), raycasts and digging (`query`), water, volcanoes, trees, grass, blocks |
+| `src/terrain/`                | Terrain shape and caves (`generate`), biomes, meshing (`mesh`), textures, terrain shader (`material`)  |
+| `src/world/`                  | Chunks and streaming (`world`), raycasts and digging (`query`), water, volcanoes, trees, grass, blocks (`blocks`, the catalogue in `block-catalog`, textures in `block-textures`) |
 | `src/render/scene.js`         | Renderer, camera, sky, lights, shadows, fog                                                            |
 | `src/player/`                 | Character model, physics, animation, camera, health/hunger/thirst, breaking and placing                |
-| `src/inventory/`              | Inventory UI and item and recipe definitions                                                           |
+| `src/inventory/`              | Inventory UI, item and recipe definitions (`items`, `catalog-items`), drawn icons                      |
 | `src/animals/`                | Animals and predators                                                                                  |
 | `src/effects/`                | Underwater, weather, sound                                                                             |
 | `src/ui/`                     | HUD, keyboard and mouse input, menus                                                                   |

@@ -53,8 +53,20 @@ run it. See README.md for features, controls and the code layout table.
 - `src/world/fluids.js` runs water and lava on the same grid: levels 1–8, sources at 8, falls then
   spreads, drains when unfed. Wake nearby cells (`wake`/`wakeArea`) after anything changes the
   grid (placing, breaking, digging), or the fluid won't notice.
+- Block families (woods, stones, colours…) are data in `src/world/block-catalog.js`; textures are
+  drawn from each block's `tex` description by `block-textures.js`. Their items and recipes are in
+  `src/inventory/catalog-items.js`. Recipe ingredients starting with `#` are item groups (tags).
+- Glowing blocks share four point lights, moved to the nearest ones each frame: adding or removing
+  lights recompiles every shader, so the count must stay fixed.
 - `terrainFns.waterAt` returns a very low value where the ground is well above the water, so
   caves under land stay dry; the water shader discards there too.
+
+## Biomes and caves
+
+- `src/terrain/biomes.js`: biomes sit at points in (temperature, humidity); `biomeWeights` blends
+  the nearest. Ground, grass, trees, plants, animals and land shape all read from it.
+- Caves (`caveDistance` in `generate.js`): cheese caverns, pillars and spaghetti tunnels. Under
+  low ground they must stay above sea level, or the sea would show through their roofs.
 
 ## Tests
 
