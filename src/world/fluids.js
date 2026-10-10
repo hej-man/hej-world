@@ -166,7 +166,7 @@ function fluidMesh(type) {
   if (meshes[type]) return meshes[type];
   const mat = type === 'water'
     ? new THREE.MeshStandardMaterial({ color: 0x2b7fb2, roughness: 0.08, transparent: true, opacity: 0.62, depthWrite: false })
-    : new THREE.MeshStandardMaterial({ color: 0xff7a2a, emissive: 0xff4a10, emissiveIntensity: 2.4, roughness: 0.7 });
+    : new THREE.MeshStandardMaterial({ color: 0xff7a2a, emissive: 0xff4a10, emissiveIntensity: 2.4, roughness: 0.7, side: THREE.DoubleSide }); // seen from inside too
   const m = new THREE.InstancedMesh(fluidGeo, mat, MAX_CELLS);
   m.count = 0; m.frustumCulled = false; m.renderOrder = type === 'water' ? 2 : 0;
   m.receiveShadow = type === 'water';

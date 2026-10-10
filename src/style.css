@@ -97,3 +97,4 @@
   #flash { position: fixed; inset: 0; pointer-events: none; background: #e8eeff; opacity: 0; z-index: 1; }
   #underwater { position: fixed; inset: 0; pointer-events: none; display: none; z-index: 1;
     background: radial-gradient(ellipse at center, rgba(40, 120, 170, 0.18) 0%, rgba(10, 45, 80, 0.55) 100%); }
+  #underwater.lava { background: radial-gradient(ellipse at center, rgba(255, 150, 40, 0.55) 0%, rgba(150, 30, 0, 0.9) 100%); }

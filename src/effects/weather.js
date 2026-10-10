@@ -8,7 +8,7 @@ import { raycastTerrain } from '../world/query.js';
 import { cloudMats, clouds } from '../world/vegetation.js';
 import { grassUniforms } from '../world/grass.js';
 import { voxelRay } from '../world/blocks.js';
-import { cameraUnderwater } from './underwater.js';
+import { cameraIn } from './underwater.js';
 import { sound, thunder } from './sound.js';
 
 // ---------------------------------------------------------------------------
@@ -127,7 +127,7 @@ export function updateWeather(dt) {
   if (weather.flash > 0) sky.horizon.lerp(new THREE.Color(0xd8e0f0), weather.flash * 0.5);
   skyDome.material.uniforms.uSunGlow.value = 1 - c * 0.85;
   for (const l of csm.lights) l.intensity = 3.4 * (1 - 0.7 * c);
-  if (!cameraUnderwater) {
+  if (!cameraIn()) {
     scene.fog.color.copy(skyColor);
     scene.fog.density = FOG_DENSITY * (1 + c * 0.6 + weather.rain * 1.4);
   }
@@ -144,7 +144,7 @@ export function updateWeather(dt) {
   if (weather.coverT <= 0) {
     weather.coverT = 0.25;
     const above = !!raycastTerrain(cam, _up, 0, 60) || !!voxelRay(cam, _up, 0, 24);
-    weather.coveredTarget = above || cameraUnderwater ? 1 : 0;
+    weather.coveredTarget = above || cameraIn() ? 1 : 0;
   }
   weather.covered += ((weather.coveredTarget || 0) - weather.covered) * Math.min(1, dt * 4);
   weather.snow = smoothstep(58, 74, cam.y);
