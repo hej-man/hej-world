@@ -12,6 +12,7 @@ import { inventoryOpen } from '../inventory/inventory.js';
 import { damagePlayer } from './survival.js';
 import { mouse, swingTime } from './interaction.js';
 import { keys } from '../ui/input.js';
+import { held } from '../ui/keybinds.js';
 
 // ---------------------------------------------------------------------------
 // Collision: capsule vs. terrain triangles (BVH), tree trunks and boulders.
@@ -120,12 +121,12 @@ function stepPhysics(dt, inputDir, speed) {
 
   // gravity (and buoyancy when swimming); creative mode flies
   if (state.creative) {
-    const up = (keys.Space ? 1 : 0) - (keys.ShiftLeft || keys.ShiftRight ? 1 : 0);
+    const up = (held(keys, 'jump') ? 1 : 0) - (held(keys, 'sprint') ? 1 : 0);
     player.velocity.y += (up * PLAYER.flySpeed * 0.8 - player.velocity.y) * (1 - Math.exp(-10 * dt));
   } else if (swimming) {
     // you float with your head out of the water; Space swims up, Shift dives
-    const dive = keys.ShiftLeft || keys.ShiftRight;
-    const want = keys.Space ? 3.2 : dive ? -2.6 : THREE.MathUtils.clamp((depth - 1.45) * 2.5, -2, 2.2);
+    const dive = held(keys, 'sprint');
+    const want = held(keys, 'jump') ? 3.2 : dive ? -2.6 : THREE.MathUtils.clamp((depth - 1.45) * 2.5, -2, 2.2);
     player.velocity.y += (want - player.velocity.y) * Math.min(1, dt * 3);
   } else {
     player.velocity.y += PLAYER.gravity * dt;
@@ -185,22 +186,22 @@ export function updatePlayer(dt) {
   _right.set(-_fwd.z, 0, _fwd.x);
   _input.set(0, 0, 0);
   if (!inventoryOpen) {
-    if (keys.KeyW || keys.ArrowUp) _input.add(_fwd);
-    if (keys.KeyS || keys.ArrowDown) _input.sub(_fwd);
-    if (keys.KeyD || keys.ArrowRight) _input.add(_right);
-    if (keys.KeyA || keys.ArrowLeft) _input.sub(_right);
+    if (held(keys, 'forward')) _input.add(_fwd);
+    if (held(keys, 'back')) _input.sub(_fwd);
+    if (held(keys, 'right')) _input.add(_right);
+    if (held(keys, 'left')) _input.sub(_right);
   }
   const moving = _input.lengthSq() > 0;
   if (moving) _input.normalize();
 
-  player.sprinting = (keys.ShiftLeft || keys.ShiftRight) && moving && !state.creative && !player.swimming;
+  player.sprinting = held(keys, 'sprint') && moving && !state.creative && !player.swimming;
   let speed = state.creative ? PLAYER.flySpeed : player.sprinting ? PLAYER.sprintSpeed : PLAYER.walkSpeed;
   if (player.inWater && !state.creative) speed *= 0.55;
   if (player.inLava && !state.creative) speed *= 0.5;
 
   // jump only from walkable ground (with a short grace period after leaving it)
   const canJump = player.onGround || state.gameTime - player.lastGroundTime < 0.12;
-  if (keys.Space && canJump && !player.inWater && !state.creative) {
+  if (held(keys, 'jump') && canJump && !player.inWater && !state.creative) {
     player.velocity.y = PLAYER.jumpSpeed;
     player.onGround = false;
     player.lastGroundTime = -1;

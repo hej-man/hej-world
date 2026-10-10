@@ -26,6 +26,10 @@
   #menu input, #menu select { flex: 1; min-width: 0; background: rgba(0,0,0,0.35); color: #fff; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; padding: 6px 8px; font: inherit; font-size: 13px; }
   #menu details { margin-top: 14px; text-align: left; font-size: 12.5px; line-height: 1.85; }
   #menu summary { cursor: pointer; opacity: 0.8; }
+  #menu .panel.wide { width: 520px; }
+  #keys-list { display: grid; grid-template-columns: 1fr auto auto; gap: 4px 6px; align-items: center; text-align: left; font-size: 13px; max-height: 56vh; overflow-y: auto; }
+  #keys-list button { min-width: 74px; padding: 3px 8px; font-size: 12.5px; }
+  #keys-list button.listening { background: #3c8a4e; border-color: #5ab36d; }
   #menu #loading { margin: 6px 0 4px; font-size: 13px; color: #ffd98a; }
 
   #hud { position: fixed; left: 12px; top: 10px; color: #fff; font-size: 13px; text-shadow: 0 1px 2px #000; pointer-events: none; white-space: pre; }
@@ -61,21 +65,44 @@
   .slot .swatch.flat { box-shadow: none; }
   .slot .badge { position: absolute; left: 4px; bottom: 4px; width: 8px; height: 8px; border-radius: 2px; box-shadow: 0 0 0 1px rgba(0,0,0,0.5); }
 
-  /* Inventory layout: backpack on the left, crafting (or the creative palette) on the right */
-  #inventory .cols { display: flex; gap: 18px; }
-  #craft { width: 300px; display: flex; flex-direction: column; }
-  #craft h3 { margin: 0 0 8px; font-size: 14px; font-weight: 600; display: flex; justify-content: space-between; }
-  #craft h3 span { font-size: 11px; font-weight: 400; opacity: 0.6; }
-  #recipes { max-height: 300px; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; padding-right: 4px; }
+  /* Inventory window: tabs for the backpack, crafting and (creative) every item, with the hotbar
+     always along the bottom so things can be moved to and from it on any page */
+  .inv-tabs { display: flex; gap: 4px; align-items: center; margin: -4px 0 12px; border-bottom: 1px solid rgba(255,255,255,0.12); padding-bottom: 8px; }
+  .inv-tabs button { font: inherit; font-size: 14px; color: #fff; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  .inv-tabs button:hover { background: rgba(255,255,255,0.14); }
+  .inv-tabs button.on { background: #3c8a4e; border-color: #5ab36d; }
+  .inv-tabs .tab-count { font-size: 11px; background: rgba(0,0,0,0.35); border-radius: 8px; padding: 1px 6px; margin-left: 2px; }
+  .inv-tabs .tab-count:empty { display: none; }
+  .inv-keys { margin-left: auto; font-size: 11px; opacity: 0.55; }
+  .inv-page { display: none; width: 664px; height: 312px; }
+  .inv-page.on { display: block; }
+  .bag-cols { display: flex; gap: 16px; }
+  .bag-side { flex: 1; display: flex; flex-direction: column; gap: 4px; font-size: 12px; min-width: 0; }
+  .bag-side h3, .inv-foot h2 { margin: 2px 0 2px; font-size: 13px; font-weight: 600; opacity: 0.8; }
+  #you, #item-info { background: rgba(255,255,255,0.05); border-radius: 8px; padding: 6px 8px; line-height: 1.5; }
+  #item-info { min-height: 54px; }
+  #item-info b { font-size: 13px; }
+  .bag-side button { margin-top: auto; font: inherit; font-size: 12px; color: #fff; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; padding: 6px; cursor: pointer; }
+  .bag-side button:hover { background: rgba(255,255,255,0.18); }
+  .inv-foot { margin-top: 12px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.12); }
+  .filters { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
+  .cats { display: flex; gap: 3px; flex-wrap: wrap; }
+  .cats button { font: inherit; font-size: 12px; color: #fff; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 3px 9px; cursor: pointer; }
+  .cats button.on { background: rgba(90, 179, 109, 0.5); border-color: #5ab36d; }
+  .filters input[type=text], .filters input:not([type]) { flex: 1; min-width: 120px; background: rgba(0,0,0,0.35); color: #fff; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; padding: 4px 8px; font: inherit; font-size: 12px; }
+  .filters .only { font-size: 12px; opacity: 0.8; display: flex; gap: 4px; align-items: center; }
+  .stations { font-size: 11px; opacity: 0.65; margin-bottom: 6px; }
+  #recipes { height: 236px; overflow-y: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 3px; padding-right: 4px; align-content: start; }
   .recipe { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 6px; background: rgba(255,255,255,0.04); opacity: 0.45; cursor: default; }
   .recipe.ok { opacity: 1; cursor: pointer; background: rgba(255,255,255,0.08); }
   .recipe.ok:hover { background: rgba(255,255,255,0.18); }
   .recipe .slot { width: 36px; height: 36px; font-size: 20px; flex: none; }
   .recipe .slot .swatch { width: 20px; height: 20px; }
-  .recipe b { font-size: 13px; font-weight: 600; }
-  .recipe small { display: block; font-size: 11px; opacity: 0.7; }
+  .recipe b { font-size: 12.5px; font-weight: 600; }
+  .recipe small { display: block; font-size: 10.5px; opacity: 0.7; }
   .recipe small .miss { color: #ff9a8a; }
-  #palette { display: grid; grid-template-columns: repeat(6, 48px); gap: 4px; max-height: 300px; overflow-y: auto; }
+  .none-note { grid-column: 1 / -1; font-size: 12px; opacity: 0.55; padding: 8px; }
+  #palette { display: grid; grid-template-columns: repeat(13, 48px); gap: 3px; height: 236px; overflow-y: auto; align-content: start; }
   #palette .slot { cursor: pointer; }
 
   /* Health, hunger, mana */

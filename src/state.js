@@ -3,7 +3,8 @@
 export const state = {
   yaw: 0,
   pitch: -0.25,
-  thirdPerson: true,
+  view: 'back',      // 'first' person, camera 'back' behind you, or 'front' looking back at you
+  thirdPerson: true, // view isn't 'first'
   camDistIndex: 1,
   gameTime: 0,
   selectedSlot: 0,

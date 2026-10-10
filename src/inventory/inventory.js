@@ -1,10 +1,11 @@
 import { state } from '../state.js';
 import { renderer } from '../render/scene.js';
-import { itemHint, renderCrafting } from './items.js';
+import { itemCategory, itemHint, renderCrafting, CATEGORIES } from './items.js';
 import { mouse } from '../player/interaction.js';
 import { toast } from '../ui/hud.js';
 import { updateOverlay } from '../ui/menu.js';
 import { keys } from '../ui/input.js';
+import { MAX_HEALTH, stats } from '../player/survival.js';
 
 // ---------------------------------------------------------------------------
 // Inventory + hotbar (items get registered later with game.registerItem)
@@ -16,6 +17,7 @@ export const slots = new Array(INVENTORY_SIZE).fill(null); // each slot: null or
 
 
 export let inventoryOpen = false;
+export let inventoryTab = 'bag';   // 'bag', 'craft' or 'items' (creative)
 
 export function registerItem(def) {
   ITEMS[def.id] = { maxStack: STACK, ...def };
@@ -96,14 +98,47 @@ export function renderInventory() {
   fillSlotEl(heldEl, state.heldStack);
   heldEl.style.display = state.heldStack ? 'flex' : 'none';
   document.getElementById('inv-note').style.display = slots.some(Boolean) || state.heldStack ? 'none' : 'block';
-  if (inventoryOpen) renderCrafting();
+  if (inventoryOpen) { renderCrafting(); renderYou(); }
 }
 
 export function showTooltip(id) {
   const def = ITEMS[id];
   tooltipEl.innerHTML = `<b>${def?.name || id}</b>${def && itemHint(def) ? '<br>' + itemHint(def) : ''}`;
   tooltipEl.style.display = 'block';
+  showItemInfo(id);
 }
+// The backpack page's side panel: what you're wearing, and the item under the mouse (or in your hand).
+const infoEl = document.getElementById('item-info');
+function showItemInfo(id) {
+  const def = ITEMS[id];
+  if (!def) { infoEl.innerHTML = '<span style="opacity:0.6">Point at an item to see what it is for.</span>'; return; }
+  const cat = CATEGORIES.find(([k]) => k === itemCategory(def))?.[1] || '';
+  infoEl.innerHTML = `<b>${def.icon ? def.icon + ' ' : ''}${def.name}</b><br><span style="opacity:0.6">${cat} · stacks to ${def.maxStack}</span><br>${itemHint(def)}`;
+}
+function renderYou() {
+  document.getElementById('you').innerHTML = state.creative ? 'Creative mode: nothing can hurt you, and every item is on the All items page.' :
+    `Health ${Math.ceil(stats.health)} / ${MAX_HEALTH} · hunger ${Math.round(stats.hunger)} · thirst ${Math.round(stats.thirst)}<br>` +
+    `Armour: ${stats.armour ? `${Math.round(stats.armour * 100)}% less damage` : 'none'}` +
+    (stats.sick > 0 ? `<br><span style="color:#c9e07a">Sick from dirty water (${Math.ceil(stats.sick)} s)</span>` : '');
+  const s = slots[state.selectedSlot];
+  if (inventoryTab === 'bag' && tooltipEl.style.display !== 'block') showItemInfo(s?.id);
+}
+
+// Sorts the backpack (not the hotbar): by kind, then name, merging part stacks.
+export function sortBackpack() {
+  const items = new Map();
+  for (let i = HOTBAR_SIZE; i < INVENTORY_SIZE; i++) if (slots[i]) { items.set(slots[i].id, (items.get(slots[i].id) || 0) + slots[i].count); slots[i] = null; }
+  const order = CATEGORIES.map(([k]) => k);
+  const ids = [...items.keys()].sort((a, b) => order.indexOf(itemCategory(ITEMS[a])) - order.indexOf(itemCategory(ITEMS[b])) || ITEMS[a].name.localeCompare(ITEMS[b].name));
+  let i = HOTBAR_SIZE;
+  for (const id of ids) {
+    let n = items.get(id);
+    while (n > 0 && i < INVENTORY_SIZE) { const k = Math.min(n, ITEMS[id].maxStack); slots[i++] = { id, count: k }; n -= k; }
+    if (n > 0) addItem(id, n); // can't happen: sorting never needs more room
+  }
+  renderInventory();
+}
+document.getElementById('btn-sort').addEventListener('click', sortBackpack);
 
 function onSlotClick(i, e) {
   const s = slots[i];
@@ -149,8 +184,24 @@ export function selectSlot(i) {
   if (s) toast(ITEMS[s.id]?.name || s.id);
 }
 
-export function setInventoryOpen(open) {
+export function setInventoryTab(tab) {
+  if (tab === 'items' && !state.creative) tab = 'craft';
+  inventoryTab = tab;
+  for (const b of document.querySelectorAll('.inv-tabs button')) {
+    b.classList.toggle('on', b.dataset.tab === tab);
+    b.style.display = b.dataset.tab === 'items' && !state.creative ? 'none' : '';
+  }
+  for (const p of document.querySelectorAll('.inv-page')) p.classList.toggle('on', p.id === `page-${tab}`);
+  tooltipEl.style.display = 'none';
+  renderInventory();
+}
+for (const b of document.querySelectorAll('.inv-tabs button')) b.addEventListener('mousedown', (e) => { e.preventDefault(); setInventoryTab(b.dataset.tab); });
+
+// Opens or closes the inventory; `tab` picks the page it opens on (default: the last one used, and
+// in creative the item list).
+export function setInventoryOpen(open, tab) {
   inventoryOpen = open;
+  if (open) setInventoryTab(tab || inventoryTab);
   inventoryEl.style.display = open ? 'block' : 'none';
   tooltipEl.style.display = 'none';
   if (open) {

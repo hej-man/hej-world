@@ -27,28 +27,24 @@
     <div class="row"><label>World seed</label><input id="seed-input" inputmode="numeric"><button class="small" id="btn-random" title="Random seed">🎲</button><button class="small" id="btn-newworld">Make</button></div>
     <div class="row"><label>Graphics</label><select id="quality-select"><option value="high">High</option><option value="low">Low (faster)</option></select></div>
     <div class="row"><label>Sound</label><select id="sound-select"><option value="on">On</option><option value="off">Off</option></select></div>
+    <button class="big" data-open-keys>Keys…</button>
     <details><summary>Controls</summary><div class="controls"></div></details>
   </div>
   <div class="panel" id="pause-panel" style="display:none">
     <h1>Paused</h1>
     <div class="sub" id="pause-info"></div>
     <button class="big primary" id="btn-resume">Resume</button>
+    <button class="big" data-open-keys>Keys…</button>
     <button class="big" id="btn-mainmenu">Main menu</button>
     <details><summary>Controls</summary><div class="controls"></div></details>
   </div>
+  <div class="panel wide" id="keys-panel" style="display:none">
+    <h1>Keys</h1>
+    <div class="sub">Click a key to change it, then press the new key (Esc cancels, Backspace clears it)</div>
+    <div id="keys-list"></div>
+    <div class="row"><button class="small" id="btn-keys-reset">Reset to defaults</button><span style="flex:1"></span><button class="small primary" id="btn-keys-done">Done</button></div>
+  </div>
 </div>
-<template id="controls-text">
-  <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move &nbsp; <kbd>Shift</kbd> sprint &nbsp; <kbd>Space</kbd> jump / swim up (<kbd>Shift</kbd> dives)<br>
-  Mouse look &nbsp; <kbd>V</kbd> first / third person &nbsp; <kbd>Z</kbd> camera distance<br>
-  Left click: break / attack &nbsp; Right click: place / eat / drink / use<br>
-  Right click on water: drink, or fill an empty bottle<br>
-  <kbd>1</kbd>–<kbd>9</kbd> or wheel: hotbar &nbsp; <kbd>E</kbd> inventory + crafting<br>
-  <kbd>G</kbd> creative mode (fly: <kbd>Space</kbd> up, <kbd>Shift</kbd> down)<br>
-  <kbd>B</kbd> building shape: block, slab, slope, stairs, roof prism, pillar<br>
-  <kbd>T</kbd> tip it: upright, on its side, upside down (it turns the way you look)<br>
-  <kbd>K</kbd> change the weather (creative) &nbsp; <kbd>M</kbd> sound on / off<br>
-  <kbd>F</kbd> lantern &nbsp; <kbd>R</kbd> respawn &nbsp; <kbd>Esc</kbd> pause
-</template>
 <div id="flash"></div>
 <div id="underwater"></div>
 <div id="hud"></div>
@@ -66,19 +62,48 @@
 <div id="mode">CREATIVE</div>
 <div id="hotbar"></div>
 <div id="inventory">
-  <div class="cols">
-    <div>
-      <h2>Inventory <span>click to move · right-click to split · shift-click to quick move</span></h2>
-      <div class="grid" id="inv-main"></div>
-      <div class="sep"></div>
-      <div class="grid" id="inv-hotbar"></div>
-      <div class="empty-note" id="inv-note">Nothing collected yet. Break trees, bushes, rocks and ground to collect things.</div>
+  <div class="inv-tabs">
+    <button data-tab="bag">🎒 Backpack</button>
+    <button data-tab="craft">🔨 Crafting <span class="tab-count" id="craft-count"></span></button>
+    <button data-tab="items">📦 All items</button>
+    <span class="inv-keys" id="inv-keys"></span>
+  </div>
+  <section class="inv-page" id="page-bag">
+    <div class="bag-cols">
+      <div>
+        <h2>Backpack <span>click to move · right-click to split · shift-click to quick move</span></h2>
+        <div class="grid" id="inv-main"></div>
+        <div class="empty-note" id="inv-note">Nothing collected yet. Break trees, bushes, rocks and ground to collect things.</div>
+      </div>
+      <div class="bag-side">
+        <h3>You</h3>
+        <div id="you"></div>
+        <h3>Selected item</h3>
+        <div id="item-info"></div>
+        <button id="btn-sort">Sort backpack</button>
+      </div>
     </div>
-    <div id="craft">
-      <h3 id="craft-title">Crafting <span id="stations"></span></h3>
-      <div id="recipes"></div>
-      <div id="palette" style="display:none"></div>
+  </section>
+  <section class="inv-page" id="page-craft">
+    <div class="filters">
+      <div class="cats" id="craft-cats"></div>
+      <input id="craft-search" placeholder="Search recipes" autocomplete="off">
+      <label class="only"><input type="checkbox" id="craft-only"> only what I can make</label>
     </div>
+    <div class="stations" id="stations"></div>
+    <div id="recipes"></div>
+  </section>
+  <section class="inv-page" id="page-items">
+    <div class="filters">
+      <div class="cats" id="item-cats"></div>
+      <input id="item-search" placeholder="Search items" autocomplete="off">
+    </div>
+    <div class="stations">Click an item to take a full stack · click again to put it back</div>
+    <div id="palette"></div>
+  </section>
+  <div class="inv-foot">
+    <h2>Hotbar</h2>
+    <div class="grid" id="inv-hotbar"></div>
   </div>
 </div>
 <div id="held" class="slot"></div>

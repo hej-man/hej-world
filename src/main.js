@@ -25,7 +25,7 @@ import { cameraUnderwater, updateUnderwater } from './effects/underwater.js';
 import { WEATHER, cycleWeather, nextWeather, setWeather, updateWeather, weather } from './effects/weather.js';
 import { crosshair, hud } from './ui/hud.js';
 import { $, clampPitch, gameState, startGame, toMainMenu, updateOverlay } from './ui/menu.js';
-import { keys } from './ui/input.js';
+import { keys, setView } from './ui/input.js';
 import { updateCamera } from './player/camera.js';
 import './terrain/generate.js';
 import './terrain/mesh.js';
@@ -121,7 +121,7 @@ function frame() {
   updateFluids(dt, state.gameTime);
   terrainUniforms.uTime.value = state.gameTime;
   waterUniforms.uTime.value = state.gameTime;
-  crosshair.style.display = (state.locked || state.testMode) && !inventoryOpen ? 'block' : 'none';
+  crosshair.style.display = (state.locked || state.testMode) && !inventoryOpen && state.view !== 'front' ? 'block' : 'none';
   if (clouds) clouds.position.x = (clouds.position.x + dt * 1.2) % (WORLD.size * 0.5);
 
   fpsAcc += dt; fpsFrames++;
@@ -131,7 +131,7 @@ function frame() {
   const terrain = terrainProgress();
   const motion = state.creative ? 'flying' : player.inLava ? 'IN LAVA' : player.onGround ? 'grounded' : contact.steep ? 'sliding' : player.inWater ? 'in water' : 'airborne';
   hud.textContent =
-    `${state.thirdPerson ? 'Third person' : 'First person'}  ·  ${state.creative ? 'Creative' : 'Survival'}  ·  ${fps} fps  ·  seed ${worldStats.seed}  ·  map ${WORLD.size} m  ·  ${WEATHER[weather.state].name}\n` +
+    `${{ first: 'First person', back: 'Third person', front: 'Front view' }[state.view]}  ·  ${state.creative ? 'Creative' : 'Survival'}  ·  ${fps} fps  ·  seed ${worldStats.seed}  ·  map ${WORLD.size} m  ·  ${WEATHER[weather.state].name}\n` +
     `pos ${player.position.x.toFixed(1)}, ${feet.toFixed(1)}, ${player.position.z.toFixed(1)}  ·  ${motion}${underground ? '  ·  in a cave' : ''}` +
     `${stats.armour ? `  ·  armour ${Math.round(stats.armour * 100)}%` : ''}  ·  ${animals.length} animals` +
     (terrain.meshed < terrain.total ? `  ·  terrain ${Math.round((terrain.meshed / terrain.total) * 100)}%` : '');
@@ -151,7 +151,7 @@ requestAnimationFrame(() => setTimeout(() => {
   window.game = { registerItem, addItem, removeItem, countItem, getSelectedItem, slots, ITEMS, WORLD, PLAYER };
   window.__game = {
     player, keys, contact, worldStats: () => worldStats, terrain: () => terrainFns, groundAt,
-    setView: (tp) => { state.thirdPerson = tp; clampPitch(); }, setLook: (y, p) => { state.yaw = y; state.pitch = p; clampPitch(); },
+    setView: (v) => setView(v === true ? 'back' : v === false ? 'first' : v), setLook: (y, p) => { state.yaw = y; state.pitch = p; clampPitch(); },
     setInventoryOpen, selectSlot, setCamDistance: (i) => { state.camDistIndex = i; },
     mouse, stats, animals, blocks, chunks: () => chunks, editTerrain, pickTarget, doBreak, useItem, placeBlock, craft, RECIPES,
     setCreative, isCreative: () => state.creative, setTestMode: (on) => { state.testMode = on; }, target: () => state.currentTarget,

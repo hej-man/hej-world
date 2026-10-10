@@ -1,10 +1,11 @@
 import * as THREE from 'three';
 import { state } from '../state.js';
 import { PLAYER, WORLD } from '../config.js';
-import { camera, scene } from '../render/scene.js';
+import { scene } from '../render/scene.js';
 import { CELL, cellKey, gridRemove, obstacleGrid, targetGrid, terrainFns, world } from '../world/world.js';
 import { editTerrain, editedMaterialAt, naturalMaterial, raycastTerrain } from '../world/query.js';
 import { EYE_OFFSET, player } from './character.js';
+import { aimRay } from './camera.js';
 import { ITEMS, addItem, inventoryOpen, renderInventory, setInventoryOpen, slots } from '../inventory/inventory.js';
 import { BLOCKS, blockKey, blocks, placeBlock, removeBlock, voxelRay } from '../world/blocks.js';
 import { BOLT_COST, MAX_HEALTH, drankDirtyWater, stats } from './survival.js';
@@ -42,8 +43,7 @@ function raySphere(o, d, cx, cy, cz, r) {
 
 // What's under the crosshair, within reach of the player: terrain, a block, a tree/bush/boulder, or an animal.
 export function pickTarget() {
-  camera.getWorldDirection(_aimD);
-  _aimO.copy(camera.position);
+  aimRay(_aimO, _aimD);
   _eye.set(player.position.x, player.position.y + EYE_OFFSET, player.position.z);
   const t0 = Math.max(0, _tv.subVectors(_eye, _aimO).dot(_aimD)); // start level with the player (third person)
   const t1 = t0 + PLAYER.reach;
@@ -309,7 +309,7 @@ const _bd = new THREE.Vector3();
 function castBolt() {
   if (stats.mana < BOLT_COST && !state.creative) { toast('Not enough mana'); return; }
   if (!state.creative) stats.mana -= BOLT_COST;
-  camera.getWorldDirection(_bd);
+  aimRay(_tv, _bd);
   const m = new THREE.Mesh(boltGeo, boltMat);
   m.position.set(player.position.x, player.position.y + EYE_OFFSET - 0.25, player.position.z).addScaledVector(_bd, 0.7);
   world.add(m);
@@ -356,10 +356,10 @@ export function updateInteraction(dt) {
   // water between you and what you're aiming at (only from above the surface)
   aimWater = null;
   if (active && !cameraUnderwater) {
-    camera.getWorldDirection(_aimD);
+    aimRay(_aimO, _aimD);
     _eye.set(player.position.x, player.position.y + EYE_OFFSET, player.position.z);
-    const t0 = Math.max(0, _tv.subVectors(_eye, camera.position).dot(_aimD));
-    aimWater = waterRay(camera.position, _aimD, t0, t ? Math.min(t.t, t0 + PLAYER.reach) : t0 + PLAYER.reach);
+    const t0 = Math.max(0, _tv.subVectors(_eye, _aimO).dot(_aimD));
+    aimWater = waterRay(_aimO, _aimD, t0, t ? Math.min(t.t, t0 + PLAYER.reach) : t0 + PLAYER.reach);
   }
   const held = slots[state.selectedSlot], def = held && ITEMS[held.id];
 

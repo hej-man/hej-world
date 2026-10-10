@@ -169,50 +169,79 @@ export function craft(r, all) {
   renderInventory();
 }
 
+// Kinds of item, for the filters in the crafting and item lists and for sorting the backpack.
+export const CATEGORIES = [
+  ['all', 'All'], ['building', 'Building'], ['nature', 'Nature'], ['tools', 'Tools and armour'], ['food', 'Food and drink'],
+  ['materials', 'Materials'], ['stations', 'Stations'], ['spawners', 'Spawners'],
+];
+export function itemCategory(def) {
+  if (def.cat) return def.cat;
+  if (def.spawn) return 'spawners';
+  if (def.tool || def.armour || def.wand || def.bucket || def.fluid) return 'tools';
+  if (def.food || def.drink || def.heal || def.mana) return 'food';
+  if (def.place) return BLOCKS[def.place]?.station ? 'stations' : BLOCKS[def.place]?.natural ? 'nature' : 'building';
+  return 'materials';
+}
+
 const recipesEl = document.getElementById('recipes');
 const paletteEl = document.getElementById('palette');
+const filter = { craft: { cat: 'all', text: '', only: false }, items: { cat: 'all', text: '' } };
+const matches = (f, def) => (f.cat === 'all' || itemCategory(def) === f.cat) && (!f.text || def.name.toLowerCase().includes(f.text));
+// Category buttons, shown only for the kinds that have something in the list.
+function renderCats(el, f, ids, rerender) {
+  const have = new Set(ids.map((id) => itemCategory(ITEMS[id])));
+  el.innerHTML = CATEGORIES.filter(([k]) => k === 'all' || have.has(k)).map(([k, name]) => `<button data-cat="${k}" class="${f.cat === k ? 'on' : ''}">${name}</button>`).join('');
+  el.onmousedown = (e) => { const b = e.target.closest('button'); if (!b) return; e.preventDefault(); f.cat = b.dataset.cat; rerender(); };
+}
+for (const [id, f] of [['craft-search', filter.craft], ['item-search', filter.items]]) {
+  document.getElementById(id).addEventListener('input', (e) => { f.text = e.target.value.trim().toLowerCase(); renderCrafting(); });
+}
+document.getElementById('craft-only').addEventListener('change', (e) => { filter.craft.only = e.target.checked; renderCrafting(); });
+
+let paletteBuilt = false;
 export function renderCrafting() {
-  const title = document.getElementById('craft-title');
-  if (state.creative) {
-    title.firstChild.textContent = 'All items ';
-    document.getElementById('stations').textContent = 'click to take a stack';
-    recipesEl.style.display = 'none';
-    paletteEl.style.display = 'grid';
-    if (!paletteEl.children.length) {
-      for (const id of Object.keys(ITEMS)) {
-        const el = document.createElement('div');
-        el.className = 'slot';
-        fillSlotEl(el, { id, count: 1 });
-        el.addEventListener('mousedown', (e) => {
-          e.preventDefault();
-          // holding something? clicking the palette throws it away, otherwise take a full stack
-          state.heldStack = state.heldStack ? null : { id, count: ITEMS[id].maxStack };
-          renderInventory();
-        });
-        el.addEventListener('mouseenter', () => showTooltip(id));
-        el.addEventListener('mouseleave', () => { tooltipEl.style.display = 'none'; });
-        paletteEl.appendChild(el);
-      }
-    }
-    return;
-  }
-  title.firstChild.textContent = 'Crafting ';
-  recipesEl.style.display = 'flex';
-  paletteEl.style.display = 'none';
+  if (state.creative) renderPalette();
   const near = stationsNear();
-  document.getElementById('stations').textContent = near.size ? `near: ${[...near].map((t) => BLOCKS[t].name.toLowerCase()).join(', ')}` : 'shift-click crafts all';
-  const iconEl = document.createElement('div');
-  recipesEl.innerHTML = RECIPES.map((r, i) => {
+  document.getElementById('stations').textContent = (near.size ? `Near: ${[...near].map((t) => BLOCKS[t].name.toLowerCase()).join(', ')}. ` : 'Some recipes need a station nearby (a workbench, furnace, campfire…). ') + 'Click to craft one, shift-click to craft as many as you can.';
+  const f = filter.craft, iconEl = document.createElement('div');
+  let rows = '', ready = 0;
+  renderCats(document.getElementById('craft-cats'), f, RECIPES.map((r) => r.out), renderCrafting);
+  RECIPES.forEach((r, i) => {
     const ok = canCraft(r, near);
+    if (ok) ready++;
+    if (!matches(f, ITEMS[r.out]) || (f.only && !ok)) return;
     fillSlotEl(iconEl, { id: r.out, count: r.n || 1 });
     iconEl.className = 'slot';
-    const parts = Object.entries(r.in).map(([id, n]) => {
-      const have = countItem(id);
-      return `<span class="${have < n ? 'miss' : ''}">${n} ${ITEMS[id].name}</span>`;
-    });
+    const parts = Object.entries(r.in).map(([id, n]) => `<span class="${countItem(id) < n ? 'miss' : ''}">${n} ${ITEMS[id].name}</span>`);
     if (r.at) parts.push(`<span class="${near.has(r.at) ? '' : 'miss'}">at a ${BLOCKS[r.at].name.toLowerCase()}</span>`);
-    return `<div class="recipe${ok ? ' ok' : ''}" data-r="${i}">${iconEl.outerHTML}<div><b>${ITEMS[r.out].name}${r.n > 1 ? ' ×' + r.n : ''}</b><small>${parts.join(' · ')}</small></div></div>`;
-  }).join('');
+    rows += `<div class="recipe${ok ? ' ok' : ''}" data-r="${i}">${iconEl.outerHTML}<div><b>${ITEMS[r.out].name}${r.n > 1 ? ' ×' + r.n : ''}</b><small>${parts.join(' · ')}</small></div></div>`;
+  });
+  recipesEl.innerHTML = rows || '<div class="none-note">No recipes match.</div>';
+  document.getElementById('craft-count').textContent = ready ? String(ready) : '';
+}
+// Creative: every item, filtered. The slots are built once and shown or hidden.
+function renderPalette() {
+  const f = filter.items;
+  if (!paletteBuilt) {
+    paletteBuilt = true;
+    for (const id of Object.keys(ITEMS)) {
+      const el = document.createElement('div');
+      el.className = 'slot';
+      el.dataset.id = id;
+      fillSlotEl(el, { id, count: 1 });
+      el.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        // holding something? clicking the list throws it away, otherwise take a full stack
+        state.heldStack = state.heldStack ? null : { id, count: ITEMS[id].maxStack };
+        renderInventory();
+      });
+      el.addEventListener('mouseenter', () => showTooltip(id));
+      el.addEventListener('mouseleave', () => { tooltipEl.style.display = 'none'; });
+      paletteEl.appendChild(el);
+    }
+  }
+  renderCats(document.getElementById('item-cats'), f, Object.keys(ITEMS), renderPalette);
+  for (const el of paletteEl.children) el.style.display = matches(f, ITEMS[el.dataset.id]) ? '' : 'none';
 }
 recipesEl.addEventListener('mousedown', (e) => {
   const row = e.target.closest('.recipe');
