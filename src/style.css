@@ -86,6 +86,7 @@
   #hp i { background: linear-gradient(#ff6b6b, #c0392b); }
   #food i { background: linear-gradient(#f5b85a, #c77a1e); }
   #water i { background: linear-gradient(#7fe0ff, #1f86c9); }
+  #water.sick i { background: linear-gradient(#b7c86a, #6b7a2a); }
   #mana i { background: linear-gradient(#a7a0ff, #5a46d8); }
   #mode { position: fixed; left: 50%; bottom: 76px; transform: translateX(-50%); color: #fff; font-size: 13px; font-weight: 600; letter-spacing: 1px; background: rgba(120, 70, 200, 0.75); padding: 2px 12px; border-radius: 10px; display: none; z-index: 5; pointer-events: none; }
 

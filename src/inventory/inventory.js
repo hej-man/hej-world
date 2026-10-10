@@ -10,6 +10,7 @@ import { keys } from '../ui/input.js';
 // Inventory + hotbar (items get registered later with game.registerItem)
 // ---------------------------------------------------------------------------
 const HOTBAR_SIZE = 9, INVENTORY_SIZE = 36; // slots 0-8 are the hotbar, 9-35 the backpack
+export const STACK = 100; // how many of one item fit in a slot (tools and armour: 1)
 export const ITEMS = {};                            // id -> { id, name, icon (emoji) or color, maxStack }
 export const slots = new Array(INVENTORY_SIZE).fill(null); // each slot: null or { id, count }
 
@@ -17,7 +18,7 @@ export const slots = new Array(INVENTORY_SIZE).fill(null); // each slot: null or
 export let inventoryOpen = false;
 
 export function registerItem(def) {
-  ITEMS[def.id] = { maxStack: 64, ...def };
+  ITEMS[def.id] = { maxStack: STACK, ...def };
   return ITEMS[def.id];
 }
 
@@ -106,7 +107,7 @@ export function showTooltip(id) {
 
 function onSlotClick(i, e) {
   const s = slots[i];
-  const max = (id) => ITEMS[id]?.maxStack ?? 64;
+  const max = (id) => ITEMS[id]?.maxStack ?? STACK;
   if (e.button === 0 && e.shiftKey && s && !state.heldStack) {
     // quick move between hotbar and backpack
     const [from, to] = i < HOTBAR_SIZE ? [HOTBAR_SIZE, INVENTORY_SIZE] : [0, HOTBAR_SIZE];

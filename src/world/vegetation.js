@@ -6,6 +6,7 @@ import { barkMaterial, boulderGeometry, foliageMaterials, leafClump, pineTier, p
 import { addObstacle, addTarget, terrainFns, whenLoaded, world } from './world.js';
 import { groundAt } from './query.js';
 import { lavaAt, volcanoRadius } from './volcano.js';
+import { litMaterial } from '../render/scene.js';
 
 export let clouds = null;
 
@@ -33,10 +34,13 @@ export function placeVegetation(seed) {
     birch: leafClump(1.15, 1.2, 1.15, 8, 1.4, 3),
     bush: leafClump(0.95, 0.75, 0.95, 5, 1.1, 4),
     rock: boulderGeometry(1),
+    ore: new THREE.DodecahedronGeometry(0.2, 0),
   };
   const mats = {
     trunk: barkMaterial(), pine: foliageMaterials(true), crown: foliageMaterials(false), birch: foliageMaterials(false),
     bush: foliageMaterials(false), rock: triplanarMaterial(LAYER.rock, { color: 0xb4aea6 }, 1.3),
+    // orange, slightly metallic nuggets sticking out of iron-rich boulders
+    ore: litMaterial(new THREE.MeshStandardMaterial({ color: 0xe0782e, roughness: 0.35, metalness: 0.45, emissive: 0x3a1204, flatShading: true })),
   };
   const farMats = { pine: foliageMaterials(true, true), crown: foliageMaterials(false, true), birch: foliageMaterials(false, true), bush: foliageMaterials(false, true) };
 
@@ -152,15 +156,29 @@ function buildVegTile({ trees, bushes, rocks, i: ti, j: tj }, nearGeo, farGeo, m
     bushMesh.setColorAt(i, col.setHSL(0.27 + hash1(b.x + b.z) * 0.06, 0.45, 0.25 + hash1(b.x * 3 + 7) * 0.08));
     addTarget({ kind: 'bush', x: b.x, y: b.y, z: b.z, parts: [[bushMesh, i]], spheres: [[b.x, b.y + 0.3 * b.s, b.z, 0.95 * b.s]] });
   });
+  const oreMesh = make('ore', rocks.filter((r) => r.iron).length * 7);
+  const rockPos = nearGeo.rock.attributes.position, rm = new THREE.Matrix4(), v = new THREE.Vector3();
+  let oi = 0;
   rocks.forEach((r, i) => {
-    if (r.iron) rockMesh.setColorAt(i, col.setHSL(0.05, 0.42, 0.5 + hash1(r.x * 3.1 + r.z) * 0.1)); // rusty: iron inside
+    if (r.iron) rockMesh.setColorAt(i, col.setHSL(0.04, 0.5, 0.4 + hash1(r.x * 3.1 + r.z) * 0.08)); // rusty: iron inside
     else rockMesh.setColorAt(i, col.setHSL(0.08, 0.06, 0.62 + hash1(r.x * 3.1 + r.z) * 0.2));
     q.setFromEuler(new THREE.Euler(r.rot, r.rot * 2, 0));
-    m.compose(p.set(r.x, r.y + r.s * 0.3, r.z), q, s.set(r.s * 1.2, r.s, r.s));
-    rockMesh.setMatrixAt(i, m);
+    rm.compose(p.set(r.x, r.y + r.s * 0.3, r.z), q, s.set(r.s * 1.2, r.s, r.s));
+    rockMesh.setMatrixAt(i, rm);
+    const ores = [];
+    for (let k = 0; r.iron && k < 7; k++) {
+      // orange nuggets sitting on the boulder's surface: at one of its vertices, in its upper part
+      let vi = 0;
+      for (let tries = 0; tries < 12; tries++) {
+        vi = Math.floor(hash1(r.x * 1.3 + k * 7.7 + r.z + tries * 3.1) * rockPos.count);
+        if (v.fromBufferAttribute(rockPos, vi).applyMatrix4(rm).y > r.y + r.s * 0.2) break;
+      }
+      m.compose(v, q.setFromEuler(new THREE.Euler(k * 1.7, r.x + k, k * 0.9)), s.setScalar(r.s * (0.6 + hash1(k + r.x) * 0.6)));
+      oreMesh.setMatrixAt(oi, m); ores.push([oreMesh, oi++]);
+    }
     const ob = { type: 'sphere', x: r.x, y: r.y + r.s * 0.3, z: r.z, r: r.s * 0.95 };
     addObstacle(ob);
-    addTarget({ kind: 'rock', x: r.x, y: r.y, z: r.z, s: r.s, iron: r.iron, obstacle: ob, parts: [[rockMesh, i]], spheres: [[r.x, r.y + r.s * 0.3, r.z, r.s * 1.05]] });
+    addTarget({ kind: 'rock', x: r.x, y: r.y, z: r.z, s: r.s, iron: r.iron, obstacle: ob, parts: [[rockMesh, i], ...ores], spheres: [[r.x, r.y + r.s * 0.3, r.z, r.s * 1.05]] });
   });
   pines.count = pi; crowns.count = ci; birches.count = bi;
   trunks.count = trees.length; bushMesh.count = bushes.length; rockMesh.count = rocks.length;
@@ -180,6 +198,7 @@ function buildVegTile({ trees, bushes, rocks, i: ti, j: tj }, nearGeo, farGeo, m
     lo.castShadow = false; lo.receiveShadow = true; // distant trees: only the far shadow cascade would see them
     farGroup.add(lo);
   }
+  if (oi) { oreMesh.count = oi; oreMesh.castShadow = true; oreMesh.instanceMatrix.needsUpdate = true; oreMesh.computeBoundingSphere(); nearGroup.add(oreMesh); }
   farGroup.visible = false;
   world.add(nearGroup, farGroup);
   vegTiles.push({ near: nearGroup, far: farGroup, cx: (ti + 0.5) * VEG_TILE, cz: (tj + 0.5) * VEG_TILE });

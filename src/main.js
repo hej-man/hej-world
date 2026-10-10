@@ -17,11 +17,12 @@ import { viewModel } from './player/animation.js';
 import { ITEMS, addItem, countItem, getSelectedItem, inventoryOpen, registerItem, removeItem, selectSlot, setInventoryOpen, slots } from './inventory/inventory.js';
 import { RECIPES, craft, defineItems } from './inventory/items.js';
 import { blockGroups, blocks, placeBlock, updateCampfires } from './world/blocks.js';
+import { addSource, fluidAt, fluids, updateFluids } from './world/fluids.js';
 import { MAX_HEALTH, damagePlayer, renderStats, setCreative, stats, updateStats } from './player/survival.js';
 import { animals, spawnAnimal, spawnAnimals, updateAnimals } from './animals/animals.js';
 import { aimWater, breakTime, doBreak, mouse, pickTarget, updateBolts, updateInteraction, useItem, useWater } from './player/interaction.js';
 import { cameraUnderwater, updateUnderwater } from './effects/underwater.js';
-import { WEATHER, setWeather, updateWeather, weather } from './effects/weather.js';
+import { WEATHER, cycleWeather, nextWeather, setWeather, updateWeather, weather } from './effects/weather.js';
 import { crosshair, hud } from './ui/hud.js';
 import { $, clampPitch, gameState, startGame, toMainMenu, updateOverlay } from './ui/menu.js';
 import { keys } from './ui/input.js';
@@ -117,6 +118,7 @@ function frame() {
   updateGrass(camera.position.x, camera.position.z, gameState === 'playing' ? 2 : 1);
   updateCampfires(state.gameTime);
   updateVolcanoes(dt, state.gameTime);
+  updateFluids(dt, state.gameTime);
   terrainUniforms.uTime.value = state.gameTime;
   waterUniforms.uTime.value = state.gameTime;
   crosshair.style.display = (state.locked || state.testMode) && !inventoryOpen ? 'block' : 'none';
@@ -156,10 +158,11 @@ requestAnimationFrame(() => setTimeout(() => {
     spawnAnimal: (kind, x, z) => { const g = groundAt(x, z); return g && spawnAnimal(kind, x, g.point.y, z, Math.random); },
     underwater: () => cameraUnderwater, time: () => state.gameTime, damagePlayer, targets: () => [...targetGrid.values()].flat(),
     renderer, scene, camera, csm, texInfo, QUALITY,
-    startGame, toMainMenu, state: () => gameState, ready: () => !!worldStats && !generating, weather, setWeather, WEATHER,
+    startGame, toMainMenu, state: () => gameState, ready: () => !!worldStats && !generating, weather, setWeather, nextWeather, cycleWeather, WEATHER, updateWeather,
     aimWater: () => aimWater, useWater, grassPatches, MAX_HEALTH, updateGrass,
     loadAll: () => { loadAll(); spawnAnimals(worldStats.seed); }, terrainProgress, vegStats,
     lavaFlows, lavaAt, burning: () => state.burning, setShape: (sh) => { state.buildShape = sh; }, blockGroups, character, breakTime,
+    fluids, addSource, fluidAt,
   };
   frame();
 }, 30));

@@ -48,6 +48,9 @@ export function makeWater() {
         vec2 wave(vec2 p, vec2 d, float k, float w, float a) { return d * (a * k * cos(dot(d, p) * k + uTime * w)); }`)
       .replace('#include <color_fragment>', `#include <color_fragment>
         float groundH = texture2D(uGroundH, vWPos.xz / uWorld.x).r * uWorld.y;
+        // no water under land: the sea plane would otherwise show up in caves below sea level
+        // (same rule as terrainFns.waterAt)
+        if (groundH > vWPos.y + 2.5) discard;
         float depth = vWPos.y - groundH; // the surface is at the water level (sea or lake)
         float shallow = 1.0 - smoothstep(0.2, 3.5, depth);
         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.05, 0.2, 0.19), shallow * 0.7);

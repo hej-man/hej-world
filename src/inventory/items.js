@@ -2,6 +2,7 @@ import { state } from '../state.js';
 import { FOOT_OFFSET, player } from '../player/character.js';
 import { ITEMS, addItem, countItem, fillSlotEl, registerItem, removeItem, renderInventory, showTooltip, slots, tooltipEl } from './inventory.js';
 import { BLOCKS, blocks } from '../world/blocks.js';
+import { SPECIES } from '../animals/animals.js';
 import { BOLT_COST } from '../player/survival.js';
 import { toast } from '../ui/hud.js';
 
@@ -18,7 +19,8 @@ const SWATCH = {
   leather: 'linear-gradient(160deg, #a8703c, #6e4421)',
   dirt: 'radial-gradient(circle at 35% 30%, #8d6a46, #5e4228)',
   sand: 'radial-gradient(circle at 35% 30%, #eadbb0, #c7b07c)',
-  iron_ore: 'radial-gradient(circle at 30% 35%, #c7713a 0 3px, transparent 4px), radial-gradient(circle at 68% 60%, #b5622e 0 3px, transparent 4px), radial-gradient(circle at 45% 75%, #d08048 0 2px, transparent 3px), radial-gradient(circle at 35% 30%, #a19d97, #6a6762)',
+  smooth_stone: 'linear-gradient(#6f6c67 0 0) 3px 3px / calc(100% - 6px) 1px no-repeat, linear-gradient(#6f6c67 0 0) 3px calc(100% - 4px) / calc(100% - 6px) 1px no-repeat, linear-gradient(135deg, #c2bfb9, #9c9993)',
+  iron_ore: 'radial-gradient(circle at 30% 35%, #ff9a4a 0 4px, transparent 5px), radial-gradient(circle at 68% 60%, #e8772e 0 4px, transparent 5px), radial-gradient(circle at 45% 75%, #ffb070 0 3px, transparent 4px), radial-gradient(circle at 72% 25%, #d86a28 0 3px, transparent 4px), radial-gradient(circle at 35% 30%, #8a8680, #55524e)',
   iron_ingot: 'linear-gradient(160deg, #f1f2f4 0%, #b9bcc2 45%, #8b8f96 100%)',
 };
 export function defineItems() {
@@ -28,10 +30,11 @@ export function defineItems() {
   reg('planks', 'Planks', SWATCH.planks, { place: 'planks' });
   reg('stick', 'Stick', SWATCH.stick, { flat: true });
   reg('stone', 'Stone', SWATCH.stone, { place: 'stone' });
-  reg('dirt', 'Dirt', SWATCH.dirt, { terrain: 'dirt' });
-  reg('sand', 'Sand', SWATCH.sand, { terrain: 'sand' });
+  reg('dirt', 'Dirt', SWATCH.dirt, { place: 'dirt' });
+  reg('sand', 'Sand', SWATCH.sand, { place: 'sand' });
   reg('crystal', 'Crystal', '💎');
   reg('stone_bricks', 'Stone bricks', SWATCH.bricks, { place: 'stone_bricks' });
+  reg('smooth_stone', 'Smooth stone', SWATCH.smooth_stone, { place: 'smooth_stone' });
   reg('glass', 'Glass', SWATCH.glass, { place: 'glass' });
   reg('wool', 'Wool', SWATCH.wool, { place: 'wool' });
   reg('workbench', 'Workbench', '🛠️', { place: 'workbench' });
@@ -44,8 +47,10 @@ export function defineItems() {
   reg('raw_meat', 'Raw meat', '🥩', { food: 10 });
   reg('cooked_meat', 'Cooked meat', '🍖', { food: 35, heal: 10 });
   reg('bread', 'Trail bread', '🍞', { food: 25 });
-  reg('bottle', 'Empty bottle', '🫙', { maxStack: 16 });
-  reg('water_bottle', 'Water bottle', '💧', { drink: 40, leaves: 'bottle', maxStack: 16 });
+  reg('bottle', 'Empty bottle', '🫙', {});
+  reg('water_bottle', 'Clean water', '💧', { drink: 40, leaves: 'bottle' });
+  reg('murky_water', 'Murky water', '🫗', { drink: 30, leaves: 'bottle', dirty: true });
+  reg('purifier', 'Water filter', '⚗️', { place: 'purifier' });
   reg('silk', 'Spider silk', '🕸️');
   reg('feather', 'Feather', '🪶');
   reg('leather', 'Leather', SWATCH.leather);
@@ -55,20 +60,30 @@ export function defineItems() {
     reg(`${mat}_shovel`, `${Mat} shovel`, '🪏', { tool: 'shovel', tier, badge, maxStack: 1, damage: 2 + tier });
     reg(`${mat}_sword`, `${Mat} sword`, '🗡️', { tool: 'sword', tier, badge, maxStack: 1, damage: 4 + tier * 2 });
   }
+  reg('bucket', 'Bucket', '🪣', { bucket: true, maxStack: 1 });
+  reg('water_bucket', 'Water bucket', '🌊', { fluid: 'water', maxStack: 1 });
+  reg('lava_bucket', 'Lava bucket', '🌋', { fluid: 'lava', maxStack: 1 });
+  // spawners only come from the creative item list
+  const ANIMAL_ICONS = { cow: '🐄', pig: '🐖', sheep: '🐑', chicken: '🐔', deer: '🦌', rabbit: '🐇', wolf: '🐺', bear: '🐻', boar: '🐗', spider: '🕷️' };
+  for (const [kind, sp] of Object.entries(SPECIES)) reg(`spawn_${kind}`, `${sp.name} spawner`, ANIMAL_ICONS[kind] || '🥚', { spawn: kind });
   reg('crystal_wand', 'Crystal wand', '🪄', { wand: true, maxStack: 1 });
-  reg('mana_tonic', 'Mana tonic', '🧪', { mana: 50, maxStack: 16 });
-  reg('bandage', 'Bandage', '🩹', { heal: 30, maxStack: 16 });
+  reg('mana_tonic', 'Mana tonic', '🧪', { mana: 50 });
+  reg('bandage', 'Bandage', '🩹', { heal: 30 });
   reg('leather_armour', 'Leather armour', '🦺', { armour: 0.35, maxStack: 1 });
   reg('iron_armour', 'Iron armour', '🛡️', { armour: 0.6, maxStack: 1 });
 }
 
 export function itemHint(def) {
   if (def.place) return BLOCKS[def.place]?.station ? 'Right click to place' : 'Right click to place · B changes the shape (block, slab, slope, stairs, prism, pillar)';
-  if (def.terrain) return 'Right click to add ground';
   if (def.food) return `Right click to eat (+${def.food} hunger${def.drink ? `, +${def.drink} thirst` : ''})`;
+  if (def.dirty) return `Unpurified: drinking it makes you sick. Purify it at a water filter, or boil it at a campfire or furnace`;
   if (def.drink) return `Right click to drink (+${def.drink} thirst)`;
+  if (def.id === 'purifier') return 'Place it, then turn murky water into clean water next to it';
   if (def.id === 'bottle') return 'Right click on water to fill it';
   if (def.id === 'iron_ore') return 'Smelt it at a furnace';
+  if (def.bucket) return 'Right click on water or lava (or poured fluid) to scoop it up';
+  if (def.fluid) return `Right click to pour the ${def.fluid}; it flows like a liquid`;
+  if (def.spawn) return `Right click on the ground to spawn a ${SPECIES[def.spawn].name.toLowerCase()}`;
   if (def.heal) return `Right click to use (+${def.heal} health)`;
   if (def.mana) return `Right click to drink (+${def.mana} mana)`;
   if (def.wand) return `Right click to cast a bolt (${BOLT_COST} mana)`;
@@ -97,13 +112,21 @@ export const RECIPES = [
   { out: 'stone_bricks', n: 4, in: { stone: 4 }, at: 'workbench' },
   { out: 'furnace', in: { stone: 8 }, at: 'workbench' },
   { out: 'iron_ingot', n: 2, in: { iron_ore: 2, log: 1 }, at: 'furnace' },
+  { out: 'smooth_stone', n: 2, in: { stone: 2, log: 1 }, at: 'furnace' },
+  { out: 'glass', n: 3, in: { sand: 3, log: 1 }, at: 'furnace' },
+  { out: 'cooked_meat', n: 3, in: { raw_meat: 3, log: 1 }, at: 'furnace' },
   { out: 'iron_pickaxe', in: { iron_ingot: 3, stick: 2 }, at: 'workbench' },
   { out: 'iron_axe', in: { iron_ingot: 3, stick: 2 }, at: 'workbench' },
   { out: 'iron_shovel', in: { iron_ingot: 1, stick: 2 }, at: 'workbench' },
   { out: 'iron_sword', in: { iron_ingot: 2, stick: 1 }, at: 'workbench' },
   { out: 'leather_armour', in: { leather: 5 }, at: 'workbench' },
+  { out: 'bucket', in: { iron_ingot: 3 }, at: 'workbench' },
   { out: 'iron_armour', in: { iron_ingot: 6, leather: 2 }, at: 'workbench' },
   { out: 'bottle', n: 2, in: { glass: 1 }, at: 'workbench' },
+  { out: 'purifier', in: { planks: 4, sand: 3, glass: 1 }, at: 'workbench' },
+  { out: 'water_bottle', in: { murky_water: 1 }, at: 'purifier' },
+  { out: 'water_bottle', in: { murky_water: 1, stick: 1 }, at: 'campfire' },
+  { out: 'water_bottle', n: 3, in: { murky_water: 3, log: 1 }, at: 'furnace' },
   { out: 'crystal_wand', in: { stick: 1, crystal: 3, feather: 1 }, at: 'workbench' },
   { out: 'cooked_meat', in: { raw_meat: 1 }, at: 'campfire' },
   { out: 'glass', in: { sand: 2 }, at: 'campfire' },
@@ -141,7 +164,7 @@ export function craft(r, all) {
     for (const [id, n] of Object.entries(r.in)) removeItem(id, n);
     addItem(r.out, r.n || 1);
     made++;
-  } while (all && made < 64);
+  } while (all && made < 100);
   if (made) toast(`Crafted ${made * (r.n || 1)} ${ITEMS[r.out].name}`);
   renderInventory();
 }

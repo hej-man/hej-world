@@ -47,7 +47,8 @@ export function buildRenderGeometry(colliderGeo, T) {
     const nb = T.noise2(x * 0.03 + 50, z * 0.03 - 20); // low-frequency noise that wobbles biome borders
     const surface = T.surfaceHeight(x, z);
     const vi = T.volcanoInfluence(x, z);
-    const lake = T.lakeAt(x, z, T.LAKE_EDGE + 0.15), W = lake ? lake.level : WORLD.waterLevel;
+    const lake = T.lakeAt(x, z, T.LAKE_EDGE + 0.15), W0 = lake ? lake.level : WORLD.waterLevel;
+    const W = T.surfaceHeight(x, z) < W0 + 2.5 ? W0 : -1000; // no wet waterline in caves under land
     let g = 0, f = 0, d = 0, s = 0, stone = 0, glow = 0, tr = 1, tg = 1, tb = 1;
     const cave = smoothstep(surface - 3, surface - 8, y);
     const edited = editedMaterialAt(x - nrm.x * 0.8, y - nrm.y * 0.8, z - nrm.z * 0.8);
@@ -187,16 +188,21 @@ export function makeTerrainMaterial() {
         col *= mix(0.78, 1.15, macro);
         // basalt: rock on the volcano is nearly black
         col *= mix(vec3(1.0), vec3(0.3, 0.28, 0.27), smoothstep(0.08, 0.45, volc) * W[4] / max(total, 1e-4));
-        // iron ore: rusty brown speckles in the rock
+        // iron ore: bright orange-rust nuggets in darker rock, with metal flecks that catch the light
         float rockFrac = W[4] / max(total, 1e-4);
-        float ore = vExtra.x * rockFrac * (0.45 + 0.55 * smoothstep(0.4, 0.7, vnoise(vWorldPos * 2.1)));
-        col = mix(col, srgb(vec3(0.62, 0.3, 0.14)) * (0.55 + 0.9 * tAlb.r), ore * 0.85);
+        float oreAmt = smoothstep(0.35, 0.6, vExtra.x) * rockFrac; // matches where mining gives iron (above 0.5)
+        float nug = smoothstep(0.52, 0.62, vnoise(vWorldPos * 1.7) * 0.7 + vnoise(vWorldPos * 4.3) * 0.3);
+        float ore = oreAmt * nug;
+        col *= 1.0 - oreAmt * 0.35; // ore-bearing rock is darker around the nuggets
+        col = mix(col, srgb(vec3(0.85, 0.42, 0.14)) * (0.75 + 0.6 * tAlb.r), ore);
+        float fleck = oreAmt * smoothstep(0.72, 0.8, vnoise(vWorldPos * 11.0));
+        col = mix(col, srgb(vec3(0.78, 0.8, 0.84)), fleck * 0.8);
         // wet, darker ground right at the waterline, and after rain on open ground
         float wet = (1.0 - smoothstep(vExtra.y - 0.3, vExtra.y + 0.9, vWorldPos.y)) * surf;
         float rainWet = uRainWet * surf * smoothstep(0.3, 0.8, wN.y);
         col *= mix(1.0, 0.62, wet) * mix(1.0, 0.72, rainWet);
         diffuseColor.rgb = col;
-        float tRough = mix(mix(tAlb.a, 0.25, wet * 0.8), 0.3, rainWet * 0.75) - ore * 0.25;
+        float tRough = mix(mix(tAlb.a, 0.25, wet * 0.8), 0.3, rainWet * 0.75) - ore * 0.3 - fleck * 0.6;
         vec3 tNW = normalize(wN + tN * 1.2);`)
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
         roughnessFactor = clamp(tRough, 0.05, 1.0);`)
@@ -224,7 +230,9 @@ export function makeTerrainMaterial() {
         float vn = abs(vnoise(vec3(vWorldPos.x * 0.07, vWorldPos.y * 0.02, vWorldPos.z * 0.07)) - 0.5) + (vnoise(vWorldPos * 0.8) - 0.5) * 0.03;
         float vein = (1.0 - smoothstep(0.0, 0.025, vn)) * smoothstep(0.45, 0.7, volc) * W[4] / max(total, 1e-4);
         totalEmissiveRadiance += lavaCol * (heat * 0.5 * surf + vein * 1.6) * pulse;
-        totalEmissiveRadiance += srgb(vec3(0.35, 0.8, 0.9)) * crystal * 0.6;`);
+        totalEmissiveRadiance += srgb(vec3(0.35, 0.8, 0.9)) * crystal * 0.6;
+        // a faint warm glow, so iron ore can be spotted in dark caves too
+        totalEmissiveRadiance += srgb(vec3(0.9, 0.4, 0.12)) * ore * 0.08;`);
   };
   return mat;
 }

@@ -12,16 +12,20 @@ import { cameraUnderwater } from './underwater.js';
 import { sound, thunder } from './sound.js';
 
 // ---------------------------------------------------------------------------
-// Weather: clear, cloudy, rain and thunderstorms come and go. Clouds grey the sky and dim the sun,
+// Weather: clear, cloudy, rain and thunderstorms come and go on their own, one step at a time (clear
+// skies cloud over before it rains, a storm eases back to rain), building up and clearing over a
+// minute or so. In creative mode K steps through them by hand. Clouds grey the sky and dim the sun,
 // rain falls around the camera (snow up in the mountains), fog thickens, the ground gets wet and
 // dark, and storms flash and rumble. Rain stops where something is over your head (a cave, a roof).
 // ---------------------------------------------------------------------------
+// last: how long it lasts, in seconds (min, max). next: what it can turn into, with weights.
 export const WEATHER = {
-  clear:  { name: 'Clear', cloud: 0.1, rain: 0, storm: 0, chance: 0.4, wind: 0.2 },
-  cloudy: { name: 'Cloudy', cloud: 0.6, rain: 0, storm: 0, chance: 0.27, wind: 0.45 },
-  rain:   { name: 'Rain', cloud: 0.88, rain: 0.7, storm: 0, chance: 0.21, wind: 0.6 },
-  storm:  { name: 'Thunderstorm', cloud: 1, rain: 1, storm: 1, chance: 0.12, wind: 1 },
+  clear:  { name: 'Clear', cloud: 0.1, rain: 0, storm: 0, wind: 0.2, last: [240, 540], next: { cloudy: 1 } },
+  cloudy: { name: 'Cloudy', cloud: 0.6, rain: 0, storm: 0, wind: 0.45, last: [120, 300], next: { clear: 0.55, rain: 0.45 } },
+  rain:   { name: 'Rain', cloud: 0.88, rain: 0.7, storm: 0, wind: 0.6, last: [100, 240], next: { cloudy: 0.65, storm: 0.35 } },
+  storm:  { name: 'Thunderstorm', cloud: 1, rain: 1, storm: 1, wind: 1, last: [60, 150], next: { rain: 1 } },
 };
+const ORDER = ['clear', 'cloudy', 'rain', 'storm'];
 export const weather = { state: 'clear', timer: 200, cloud: 0.1, rain: 0, storm: 0, wind: 0.2, snow: 0, covered: 0, coverT: 0, flash: 0, nextBolt: 6, baked: 0.1 };
 const skyClear = { zenith: sky.zenith.clone(), horizon: sky.horizon.clone(), sun: sky.sun.clone(), ground: sky.ground.clone() };
 const skyStorm = { zenith: new THREE.Color(0x4a525c), horizon: new THREE.Color(0x7d858d), sun: new THREE.Color(0x9aa0a8), ground: new THREE.Color(0x2c2e2c) };
@@ -31,16 +35,23 @@ const flashLight = new THREE.HemisphereLight(0xdde6ff, 0x50505a, 0);
 scene.add(flashLight);
 
 export function setWeather(state, quick = false) {
+  const [lo, hi] = WEATHER[state].last;
   weather.state = state;
-  weather.timer = 120 + Math.random() * 180;
+  weather.timer = lo + Math.random() * (hi - lo);
   if (quick) Object.assign(weather, { cloud: WEATHER[state].cloud, rain: WEATHER[state].rain, storm: WEATHER[state].storm });
 }
+// the natural next step from the current weather
 export function nextWeather() {
-  let r = Math.random() * 0.999, pick = 'clear';
-  const options = Object.keys(WEATHER).filter((k) => k !== weather.state);
-  const total = options.reduce((a, k) => a + WEATHER[k].chance, 0);
-  for (const k of options) { r -= WEATHER[k].chance / total; if (r < 0) { pick = k; break; } }
+  const next = WEATHER[weather.state].next, total = Object.values(next).reduce((a, b) => a + b, 0);
+  let r = Math.random() * total, pick = Object.keys(next)[0];
+  for (const [k, w] of Object.entries(next)) { r -= w; if (r < 0) { pick = k; break; } }
   setWeather(pick);
+  weather.manual = false;
+}
+// creative mode: K steps clear -> cloudy -> rain -> storm -> clear, changing quickly
+export function cycleWeather() {
+  setWeather(ORDER[(ORDER.indexOf(weather.state) + 1) % ORDER.length]);
+  weather.manual = true;
 }
 
 // Rain: streaks that fall through a box around the camera. Each drop keeps its place in the world
@@ -100,8 +111,15 @@ const _up = new THREE.Vector3(0, 1, 0);
 export function updateWeather(dt) {
   weather.timer -= dt;
   if (weather.timer <= 0) nextWeather();
-  const tgt = WEATHER[weather.state], k = 1 - Math.exp(-dt / 10);
-  for (const key of ['cloud', 'rain', 'storm', 'wind']) weather[key] += (tgt[key] - weather[key]) * k;
+  // natural changes build up slowly, clouds first and rain once they've gathered (and the rain
+  // stops before the clouds clear); a change picked by hand happens within seconds
+  const tgt = WEATHER[weather.state], slow = weather.manual ? 0.15 : 1;
+  const rainTo = tgt.rain * smoothstep(0.6, 0.85, weather.cloud), stormTo = tgt.storm * smoothstep(0.4, 0.9, weather.rain);
+  const ease = (key, to, secs) => { weather[key] += (to - weather[key]) * (1 - Math.exp(-dt / (secs * slow))); };
+  ease('cloud', tgt.cloud, tgt.cloud > weather.cloud ? 30 : 45);
+  ease('rain', rainTo, rainTo > weather.rain ? 18 : 10);
+  ease('storm', stormTo, 15);
+  ease('wind', tgt.wind, 25);
   const c = smoothstep(0.15, 1, weather.cloud), cam = camera.position;
 
   // sky, sun and fog

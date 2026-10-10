@@ -12,7 +12,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "node tests/smoke.test.mjs",
-    "test:all": "node tests/smoke.test.mjs && node tests/gameplay.test.mjs && node tests/survival.test.mjs"
+    "test:all": "node tests/smoke.test.mjs && node tests/gameplay.test.mjs && node tests/survival.test.mjs && node tests/behaviour.test.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.0",

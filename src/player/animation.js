@@ -3,7 +3,6 @@ import { state } from '../state.js';
 import { PLAYER } from '../config.js';
 import { smoothstep } from '../noise.js';
 import { camera, prepareLighting, scene } from '../render/scene.js';
-import { terrainFns } from '../world/world.js';
 import { FOOT_OFFSET, character, heldItemModel, player } from './character.js';
 import { slots } from '../inventory/inventory.js';
 import { stats } from './survival.js';
@@ -17,12 +16,11 @@ export function animateCharacter(dt) {
   const C = character.userData, [legL, legR] = C.legs, [armL, armR] = C.arms;
   const grounded = state.gameTime - player.lastGroundTime < 0.15;
   const hSpeed = Math.hypot(player.velocity.x, player.velocity.z);
-  const depth = terrainFns.waterAt(player.position.x, player.position.z) - (player.position.y - FOOT_OFFSET);
-  const swimming = !state.creative && depth > 1.1, flying = state.creative && !grounded;
+  const depth = player.swimDepth, swimming = player.swimming, flying = state.creative && !grounded;
   const walk = Math.min(1, hSpeed / 4), run = smoothstep(PLAYER.walkSpeed, PLAYER.sprintSpeed, hSpeed);
   if (!grounded) C.air += dt; else { if (C.air > 0.35) C.land = 0.22; C.air = 0; }
   C.land = Math.max(0, C.land - dt);
-  C.phase += dt * (grounded ? hSpeed * 1.75 : swimming ? 3.5 : 0);
+  C.phase += dt * (swimming ? 2 + hSpeed * 0.9 : grounded ? hSpeed * 1.75 : 0);
   const p = C.phase, t = state.gameTime;
   const attacking = swingTime > 0 || (mouse.left && (state.locked || state.testMode));
   if (attacking) C.swing = (C.swing + dt * 3.2) % 1; else C.swing = 0;
@@ -30,17 +28,24 @@ export function animateCharacter(dt) {
   // targets (radians): + on x swings a limb forward, - bends a knee back
   const T = { rootX: 0, rootY: 0, spineX: 0, spineY: 0, headX: 0, headY: 0,
     hip: [0, 0], knee: [0, 0], ankle: [0, 0], shX: [0, 0], shZ: [0.08, -0.08], elbow: [0.15, 0.15] };
+  let swimMove = 0;
   if (swimming) {
-    const moving = hSpeed > 0.5;
-    T.rootX = moving ? -1.2 : -0.25;
+    swimMove = smoothstep(0.4, 1.6, hSpeed);
+    // front crawl when moving: body flat, arms windmilling in turn, a quick flutter kick, head up to
+    // look ahead. Treading water when still: upright, legs cycling, hands sculling at the sides.
+    T.rootX = -1.45 * swimMove - 0.12 * (1 - swimMove);
     for (let i = 0; i < 2; i++) {
-      const s = Math.sin(t * 7 + i * Math.PI);
-      T.hip[i] = s * 0.35; T.knee[i] = -0.25 - Math.max(0, s) * 0.3;
-      T.shX[i] = moving ? -2.4 + Math.sin(p) * 0.9 : 0.4 + Math.sin(t * 2 + i) * 0.4;
-      T.shZ[i] = (i ? -1 : 1) * (moving ? 0.5 + Math.cos(p) * 0.4 : 0.9);
-      T.elbow[i] = 0.4;
+      const ph = p + i * Math.PI, kick = Math.sin(t * 8 + i * Math.PI), tread = Math.sin(t * 3.2 + i * Math.PI);
+      // the arm goes all the way round: pulled through under the chest, then back over the water
+      const turn = Math.PI - (((ph / (2 * Math.PI)) % 1) + 1) % 1 * 2 * Math.PI, over = turn < 0 ? Math.sin(-turn) : 0;
+      const crawl = { hip: kick * 0.28, knee: -0.12 - Math.max(0, kick) * 0.35, shX: turn, shZ: 0.15 + over * 0.3, elbow: 0.2 + over * 1.1 };
+      const still = { hip: 0.45 + tread * 0.4, knee: -0.7 - tread * 0.45, shX: 0.3, shZ: 0.85 + Math.sin(t * 3.2 + i) * 0.3, elbow: 0.55 };
+      const mix = (a, b) => a * swimMove + b * (1 - swimMove);
+      T.hip[i] = mix(crawl.hip, still.hip); T.knee[i] = mix(crawl.knee, still.knee); T.ankle[i] = 0.35 * swimMove;
+      T.shX[i] = swimMove > 0.5 ? crawl.shX : still.shX; T.shZ[i] = (i ? -1 : 1) * mix(crawl.shZ, still.shZ); T.elbow[i] = mix(crawl.elbow, still.elbow);
     }
-    T.headX = moving ? 0.9 : 0;
+    T.headX = 0.85 * swimMove;
+    T.spineY = Math.sin(p) * 0.18 * swimMove; // the body rolls with each stroke
   } else if (flying) {
     T.spineX = -0.15; T.hip = [0.15, -0.1]; T.knee = [-0.35, -0.2]; T.shZ = [0.35, -0.35]; T.elbow = [0.3, 0.3];
   } else if (!grounded) {
@@ -79,11 +84,23 @@ export function animateCharacter(dt) {
   const k = 1 - Math.exp(-dt * (attacking ? 22 : 13)), ease = (o, axis, v) => { o.rotation[axis] += (v - o.rotation[axis]) * k; };
   ease(C.root, 'x', T.rootX); ease(C.spine, 'x', T.spineX); ease(C.spine, 'y', T.spineY); ease(C.head, 'x', T.headX); ease(C.head, 'y', T.headY);
   [legL, legR].forEach((L, i) => { ease(L.hip, 'x', T.hip[i]); ease(L.knee, 'x', T.knee[i]); ease(L.ankle, 'x', T.ankle[i]); });
-  [armL, armR].forEach((A, i) => { ease(A.shoulder, 'x', T.shX[i]); ease(A.shoulder, 'z', T.shZ[i]); ease(A.elbow, 'x', T.elbow[i]); });
+  // shoulders ease the short way round (the crawl stroke turns the arm in full circles)
+  const easeTurn = (o, v) => { const r = o.rotation, d = Math.atan2(Math.sin(v - r.x), Math.cos(v - r.x)); r.x = Math.atan2(Math.sin(r.x + d * k), Math.cos(r.x + d * k)); };
+  [armL, armR].forEach((A, i) => { easeTurn(A.shoulder, T.shX[i]); ease(A.shoulder, 'z', T.shZ[i]); ease(A.elbow, 'x', T.elbow[i]); });
 
-  // body height: a little bob when walking, crouch on landing; lifted when swimming so the head is above water
+  // body height: a little bob when walking, crouch on landing. Swimming, the body pivots around its
+  // middle (so it stays where the player is) and floats with the head just out of the water.
   const bob = grounded ? Math.abs(Math.sin(p)) * 0.045 * walk - (C.land / 0.22) * 0.12 : 0;
-  C.root.position.y = swimming ? 0.7 : bob;
+  let ry = bob, rz = 0;
+  if (swimming) {
+    const a = C.root.rotation.x, mid = 1.05, surface = Math.min(depth, 2.4);
+    // centre of the body: just under the surface when crawling, lower when treading water (head up)
+    const cy = THREE.MathUtils.clamp(surface - 0.15 * swimMove - 0.36 * (1 - swimMove) + Math.sin(t * 3.2) * 0.03, 0.5, 2.4);
+    ry = cy - mid * Math.cos(a); rz = -mid * Math.sin(a);
+  }
+  const kp = 1 - Math.exp(-dt * 8);
+  C.root.position.y += (ry - C.root.position.y) * kp;
+  C.root.position.z += (rz - C.root.position.z) * kp;
   character.position.set(player.position.x, player.position.y - FOOT_OFFSET, player.position.z);
   character.rotation.y = player.facing;
   character.visible = state.thirdPerson;

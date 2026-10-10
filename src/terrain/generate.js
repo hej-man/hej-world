@@ -100,15 +100,17 @@ export function createTerrainFunctions(seed) {
     if (Math.abs(dx) > lk.R * 1.9 || Math.abs(dz) > lk.R * 1.9) return 9;
     return Math.hypot(dx, dz) / lakeRadius(lk, Math.atan2(dz, dx));
   }
+  const DRY_ABOVE = 2.5, NO_WATER = -1000; // see waterAt
   const LAKE_EDGE = 1.3; // the water surface reaches this far (in lake radii)
   function lakeAt(x, z, reach = LAKE_EDGE) {
     for (const lk of lakes) if (lakeShape(lk, x, z) < reach) return lk;
     return null;
   }
-  // height of the water surface that covers this point (the sea level outside the lakes)
+  // Height of the water surface over this point: the sea level outside the lakes. Only open water
+  // counts: where the ground above is well over the water (caves and tunnels under hills), it's dry.
   function waterAt(x, z) {
-    const lk = lakes.length ? lakeAt(x, z) : null;
-    return lk ? lk.level : W;
+    const lk = lakes.length ? lakeAt(x, z) : null, level = lk ? lk.level : W;
+    return surfaceHeight(x, z) < level + DRY_ABOVE ? level : NO_WATER;
   }
 
   function surfaceHeight(x, z) {

@@ -45,28 +45,30 @@ the game uses them whenever it's served. Which Poly Haven texture each layer use
 
 ## Controls
 
-| Key               | Action                                                                                     |
-| ----------------- | ------------------------------------------------------------------------------------------ |
-| Main menu         | Continue, new survival or creative world, a random or typed seed, quality and sound        |
-| W A S D / arrows  | Move (relative to where you look)                                                          |
-| Shift             | Sprint                                                                                     |
-| Space             | Jump (from walkable ground) / swim up in deep water                                        |
-| Mouse             | Look around                                                                                |
-| V (or C)          | Switch first / third person                                                                |
-| Z                 | Cycle third-person camera distance                                                         |
-| Left mouse (hold) | Break / harvest what you aim at, or attack an animal                                       |
-| Right mouse       | Place a block or ground, eat, drink, cast, wear; on a workbench or campfire, open crafting |
-| 1–9, mouse wheel  | Select hotbar slot                                                                         |
-| E (or I / Tab)    | Open / close the inventory and crafting                                                    |
-| G                 | Toggle creative mode (fly with Space / Shift)                                              |
-| F                 | Toggle the lantern (useful in caves)                                                       |
-| B                 | Cycle the building shape: block, slab, slope, stairs, roof prism, pillar                   |
-| K                 | Change the weather (clear, cloudy, rain, storm)                                            |
-| M                 | Sound on / off                                                                             |
-| R                 | Respawn at the cave mouth                                                                  |
-| Esc               | Pause (resume or go back to the main menu)                                                 |
+| Key               | Action                                                                                    |
+| ----------------- | ----------------------------------------------------------------------------------------- |
+| Main menu         | Continue, new survival or creative world, a random or typed seed, quality and sound       |
+| W A S D / arrows  | Move (relative to where you look)                                                         |
+| Shift             | Sprint / dive when swimming                                                               |
+| Space             | Jump (from walkable ground) / swim up in deep water                                       |
+| Mouse             | Look around                                                                               |
+| V (or C)          | Switch first / third person                                                               |
+| Z                 | Cycle third-person camera distance                                                        |
+| Left mouse (hold) | Break / harvest what you aim at, or attack an animal                                      |
+| Right mouse       | Place a block, eat, drink, cast, wear; on a workbench, campfire or furnace, open crafting |
+| 1–9, mouse wheel  | Select hotbar slot                                                                        |
+| E (or I / Tab)    | Open / close the inventory and crafting                                                   |
+| G                 | Toggle creative mode (fly with Space / Shift)                                             |
+| F                 | Toggle the lantern (useful in caves)                                                      |
+| B                 | Cycle the building shape: block, slab, slope, stairs, roof prism, pillar                  |
+| T                 | Tip the next block: upright, on its side, upside down (it also turns the way you look)    |
+| K                 | Change the weather in creative mode (clear, cloudy, rain, storm)                          |
+| M                 | Sound on / off                                                                            |
+| R                 | Respawn at the cave mouth                                                                 |
+| Esc               | Pause (resume or go back to the main menu)                                                |
 
-In the inventory: click to pick up and drop a stack, right-click to split a stack or place one
+A slot holds up to 100 of an item (tools, weapons, armour and buckets one each). In the
+inventory: click to pick up and drop a stack, right-click to split a stack or place one
 item, shift-click to move a stack between the hotbar and the backpack. Click a recipe on the
 right to craft it once, shift-click to craft as many as you can.
 
@@ -75,17 +77,18 @@ right to craft it once, shift-click to craft as many as you can.
 - **Breaking.** Hold the left mouse button on something within reach (5.5 m). Trees give logs,
   sticks and sometimes apples; bushes give berries and a stick; boulders give stone. The ground
   can be dug: dirt and sand by hand (faster with a shovel), stone and cave crystal only with a
-  pickaxe. Iron ore (rusty speckled rock in cliffs and caves, and rusty boulders) needs a stone
-  pickaxe or better. Axes chop wood faster; iron tools are the fastest. Placed blocks break back
-  into their item.
-- **Building.** Right-click with a block (log, planks, stone, stone bricks, glass, wool,
-  workbench, campfire, furnace) to place it on the face you aim at; a white outline shows where
-  it goes. Press B to choose the shape: a full block, half-height slab, slope, stairs, roof prism
-  or thin pillar. Slopes, stairs, prisms and furnaces turn to face the way you look, and you can
-  walk up slopes and stairs. Right-click with dirt or sand to add ground to the terrain.
+  pickaxe. Iron ore (orange nuggets with metal flecks in dark rock in cliffs and caves, and rusty
+  boulders studded with orange nuggets) needs a stone pickaxe or better. Axes chop wood faster;
+  iron tools are the fastest. Placed blocks break back into their item.
+- **Building.** Right-click with a block (dirt, sand, log, planks, stone, stone bricks, smooth
+  stone, glass, wool, workbench, campfire, furnace) to place it on the face you aim at; a white
+  outline shows where it goes. Press B to choose the shape: a full block, half-height slab, slope,
+  stairs, roof prism or thin pillar. Slopes, stairs, prisms and furnaces turn to face the way you
+  look, and you can walk up slopes and stairs. Every shape has rounded edges. Dirt and sand are
+  placed as blocks too, in any shape.
 - **Crafting.** Basic recipes work anywhere; tools, bricks, armour and the wand need a
   workbench within 4.5 m, cooking, glass and the mana tonic need a campfire, and smelting iron
-  needs a furnace.
+  and smooth stone need a furnace (which also makes glass and cooks meat in batches).
 
   | Item                                  | Recipe                                                          |
   | ------------------------------------- | --------------------------------------------------------------- |
@@ -99,9 +102,16 @@ right to craft it once, shift-click to craft as many as you can.
   | Leather armour                        | 5 leather, at a workbench (35% less damage)                     |
   | Furnace                               | 8 stone, at a workbench                                         |
   | Iron ingot ×2                         | 2 iron ore, 1 log, at a furnace                                 |
+  | Smooth stone ×2                       | 2 stone, 1 log, at a furnace                                    |
+  | Glass ×3                              | 3 sand, 1 log, at a furnace                                     |
+  | Cooked meat ×3                        | 3 raw meat, 1 log, at a furnace                                 |
   | Iron pickaxe / axe / shovel / sword   | iron ingots + sticks, at a workbench (fastest, hardest hitting) |
   | Iron armour                           | 6 iron ingots, 2 leather, at a workbench (60% less damage)      |
+  | Bucket                                | 3 iron ingots, at a workbench                                   |
   | Bottle ×2                             | 1 glass, at a workbench                                         |
+  | Water filter                          | 4 planks, 3 sand, 1 glass, at a workbench                       |
+  | Clean water                           | 1 murky water at a water filter, or + 1 stick at a campfire     |
+  | Clean water ×3                        | 3 murky water, 1 log, at a furnace                              |
   | Crystal wand                          | 1 stick, 3 crystal, 1 feather, at a workbench                   |
   | Cooked meat                           | 1 raw meat, at a campfire                                       |
   | Glass                                 | 2 sand, at a campfire                                           |
@@ -113,21 +123,37 @@ right to craft it once, shift-click to craft as many as you can.
   and fields. Deer and rabbits run when you get close, others run once hit. Predators attack:
   wolves hunt in packs of two to four, bears roam the forests and hit very hard, boars charge if
   you come close, and cave spiders lurk in caves. Animals drop raw meat, leather, wool, feathers
-  and silk. Herds are topped back up over time, away from you.
+  and silk. Herds are topped back up over time, away from you. Herd animals drift back toward
+  their herd, everything steers around walls and keeps out of poured water and lava, and a predator
+  that can't get to you (you're up on blocks, or it makes no headway for a few seconds) gives up
+  for a while.
 - **Health, hunger, thirst, mana.** You have 150 health. Hunger and thirst drain over time
   (thirst faster when sprinting or near a volcano); at zero you start losing health, and when
-  fed and watered you heal. You start with bread, apples, cooked meat and three water bottles.
-  Right-click on a lake or the river to drink, or with an empty bottle to fill it. Falls of more
+  fed and watered you heal. You start with bread, apples, cooked meat and three bottles of clean
+  water. Right-click on a lake or the river to drink, or with an empty bottle to fill it with
+  murky water. Unpurified water makes you sick for a while (up to two minutes): thirst drains three
+  times as fast, you lose health every couple of seconds and don't heal, and the thirst bar turns
+  green. Purify murky water at a water filter (4 planks, 3 sand, 1 glass at a workbench), boil it
+  at a campfire (with a stick) or a furnace (three at a time with a log). Falls of more
   than about 5 m hurt, also when you land on a slope. Lava burns: standing in it costs 24 health
   a second, and you keep burning for a few seconds after you step out unless you jump into water.
   Mana refills over time and powers the crystal wand's bolts. When you die you respawn at the
   cave and keep your inventory.
-- **Weather** changes every few minutes between clear, cloudy, rain and storms with thunder and
-  lightning; it snows instead on high mountains. Rain darkens and wets the ground. Press K to
-  change it yourself.
+- **Water and lava flow.** Right-click water (or poured water) with a bucket to fill it, or a
+  lava flow or crater; right-click with a full bucket to pour it. Poured fluid falls and spreads
+  cell by cell (lava slower and not as far) and drains away when its source is gone. Dig a hole
+  next to the sea or a lake and the water runs in. Where water meets lava, the lava turns to
+  stone. Caves under land stay dry.
+- **Weather** changes on its own, one step at a time: clear skies cloud over, rain only starts
+  once the clouds have gathered, a thunderstorm eases back to rain, and each change builds up over
+  a minute or so. It snows instead on high mountains. Rain darkens and wets the ground. In
+  creative mode K steps through the weather by hand.
+- **Swimming.** In deep water you float with your head out; Space swims up and Shift dives. You
+  swim a front crawl when moving and tread water when still.
 - **Creative mode** (G): fly, no damage or hunger, instant breaking without tools, placing
   doesn't use up items, and the inventory shows every item to take stacks from (click it again
-  while holding a stack to throw that stack away).
+  while holding a stack to throw that stack away). It also has a spawner for every animal:
+  right-click the ground with one to make that animal appear there.
 
 ## Settings
 

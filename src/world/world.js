@@ -9,6 +9,7 @@ import { addVolcanoEffects } from './volcano.js';
 import { addClouds, placeVegetation, vegTiles } from './vegetation.js';
 import { clearGrass } from './grass.js';
 import { initBlocks, resetBlocks } from './blocks.js';
+import { resetFluids } from './fluids.js';
 import { animals, spawnAnimals } from '../animals/animals.js';
 import { bolts } from '../player/interaction.js';
 
@@ -68,7 +69,7 @@ function disposeWorld() {
   volcanoFx.length = 0;
   vegTiles.length = 0;
   animals.length = 0; bolts.length = 0;
-  resetBlocks();
+  resetBlocks(); resetFluids();
   clearGrass();
 }
 

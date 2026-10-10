@@ -288,6 +288,7 @@ check('placing stone blocks', R.build?.blocks?.filter((b) => b === 'stone').leng
 const onTop = R.standOnBlock && R.standOnBlock.feet - R.standOnBlock.blockTop;
 check('standing on a block', R.standOnBlock?.ground && onTop > -0.2 && Math.abs(onTop - Math.round(onTop)) < 0.2, R.standOnBlock);
 check('animals of several kinds', R.animals && Object.keys(R.animals).length >= 6, R.animals);
+check('wolves and bears roam the forests', R.animals?.wolf > 0 && R.animals?.bear > 0, R.animals);
 check('killing a chicken drops meat', R.attack?.killed && R.attack.meat > 0, R.attack);
 check('creative flight goes up', R.creative?.up > 1, R.creative);
 check('underwater detected', R.underwater?.under, R.underwater);

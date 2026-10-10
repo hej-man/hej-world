@@ -3,7 +3,9 @@ import { state } from '../state.js';
 import { PLAYER, SLOPE_Y, WORLD } from '../config.js';
 import { lantern } from '../render/scene.js';
 import { CELL, cellKey, chunksIn, obstacleGrid, terrainFns } from '../world/world.js';
-import { craterLavaAt, lavaAt } from '../world/volcano.js';
+import { craterLavaAt, lavaTouching } from '../world/volcano.js';
+import { sampleField } from '../terrain/material.js';
+import { fluidAt } from '../world/fluids.js';
 import { FOOT_OFFSET, player, respawn } from './character.js';
 import { animateCharacter } from './animation.js';
 import { inventoryOpen } from '../inventory/inventory.js';
@@ -107,20 +109,24 @@ function collideCapsule() {
 
 
 function stepPhysics(dt, inputDir, speed) {
-  const W = Math.max(terrainFns.waterAt(player.position.x, player.position.z), craterLavaAt(player.position.x, player.position.z));
   const feet = player.position.y - FOOT_OFFSET;
+  // water and lava you can swim in: the sea, lakes, the crater lakes and poured fluid cells
+  const fl = fluidAt(player.position.x, feet + 0.05, player.position.z);
+  const W = Math.max(terrainFns.waterAt(player.position.x, player.position.z), craterLavaAt(player.position.x, player.position.z), fl ? fl.top : -Infinity);
   const depth = W - feet;
   player.inWater = depth > 0.3;
   const swimming = depth > 1.25;
+  player.swimDepth = depth; player.swimming = swimming && !state.creative; // for the swimming animation
 
   // gravity (and buoyancy when swimming); creative mode flies
   if (state.creative) {
     const up = (keys.Space ? 1 : 0) - (keys.ShiftLeft || keys.ShiftRight ? 1 : 0);
     player.velocity.y += (up * PLAYER.flySpeed * 0.8 - player.velocity.y) * (1 - Math.exp(-10 * dt));
   } else if (swimming) {
-    player.velocity.y += (PLAYER.gravity * 0.15) * dt;
-    player.velocity.y *= 1 - Math.min(1, dt * 2.5);
-    if (keys.Space) player.velocity.y = Math.max(player.velocity.y, 3.2);
+    // you float with your head out of the water; Space swims up, Shift dives
+    const dive = keys.ShiftLeft || keys.ShiftRight;
+    const want = keys.Space ? 3.2 : dive ? -2.6 : THREE.MathUtils.clamp((depth - 1.45) * 2.5, -2, 2.2);
+    player.velocity.y += (want - player.velocity.y) * Math.min(1, dt * 3);
   } else {
     player.velocity.y += PLAYER.gravity * dt;
   }
@@ -159,6 +165,19 @@ function stepPhysics(dt, inputDir, speed) {
   if (contact.ceiling && player.velocity.y > 0) player.velocity.y = 0;
 }
 
+// Collision only pushes you out of ground surfaces you touch; if the middle of your body ever ends
+// up inside solid ground (the ground was changed right where you stand), lift you to open air.
+function unbury() {
+  const { x, z } = player.position, mid = player.position.y - PLAYER.segment * 0.5;
+  if (sampleField(x, mid, z) <= 0.3) return;
+  for (let dy = 0.5; dy <= 12; dy += 0.5) {
+    if (sampleField(x, mid + dy, z) <= 0 && sampleField(x, player.position.y + dy + 0.4, z) <= 0 && sampleField(x, mid + dy - PLAYER.segment * 0.5 - 0.3, z) <= 0) {
+      player.position.y += dy; player.velocity.set(0, 0, 0);
+      return;
+    }
+  }
+}
+
 const _fwd = new THREE.Vector3(), _right = new THREE.Vector3(), _input = new THREE.Vector3();
 
 export function updatePlayer(dt) {
@@ -174,7 +193,7 @@ export function updatePlayer(dt) {
   const moving = _input.lengthSq() > 0;
   if (moving) _input.normalize();
 
-  player.sprinting = (keys.ShiftLeft || keys.ShiftRight) && moving && !state.creative;
+  player.sprinting = (keys.ShiftLeft || keys.ShiftRight) && moving && !state.creative && !player.swimming;
   let speed = state.creative ? PLAYER.flySpeed : player.sprinting ? PLAYER.sprintSpeed : PLAYER.walkSpeed;
   if (player.inWater && !state.creative) speed *= 0.55;
   if (player.inLava && !state.creative) speed *= 0.5;
@@ -191,8 +210,10 @@ export function updatePlayer(dt) {
   for (let i = 0; i < steps; i++) stepPhysics(dt / steps, _input, speed);
 
   if (player.position.y < -20) respawn();
+  unbury();
   // lava burns while you're in it (and a little longer); creative mode just bounces you out
-  player.inLava = lavaAt(player.position.x, player.position.y - FOOT_OFFSET, player.position.z);
+  const feet = player.position.y - FOOT_OFFSET;
+  player.inLava = lavaTouching(player.position.x, feet, player.position.z) || fluidAt(player.position.x, feet + 0.05, player.position.z)?.type === 'lava';
   if (player.inLava) {
     if (state.creative) player.velocity.y = 12;
     else state.burning = Math.max(state.burning, 3);

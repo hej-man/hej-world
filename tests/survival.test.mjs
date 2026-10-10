@@ -107,9 +107,23 @@ R.iron = await log('iron', async () => {
   G.craft(find('iron_ingot'), true);
   const ingots = count('iron_ingot');
   G.craft(find('iron_pickaxe'), false);
+  // the furnace's other recipes
+  game.addItem('stone', 2);
+  game.addItem('sand', 3);
+  game.addItem('log', 2);
+  G.craft(
+    R.find((r) => r.out === 'smooth_stone'),
+    false,
+  );
+  G.craft(
+    R.find((r) => r.out === 'glass' && r.at === 'furnace'),
+    false,
+  );
+  const smooth = count('smooth_stone'),
+    glass = count('glass');
   const stoneHand = G.breakTime('stone', null),
     ironHand = G.breakTime('iron', null);
-  return { ingots, ironPick: count('iron_pickaxe'), stoneHand, ironHand };
+  return { ingots, ironPick: count('iron_pickaxe'), smooth, glass, stoneHand, ironHand };
 });
 await page.evaluate(() => {
   const G = window.__game;
@@ -142,10 +156,90 @@ R.shapes = await log('shapes', async () => {
   G.setView(true);
   G.setLook(Math.PI, -0.3);
   out.groups = Object.keys(G.blockGroups).length;
+  // every shape is drawn with rounded edges (many more triangles than a sharp box's 12)
+  out.tris = Object.fromEntries(
+    Object.entries(G.blockGroups).map(([k, g]) => [k.split('|')[1], g.meshes[0].geometry.attributes.position.count / 3]),
+  );
   return out;
 });
 await page.waitForTimeout(400);
 await shot('shapes');
+
+// 5a. no water under land: caves below sea level under a hill are dry, the open sea isn't
+R.dryCaves = await log('dryCaves', () => {
+  const T = window.__game.terrain();
+  let hill = null,
+    sea = null;
+  for (let x = 20; x < 1000 && !(hill && sea); x += 16)
+    for (let z = 20; z < 1000 && !(hill && sea); z += 16) {
+      const h = T.surfaceHeight(x, z);
+      if (!hill && h > 40) hill = { x, z, h, water: T.waterAt(x, z) };
+      if (!sea && T.waterAt(x, z) > h + 1) sea = { x, z, h, water: T.waterAt(x, z) };
+    }
+  return { hill, sea };
+});
+
+// 5b. dirt is placed as a block in the chosen shape, and a player buried in the ground is lifted out
+R.dirt = await log('dirt', async () => {
+  const G = window.__game,
+    f = flatSpot();
+  put(f.x, f.y, f.z);
+  await waitGame(0.3);
+  game.addItem('dirt', 4);
+  const slot = game.slots.findIndex((s) => s && s.id === 'dirt'),
+    tmp = game.slots[1];
+  game.slots[1] = game.slots[slot];
+  game.slots[slot] = tmp;
+  G.selectSlot(1);
+  G.setShape('slope');
+  aimAt(f.x + 2.5, f.y, f.z + 0.3);
+  await waitGame(0.2);
+  const before = G.blocks.size;
+  G.useItem(G.target());
+  const placed = [...G.blocks.values()].filter((b) => b.type === 'dirt').map((b) => b.shape);
+  G.setShape('block');
+  // bury the player 3 m under the ground and see that they come back up
+  put(f.x, f.y - 3, f.z);
+  await waitGame(0.5);
+  const feet = G.player.position.y - 1.45;
+  return { added: G.blocks.size - before, placed, feetAboveGround: +(feet - f.y).toFixed(2) };
+});
+
+// 5c. liquids: poured water spreads and drains, lava flows slower and hardens where water meets it,
+// and creative spawners make animals
+R.liquids = await log('liquids', async () => {
+  const G = window.__game,
+    f = flatSpot();
+  put(f.x, f.y, f.z);
+  const x = Math.floor(f.x) + 6,
+    z = Math.floor(f.z),
+    y = Math.floor(G.groundAt(x + 0.5, z + 0.5).point.y) + 1;
+  G.addSource('water', x, y, z);
+  await waitGame(2.5);
+  const water = [...G.fluids.values()].filter((c) => c.type === 'water').length;
+  G.addSource('lava', x + 3, y + 1, z);
+  await waitGame(3);
+  const lava = [...G.fluids.values()].filter((c) => c.type === 'lava').length;
+  const stone = [...G.blocks.values()].filter((b) => b.type === 'stone' && Math.abs(b.x - x) < 8 && Math.abs(b.z - z) < 8).length;
+  return { water, lava, stone };
+});
+R.spawn = await log('spawn', async () => {
+  const G = window.__game,
+    before = G.animals.length;
+  G.setCreative(true);
+  game.addItem('spawn_cow', 1);
+  const slot = game.slots.findIndex((s) => s && s.id === 'spawn_cow'),
+    tmp = game.slots[1];
+  game.slots[1] = game.slots[slot];
+  game.slots[slot] = tmp;
+  G.selectSlot(1);
+  const p = G.player.position;
+  aimAt(p.x + 3, p.y - 1.45, p.z + 0.5);
+  await waitGame(0.2);
+  G.useItem(G.target());
+  G.setCreative(false);
+  return { added: G.animals.length - before, last: G.animals[G.animals.length - 1]?.kind };
+});
 
 // 6. a bear attacks
 R.bear = await log('bear', async () => {
@@ -227,6 +321,14 @@ check('lava flows burn', R.lava?.flows > 0 && R.lava.inside?.burning > 0 && R.la
 check('drinking restores thirst', R.drink?.thirst > 50, R.drink);
 check('smelting iron and an iron pickaxe', R.iron?.ingots > 0 && R.iron.ironPick === 1, R.iron);
 check('every block shape places', R.shapes && ['block', 'slab', 'slope', 'stairs', 'prism', 'pillar'].every((k) => R.shapes[k]), R.shapes);
+check('every shape has rounded edges', R.shapes?.tris && Object.values(R.shapes.tris).every((n) => n > 60), R.shapes?.tris);
+check('furnace makes smooth stone and glass', R.iron?.smooth > 0 && R.iron.glass > 0, R.iron);
+check('dirt places as a shaped block', R.dirt?.added === 1 && R.dirt.placed.includes('slope'), R.dirt);
+check('no water under hills', R.dryCaves?.hill?.water < -100 && R.dryCaves.sea?.water > 0, R.dryCaves);
+check('poured water spreads', R.liquids?.water > 5, R.liquids);
+check('water hardens lava into stone', R.liquids?.stone > 0, R.liquids);
+check('creative spawner makes an animal', R.spawn?.added === 1 && R.spawn.last === 'cow', R.spawn);
+check('a buried player is lifted out', R.dirt?.feetAboveGround > -0.5, R.dirt);
 check('bears chase and bite', R.bear?.hpLost > 0, R.bear);
 check('weather turns stormy', R.storm?.state === 'storm', R.storm);
 check('main menu and continue', R.menu?.inMenu === 'menu' && R.menu.after === 'playing', R.menu);

@@ -2,10 +2,10 @@ import { state } from '../state.js';
 import { camera, csm, lantern, renderer } from '../render/scene.js';
 import { player, respawn } from '../player/character.js';
 import { inventoryOpen, selectSlot, setInventoryOpen } from '../inventory/inventory.js';
-import { SHAPES, SHAPE_NAMES } from '../world/blocks.js';
+import { SHAPES, SHAPE_NAMES, TILTS } from '../world/blocks.js';
 import { setCreative } from '../player/survival.js';
 import { mouse } from '../player/interaction.js';
-import { WEATHER, nextWeather, weather } from '../effects/weather.js';
+import { WEATHER, cycleWeather, weather } from '../effects/weather.js';
 import { setSound, sound } from '../effects/sound.js';
 import { toast } from './hud.js';
 import { $, clampPitch, gameState, updateOverlay } from './menu.js';
@@ -60,9 +60,16 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyR') respawn();
   if (e.code === 'KeyB') {
     state.buildShape = SHAPES[(SHAPES.indexOf(state.buildShape) + 1) % SHAPES.length];
-    toast(`Building shape: ${SHAPE_NAMES[state.buildShape]} (B to change)`);
+    toast(`Building shape: ${SHAPE_NAMES[state.buildShape]} (B to change, T to tip it)`);
   }
-  if (e.code === 'KeyK') { nextWeather(); toast(`Weather: ${WEATHER[weather.state].name}`); }
+  if (e.code === 'KeyT') {
+    state.buildTilt = (state.buildTilt + 1) % TILTS.length;
+    toast(`Place blocks ${TILTS[state.buildTilt]} (T to change; they also turn the way you look)`);
+  }
+  if (e.code === 'KeyK') {
+    if (state.creative) { cycleWeather(); toast(`Weather: ${WEATHER[weather.state].name}`); }
+    else toast('The weather changes on its own in survival (K sets it in creative)');
+  }
   if (e.code === 'KeyM') { setSound(!sound.on); $('sound-select').value = sound.on ? 'on' : 'off'; toast(sound.on ? 'Sound on' : 'Sound off'); }
 });
 window.addEventListener('keyup', (e) => { keys[e.code] = false; });

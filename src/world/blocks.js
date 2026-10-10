@@ -5,20 +5,26 @@ import { hash1, mulberry32 } from '../noise.js';
 import { canvasTexture } from './plant-looks.js';
 import { litMaterial } from '../render/scene.js';
 import { addObstacle, gridRemove, obstacleGrid, world } from './world.js';
+import { roundedBox, shapeGeometry, sharpShape } from './shapes.js';
+export { SHAPES, SHAPE_NAMES, shapeGeometry } from './shapes.js';
 
 // ---------------------------------------------------------------------------
-// Placed blocks: 1 m cubes on a grid, drawn with one InstancedMesh per block type
+// Placed blocks: 1 m cells on a grid, drawn with one InstancedMesh per block type and shape
 // ---------------------------------------------------------------------------
 export const BLOCKS = {
+  dirt:         { name: 'Dirt', colors: [0x7a5a3a], mat: 'dirt' },
+  sand:         { name: 'Sand', colors: [0xd9c793], mat: 'sand' },
   log:          { name: 'Log', colors: [0x7a5532, 0xc29a64], mat: 'wood' },  // [sides, top]
   planks:       { name: 'Planks', colors: [0xb8894d], mat: 'wood' },
   stone:        { name: 'Stone', colors: [0x86837e], mat: 'stone' },
   stone_bricks: { name: 'Stone bricks', colors: [0xa19e98], mat: 'stone' },
+  smooth_stone: { name: 'Smooth stone', colors: [0xb4b1ab], mat: 'stone' },
   glass:        { name: 'Glass', colors: [0xcdeaf5], mat: 'soft', glass: true },
   wool:         { name: 'Wool', colors: [0xf2efe6], mat: 'soft' },
-  workbench:    { name: 'Workbench', colors: [0x8a6238, 0xd0a466], mat: 'wood', station: true },
+  workbench:    { name: 'Workbench', colors: [0x5a2f1c, 0xd8bf8f], mat: 'wood', station: true },
   campfire:     { name: 'Campfire', mat: 'soft', solid: false, station: true },
   furnace:      { name: 'Furnace', mat: 'stone', station: true, facing: true },
+  purifier:     { name: 'Water filter', mat: 'wood', station: true },
 };
 const MAX_BLOCKS = 4096;       // per block type and shape
 export const blockGroups = {};         // "type|shape" -> { meshes: InstancedMesh[], keys: string[] }
@@ -26,87 +32,20 @@ export const blocks = new Map();       // "x,y,z" -> { type, shape, x, y, z, idx
 export const blockKey = (x, y, z) => `${x},${y},${z}`;
 export function resetBlocks() { blocks.clear(); for (const k in blockGroups) delete blockGroups[k]; }
 
-// Shapes you can build with; B switches the shape of the blocks you place. Slopes, stairs and roof
-// prisms turn to face the way you look (a slope rises away from you).
-export const SHAPES = ['block', 'slab', 'slope', 'stairs', 'prism', 'pillar'];
-export const SHAPE_NAMES = { block: 'Block', slab: 'Half slab', slope: 'Slope', stairs: 'Stairs', prism: 'Roof prism', pillar: 'Pillar' };
-
-
-// Merges [geometry, colour] pairs into one flat-shaded, vertex-coloured geometry.
+// Merges [geometry, colour] pairs into one vertex-coloured geometry, keeping each part's normals.
 function mergeColored(parts) {
-  const pos = [], col = [], c = new THREE.Color();
+  const pos = [], nor = [], col = [], c = new THREE.Color();
   for (const [g, hex] of parts) {
     const ng = g.index ? g.toNonIndexed() : g;
-    const p = ng.attributes.position.array;
+    pos.push(...ng.attributes.position.array); nor.push(...ng.attributes.normal.array);
     c.set(hex);
-    for (let i = 0; i < p.length; i += 3) { pos.push(p[i], p[i + 1], p[i + 2]); col.push(c.r, c.g, c.b); }
+    for (let i = 0; i < ng.attributes.position.count; i++) col.push(c.r, c.g, c.b);
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
   geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
-  geo.computeVertexNormals();
   return geo;
-}
-
-// Triangles [[a, b, c], ...] -> geometry with flat normals; each triangle is turned to face away from
-// `inside`, so the faces don't have to be listed in a particular winding order.
-function trianglesGeometry(tris, inside) {
-  const pos = [], A = new THREE.Vector3(), B = new THREE.Vector3(), C = new THREE.Vector3(), n = new THREE.Vector3(), m = new THREE.Vector3();
-  for (const [a, b, c] of tris) {
-    A.fromArray(a); B.fromArray(b); C.fromArray(c);
-    n.subVectors(C, B).cross(m.subVectors(A, B));
-    m.copy(A).add(B).add(C).divideScalar(3).sub(inside);
-    if (n.dot(m) < 0) pos.push(...a, ...c, ...b); else pos.push(...a, ...b, ...c);
-  }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.computeVertexNormals();
-  return g;
-}
-function mergeGeometries(list) {
-  const out = { position: [], normal: [] };
-  for (let g of list) { g = g.index ? g.toNonIndexed() : g; for (const k in out) out[k].push(...g.attributes[k].array); }
-  const g = new THREE.BufferGeometry();
-  for (const k in out) g.setAttribute(k, new THREE.Float32BufferAttribute(out[k], 3));
-  return g;
-}
-// Texture coordinates projected along each face's main axis; sides use the left half of a block's
-// texture and tops/bottoms the right half (a log's rings, a workbench's top).
-function boxUVs(g) {
-  const p = g.attributes.position, uv = new Float32Array(p.count * 2), a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), n = new THREE.Vector3();
-  for (let i = 0; i < p.count; i += 3) {
-    a.fromBufferAttribute(p, i); b.fromBufferAttribute(p, i + 1); c.fromBufferAttribute(p, i + 2);
-    n.subVectors(c, b).cross(b.clone().sub(a)).normalize();
-    const ax = Math.abs(n.x), ay = Math.abs(n.y), az = Math.abs(n.z);
-    for (let k = 0; k < 3; k++) {
-      const v = [a, b, c][k];
-      let u, w, top = false;
-      if (ay >= 0.75) { u = v.x + 0.5; w = v.z + 0.5; top = true; }
-      else if (ax > az) { u = v.z + 0.5; w = v.y + 0.5; }
-      else { u = v.x + 0.5; w = v.y + 0.5; }
-      u = 0.01 + Math.min(1, Math.max(0, u)) * 0.98;
-      uv[(i + k) * 2] = top ? 0.5 + u * 0.5 : u * 0.5; uv[(i + k) * 2 + 1] = Math.min(1, Math.max(0, w));
-    }
-  }
-  g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
-  return g;
-}
-const _shapeGeos = {};
-export function shapeGeometry(shape) {
-  if (_shapeGeos[shape]) return _shapeGeos[shape];
-  const l = -0.5, h = 0.5;
-  let g;
-  if (shape === 'slab') g = new THREE.BoxGeometry(1, 0.5, 1).translate(0, -0.25, 0).toNonIndexed();
-  else if (shape === 'pillar') g = new THREE.CylinderGeometry(0.3, 0.3, 1, 10).toNonIndexed();
-  else if (shape === 'stairs') g = mergeGeometries([new THREE.BoxGeometry(1, 0.5, 1).translate(0, -0.25, 0), new THREE.BoxGeometry(1, 0.5, 0.5).translate(0, 0.25, -0.25)]);
-  else if (shape === 'slope' || shape === 'prism') {
-    // bottom corners A B (front) C D (back); top edge E F: at the back for a slope, along the middle for a prism
-    const A = [l, l, h], B = [h, l, h], C = [h, l, l], D = [l, l, l];
-    const zt = shape === 'slope' ? l : 0, E = [l, h, zt], F = [h, h, zt];
-    const tris = [[A, B, C], [A, C, D], [A, B, F], [A, F, E], [D, C, F], [D, F, E], [A, D, E], [B, C, F]];
-    g = trianglesGeometry(tris, new THREE.Vector3(0, -0.2, shape === 'slope' ? -0.2 : 0));
-  } else g = new THREE.BoxGeometry(1, 1, 1).toNonIndexed();
-  return (_shapeGeos[shape] = boxUVs(g));
 }
 
 // Block textures, drawn once on canvases: [side | top], 128 x 128 pixels each.
@@ -150,16 +89,50 @@ function drawBlockTexture(type) {
     const halves = (fn) => { fn(0, H); fn(H, H); };
     switch (type) {
       case 'planks': halves((x0, w) => planks(x0, w)); break;
-      case 'workbench':
-        planks(0, H, 28, 44);
-        g.fillStyle = 'rgba(40, 30, 20, 0.85)'; // a saw and a hammer hanging on the side
-        g.fillRect(20, 36, 44, 10); g.beginPath(); g.moveTo(64, 36); g.lineTo(84, 36); g.lineTo(64, 58); g.fill();
-        g.fillRect(96, 30, 6, 46); g.fillRect(86, 28, 26, 10);
-        planks(H, H, 34, 58);
-        g.strokeStyle = 'rgba(50, 32, 16, 0.8)'; g.lineWidth = 2; // crafting grid on top
-        for (let k = 1; k < 3; k++) { g.beginPath(); g.moveTo(H + 20 + k * 29, 20); g.lineTo(H + 20 + k * 29, H - 20); g.moveTo(H + 20, 20 + k * 29); g.lineTo(H + 107, 20 + k * 29); g.stroke(); }
-        g.strokeRect(H + 20, 20, 87, 87);
+      case 'workbench': {
+        // sides: dark red-brown frame with corner legs, a drawer and a tool rack, so it can't be
+        // mistaken for planks; top: a pale worn slab with a carved crafting grid and a tool on it
+        g.fillStyle = '#5a2f1c'; g.fillRect(0, 0, H, H);
+        for (let i = 0; i < 40; i++) { g.strokeStyle = `rgba(30, 12, 6, ${0.2 + rand() * 0.3})`; g.lineWidth = 1; const y = rand() * H; g.beginPath(); g.moveTo(0, y); g.lineTo(H, y + (rand() - 0.5) * 4); g.stroke(); }
+        g.fillStyle = '#3a1d10'; g.fillRect(0, 0, 14, H); g.fillRect(H - 14, 0, 14, H); g.fillRect(0, 0, H, 12); // legs and top rail
+        g.fillStyle = '#7a4a2a'; g.fillRect(24, 66, H - 48, 34); g.strokeStyle = '#2a120a'; g.lineWidth = 3; g.strokeRect(24, 66, H - 48, 34); // drawer
+        g.fillStyle = '#c9b48a'; g.fillRect(H / 2 - 10, 80, 20, 5); // drawer handle
+        g.fillStyle = '#2b2b2e'; for (const [x, y] of [[2, 2], [H - 12, 2], [2, H - 12], [H - 12, H - 12]]) g.fillRect(x, y, 10, 10); // iron corner brackets
+        g.fillStyle = '#9aa0a6'; g.fillRect(30, 22, 30, 6); g.fillStyle = '#6b3b1e'; g.fillRect(58, 20, 14, 10); // a chisel on the rack
+        g.fillStyle = '#9aa0a6'; g.fillRect(84, 18, 18, 12); g.fillStyle = '#6b3b1e'; g.fillRect(91, 30, 5, 26); // and a hammer
+        speckle(0, H, 0.15);
+        g.fillStyle = '#d8bf8f'; g.fillRect(H, 0, H, H);
+        for (let i = 0; i < 30; i++) { g.strokeStyle = `rgba(150, 110, 60, ${0.15 + rand() * 0.25})`; g.lineWidth = 1 + rand(); const y = rand() * H; g.beginPath(); g.moveTo(H, y); g.lineTo(S, y + (rand() - 0.5) * 6); g.stroke(); }
+        g.strokeStyle = '#5a2f1c'; g.lineWidth = 10; g.strokeRect(H + 5, 5, H - 10, H - 10); // dark border, like the frame
+        g.strokeStyle = 'rgba(90, 47, 28, 0.9)'; g.lineWidth = 3; // carved 3 x 3 crafting grid
+        for (let k = 1; k < 3; k++) { g.beginPath(); g.moveTo(H + 24 + k * 27, 24); g.lineTo(H + 24 + k * 27, 105); g.moveTo(H + 24, 24 + k * 27); g.lineTo(H + 105, 24 + k * 27); g.stroke(); }
+        g.strokeRect(H + 24, 24, 81, 81);
+        g.fillStyle = 'rgba(160, 60, 40, 0.55)'; g.fillRect(H + 53, 53, 23, 23); // a red mark in the middle square
         break;
+      }
+      case 'dirt': halves((x0, w) => {
+        g.fillStyle = '#6e4f33'; g.fillRect(x0, 0, w, H);
+        for (let i = 0; i < 260; i++) { // clods and little stones
+          const l = 20 + rand() * 22, stone = rand() < 0.12;
+          g.fillStyle = stone ? `hsl(30, 6%, ${45 + rand() * 20}%)` : `hsl(${24 + rand() * 10}, 38%, ${l}%)`;
+          g.beginPath(); g.ellipse(x0 + rand() * w, rand() * H, stone ? 2 + rand() * 3 : 3 + rand() * 6, stone ? 2 + rand() * 2 : 2 + rand() * 4, rand() * 3, 0, Math.PI * 2); g.fill();
+        }
+        speckle(x0, w, 0.3);
+      }); break;
+      case 'sand': halves((x0, w) => {
+        g.fillStyle = '#d8c48e'; g.fillRect(x0, 0, w, H);
+        for (let k = 0; k < 7; k++) { // faint ripples
+          g.strokeStyle = 'rgba(160, 130, 80, 0.18)'; g.lineWidth = 2;
+          const y = 8 + k * 17 + rand() * 6; g.beginPath(); for (let x = 0; x <= w; x += 4) g.lineTo(x0 + x, y + Math.sin(x * 0.07 + k) * 3); g.stroke();
+        }
+        speckle(x0, w, 0.18); speckle(x0, w, 0.25, true);
+      }); break;
+      case 'smooth_stone': halves((x0, w) => {
+        const grd = g.createLinearGradient(x0, 0, x0 + w, H); grd.addColorStop(0, '#b9b6b0'); grd.addColorStop(1, '#a29f99');
+        g.fillStyle = grd; g.fillRect(x0, 0, w, H);
+        speckle(x0, w, 0.1); speckle(x0, w, 0.1, true);
+        g.strokeStyle = 'rgba(70, 68, 64, 0.5)'; g.lineWidth = 3; g.strokeRect(x0 + 6, 6, w - 12, H - 12); // a chiselled border
+      }); break;
       case 'log': {
         g.fillStyle = '#5e4129'; g.fillRect(0, 0, H, H);
         for (let i = 0; i < 26; i++) { // bark furrows
@@ -211,7 +184,7 @@ export function blockMaterial(type) {
   const glass = !!BLOCKS[type].glass, map = drawBlockTexture(type);
   map.anisotropy = 8;
   return (_blockMats[type] = new THREE.MeshStandardMaterial({
-    map, bumpMap: map, bumpScale: glass ? 0 : 1.6, roughness: glass ? 0.05 : type === 'stone' || type === 'stone_bricks' ? 0.9 : 0.8,
+    map, bumpMap: map, bumpScale: glass ? 0 : 1.6, roughness: glass ? 0.05 : type === 'smooth_stone' ? 0.55 : type === 'stone' || type === 'stone_bricks' ? 0.9 : 0.8,
     transparent: glass, depthWrite: !glass, side: glass ? THREE.DoubleSide : THREE.FrontSide,
   }));
 }
@@ -235,14 +208,24 @@ function campfireParts() {
 }
 
 // A stone furnace with a glowing fire door on its front (+z) and a little chimney; base at y = 0.
+// Built from rounded boxes like the placed blocks.
 function furnaceParts() {
-  const B = (w, h, d, x, y, z) => new THREE.BoxGeometry(w, h, d).translate(x, y, z);
   const base = new THREE.Mesh(mergeColored([
-    [B(1, 0.92, 1, 0, 0.46, 0), 0x86827c], [B(1.02, 0.1, 1.02, 0, 0.95, 0), 0x6f6c67],
-    [B(0.56, 0.4, 0.04, 0, 0.36, 0.5), 0x2a2522], [B(0.26, 0.34, 0.26, 0.25, 1.15, -0.2), 0x75716b],
+    [roundedBox(1, 0.9, 1, 0, 0.45, 0), 0x86827c], [roundedBox(1, 0.16, 1, 0, 0.92, 0), 0x6f6c67],
+    [roundedBox(0.62, 0.46, 0.18, 0, 0.36, 0.43), 0x2a2522], [roundedBox(0.28, 0.36, 0.28, 0.25, 1.16, -0.2), 0x75716b],
   ]), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 }));
-  const glow = new THREE.Mesh(B(0.46, 0.22, 0.03, 0, 0.3, 0.515), new THREE.MeshStandardMaterial({ color: 0xff8a30, emissive: 0xff5a10, emissiveIntensity: 2 }));
+  const glow = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.26, 0.02).translate(0, 0.33, 0.523), new THREE.MeshStandardMaterial({ color: 0xff8a30, emissive: 0xff5a10, emissiveIntensity: 2 }));
   return [base, glow];
+}
+
+// A water filter: a wooden barrel of sand and charcoal under a glass jar of water, with a tap; base at y = 0.
+function purifierParts() {
+  const base = new THREE.Mesh(mergeColored([
+    [roundedBox(0.8, 0.7, 0.8, 0, 0.35, 0), 0x8a5a32], [roundedBox(0.84, 0.08, 0.84, 0, 0.18, 0), 0x55575a], [roundedBox(0.84, 0.08, 0.84, 0, 0.56, 0), 0x55575a],
+    [roundedBox(0.66, 0.06, 0.66, 0, 0.71, 0), 0xd9c38f], [roundedBox(0.1, 0.1, 0.18, 0, 0.2, 0.45), 0x9aa0a6],
+  ]), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85 }));
+  const jar = new THREE.Mesh(roundedBox(0.5, 0.5, 0.5, 0, 0.99, 0), new THREE.MeshStandardMaterial({ color: 0x8fd0f0, roughness: 0.1, transparent: true, opacity: 0.55, depthWrite: false }));
+  return [base, jar];
 }
 
 // The instanced meshes for one block type in one shape, made the first time one is placed.
@@ -250,7 +233,7 @@ function blockGroup(type, shape) {
   const k = `${type}|${shape}`;
   if (blockGroups[k]) return blockGroups[k];
   const def = BLOCKS[type];
-  const templates = type === 'campfire' ? campfireParts() : type === 'furnace' ? furnaceParts() : [new THREE.Mesh(shapeGeometry(shape), blockMaterial(type))];
+  const templates = type === 'campfire' ? campfireParts() : type === 'furnace' ? furnaceParts() : type === 'purifier' ? purifierParts() : [new THREE.Mesh(shapeGeometry(shape), blockMaterial(type))];
   const meshes = templates.map((t) => {
     const im = new THREE.InstancedMesh(t.geometry, t.material, MAX_BLOCKS);
     im.setColorAt(0, new THREE.Color(1, 1, 1));
@@ -266,18 +249,24 @@ function blockGroup(type, shape) {
 export function initBlocks() {}
 
 // Collision shapes for a placed block, in world space: boxes, or triangles for slopes and prisms.
+// Boxes are given in the block's own space (-0.5..0.5) and turned with it; turns are quarter turns,
+// so a turned box is still an axis-aligned box.
+const LOCAL_BOXES = {
+  block: [[-0.5, -0.5, -0.5, 0.5, 0.5, 0.5]],
+  slab: [[-0.5, -0.5, -0.5, 0.5, 0, 0.5]],
+  pillar: [[-0.3, -0.5, -0.3, 0.3, 0.5, 0.3]],
+  stairs: [[-0.5, -0.5, -0.5, 0.5, 0, 0.5], [-0.5, 0, -0.5, 0.5, 0.5, 0]], // the upper step on the local -z half
+};
+const _ba = new THREE.Vector3(), _bb = new THREE.Vector3();
 function blockObstacles(shape, x, y, z, m) {
-  const box = (x0, y0, z0, x1, y1, z1) => ({ type: 'box', x: x + 0.5, z: z + 0.5, min: new THREE.Vector3(x0, y0, z0), max: new THREE.Vector3(x1, y1, z1) });
-  if (shape === 'slab') return [box(x, y, z, x + 1, y + 0.5, z + 1)];
-  if (shape === 'pillar') return [box(x + 0.2, y, z + 0.2, x + 0.8, y + 1, z + 0.8)];
-  if (shape === 'stairs') {
-    // the upper step sits on the local -z half, turned with the block
-    const c = new THREE.Vector3(0, 0.25, -0.25).applyMatrix4(m), e = new THREE.Vector3(0.5, 0.25, 0.25).transformDirection(m);
-    const ex = Math.abs(e.x) > Math.abs(e.z) ? 0.5 : 0.25, ez = 0.75 - ex;
-    return [box(x, y, z, x + 1, y + 0.5, z + 1), box(c.x - ex, y + 0.5, c.z - ez, c.x + ex, y + 1, c.z + ez)];
-  }
+  if (LOCAL_BOXES[shape]) return LOCAL_BOXES[shape].map(([x0, y0, z0, x1, y1, z1]) => {
+    _ba.set(x0, y0, z0).applyMatrix4(m); _bb.set(x1, y1, z1).applyMatrix4(m);
+    const min = _ba.clone().min(_bb), max = _ba.clone().max(_bb);
+    for (const v of [min, max]) v.set(Math.round(v.x * 1000) / 1000, Math.round(v.y * 1000) / 1000, Math.round(v.z * 1000) / 1000);
+    return { type: 'box', x: x + 0.5, z: z + 0.5, min, max };
+  });
   if (shape === 'slope' || shape === 'prism') {
-    const p = shapeGeometry(shape).attributes.position, tris = [];
+    const p = sharpShape(shape).attributes.position, tris = [];
     for (let i = 0; i < p.count; i += 3) {
       const t = new ExtendedTriangle();
       t.a.fromBufferAttribute(p, i).applyMatrix4(m); t.b.fromBufferAttribute(p, i + 1).applyMatrix4(m); t.c.fromBufferAttribute(p, i + 2).applyMatrix4(m);
@@ -286,11 +275,16 @@ function blockObstacles(shape, x, y, z, m) {
     }
     return [{ type: 'tris', x: x + 0.5, z: z + 0.5, tris, min: new THREE.Vector3(x, y, z), max: new THREE.Vector3(x + 1, y + 1, z + 1) }];
   }
-  return [box(x, y, z, x + 1, y + 1, z + 1)];
+  return blockObstacles('block', x, y, z, m);
 }
 
+// How a block can be tipped before placing (T): upright, on its side (lying along the way you look),
+// or upside down. The way you look also turns it in quarter turns.
+export const TILTS = ['upright', 'on its side', 'upside down'];
+const _tilt = new THREE.Matrix4();
+
 const _bm = new THREE.Matrix4(), _bc = new THREE.Color();
-export function placeBlock(type, x, y, z, shape = 'block') {
+export function placeBlock(type, x, y, z, shape = 'block', tilt = 0) {
   const def = BLOCKS[type];
   if (def.station || def.solid === false) shape = 'block';
   const key = blockKey(x, y, z), bt = blockGroup(type, shape);
@@ -298,9 +292,10 @@ export function placeBlock(type, x, y, z, shape = 'block') {
   const idx = bt.keys.length;
   // campfires get a random turn; furnaces, slopes, stairs and prisms turn with the way you look
   const facing = Math.round(state.yaw / (Math.PI / 2)) * (Math.PI / 2);
-  const turn = type === 'campfire' ? hash1(x + z * 7) * 6 : def.facing || ['slope', 'stairs', 'prism'].includes(shape) ? facing : 0;
-  const based = type === 'campfire' || type === 'furnace'; // these models stand on y = 0 instead of being centred
-  _bm.makeRotationY(turn).setPosition(x + 0.5, based ? y : y + 0.5, z + 0.5);
+  if (def.station || def.solid === false) tilt = 0;
+  const turn = type === 'campfire' ? hash1(x + z * 7) * 6 : def.facing || shape !== 'block' || tilt ? facing : 0;
+  const based = type === 'campfire' || type === 'furnace' || type === 'purifier'; // these models stand on y = 0 instead of being centred
+  _bm.makeRotationY(turn).multiply(_tilt.makeRotationX(tilt === 1 ? Math.PI / 2 : tilt === 2 ? Math.PI : 0)).setPosition(x + 0.5, based ? y : y + 0.5, z + 0.5);
   _bc.setScalar(0.93 + hash1(x * 7.1 + y * 3.3 + z * 1.7) * 0.1);
   for (const im of bt.meshes) {
     im.setMatrixAt(idx, _bm); im.setColorAt(idx, _bc);

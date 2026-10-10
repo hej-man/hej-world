@@ -7,8 +7,10 @@ import { editTerrain, editedMaterialAt, naturalMaterial, raycastTerrain } from '
 import { EYE_OFFSET, player } from './character.js';
 import { ITEMS, addItem, inventoryOpen, renderInventory, setInventoryOpen, slots } from '../inventory/inventory.js';
 import { BLOCKS, blockKey, blocks, placeBlock, removeBlock, voxelRay } from '../world/blocks.js';
-import { BOLT_COST, MAX_HEALTH, stats } from './survival.js';
-import { animals, hurtAnimal } from '../animals/animals.js';
+import { BOLT_COST, MAX_HEALTH, drankDirtyWater, stats } from './survival.js';
+import { animals, hurtAnimal, spawnAnimal } from '../animals/animals.js';
+import { addSource, fluidRay, floodFromNature, removeFluid, wakeArea } from '../world/fluids.js';
+import { craterLavaAt, lavaAt } from '../world/volcano.js';
 import { cameraUnderwater } from '../effects/underwater.js';
 import { toast } from '../ui/hud.js';
 import { gameState } from '../ui/menu.js';
@@ -165,12 +167,15 @@ function harvest(tg) {
 
 export function doBreak(t) {
   if (t.kind === 'tree' || t.kind === 'bush' || t.kind === 'rock') { harvest(t.target); return; }
-  if (t.kind === 'block') { const b = removeBlock(t.key); if (b) give([[b.type, 1]]); return; }
+  if (t.kind === 'block') { const b = removeBlock(t.key); if (b) { give([[b.type, 1]]); wakeArea(b.x, b.y, b.z, 1); } return; }
   if (t.kind === 'terrain') {
     const mat = materialOf(t);
     const center = t.point.clone().addScaledVector(t.normal, -0.6);
     const flipped = editTerrain(center, 1.9, false);
     if (!flipped) return;
+    // water and lava nearby can now flow into the hole, and the sea or a lake right next to it does
+    wakeArea(center.x, center.y, center.z, 3.5);
+    floodFromNature(center.x, center.y, center.z, 2.5);
     // plants standing on the removed ground come down with it
     const gx = Math.floor(center.x / CELL), gz = Math.floor(center.z / CELL);
     for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
@@ -217,13 +222,14 @@ export function useWater() {
   const s = slots[state.selectedSlot];
   if (s?.id === 'bottle') {
     consumeSelected();
-    give([['water_bottle', 1]]);
+    give([['murky_water', 1]]);
     state.useCd = 0.4;
     return;
   }
   if (stats.thirst > 99 && !state.creative) { toast("You're not thirsty"); return; }
   stats.thirst = Math.min(100, stats.thirst + 15);
-  toast('Drank some water');
+  drankDirtyWater(15);
+  toast('Drank unpurified water. You feel sick (purify it at a water filter, or boil it at a campfire)');
   state.useCd = 0.6;
 }
 
@@ -231,21 +237,34 @@ export function useWater() {
 export function useItem(t) {
   const s = slots[state.selectedSlot], def = s && ITEMS[s.id];
   // water in front of whatever you're aiming at: drink or fill a bottle, unless you're building
-  if (aimWater && !(def && (def.place || def.terrain || def.food || def.drink || def.heal || def.mana || def.armour || def.wand))) { useWater(); return; }
-  if (t?.kind === 'block' && BLOCKS[t.type].station && !(def && (def.place || def.terrain))) { setInventoryOpen(true); return; }
+  if (aimWater && !(def && (def.place || def.bucket || def.fluid || def.spawn || def.food || def.drink || def.heal || def.mana || def.armour || def.wand))) { useWater(); return; }
+  if (t?.kind === 'block' && BLOCKS[t.type].station && !(def && def.place)) { setInventoryOpen(true); return; }
   if (!def) return;
   if (def.place) {
     const cell = placementCell(t);
     if (!cell || !cellFree(cell)) return;
-    if (placeBlock(def.place, ...cell, state.buildShape)) consumeSelected();
-  } else if (def.terrain) {
-    if (!t || (t.kind !== 'terrain' && t.kind !== 'block')) return;
-    const p = t.kind === 'terrain' ? t.point : new THREE.Vector3(t.cell[0] + 0.5, t.cell[1] + 0.5, t.cell[2] + 0.5).addScaledVector(t.normal, 0.5);
-    const center = p.clone().addScaledVector(t.normal, 0.9);
-    _sg.start.copy(player.position); _sg.end.copy(player.position); _sg.end.y -= PLAYER.segment;
-    _sg.closestPointToPoint(center, true, _p1);
-    if (_p1.distanceTo(center) < 1.9 + PLAYER.radius + 0.3) { toast('Too close to place ground here'); return; }
-    if (editTerrain(center, 1.9, true, def.terrain)) consumeSelected();
+    if (placeBlock(def.place, ...cell, state.buildShape, state.buildTilt)) { consumeSelected(); removeFluid(...cell); wakeArea(cell[0], cell[1], cell[2], 1); }
+  } else if (def.bucket) {
+    // scoop up poured fluid, the sea or a lake, or lava from a flow or crater
+    const f = fluidRay(_aimO, _aimD, PLAYER.reach);
+    let got = null;
+    if (f && (!t || f.t < t.t)) { got = f.type; if (f.src) removeFluid(f.x, f.y, f.z); }
+    else if (aimWater) got = 'water';
+    else if (t?.kind === 'terrain' && (lavaAt(t.point.x, t.point.y - 0.2, t.point.z, 0.3) || t.point.y < craterLavaAt(t.point.x, t.point.z) + 1)) got = 'lava';
+    if (!got) { toast('Aim at water or lava to fill the bucket'); return; }
+    consumeSelected(); addItem(`${got}_bucket`, 1); renderInventory();
+    toast(`Filled the bucket with ${got}`); state.useCd = 0.4;
+  } else if (def.fluid) {
+    const cell = placementCell(t);
+    if (!cell || blocks.has(blockKey(...cell)) || !addSource(def.fluid, ...cell)) return;
+    consumeSelected(); if (!state.creative) addItem('bucket', 1); renderInventory();
+    state.useCd = 0.4;
+  } else if (def.spawn) {
+    if (!t || (t.kind !== 'terrain' && t.kind !== 'block')) { toast('Aim at the ground to spawn it'); return; }
+    const p = t.kind === 'terrain' ? t.point : new THREE.Vector3(t.cell[0] + 0.5, t.cell[1] + 1, t.cell[2] + 0.5);
+    spawnAnimal(def.spawn, p.x, p.y, p.z, Math.random);
+    consumeSelected();
+    state.useCd = 0.3;
   } else if (def.food) {
     if (stats.hunger > 99 && !state.creative) { toast("You're not hungry"); return; }
     stats.hunger = Math.min(100, stats.hunger + def.food);
@@ -259,7 +278,8 @@ export function useItem(t) {
     stats.thirst = Math.min(100, stats.thirst + def.drink);
     consumeSelected();
     if (def.leaves && !state.creative) addItem(def.leaves, 1);
-    toast(`Drank ${def.name.toLowerCase()}`);
+    if (def.dirty) drankDirtyWater(30);
+    toast(def.dirty ? `Drank ${def.name.toLowerCase()}. You feel sick` : `Drank ${def.name.toLowerCase()}`);
     state.useCd = 0.5;
   } else if (def.heal) {
     if (stats.health >= MAX_HEALTH) { toast('Health is already full'); return; }
@@ -352,7 +372,7 @@ export function updateInteraction(dt) {
     outline.position.set(t.cell[0] + 0.5, t.cell[1] + 0.5, t.cell[2] + 0.5);
     outline.material.color.set(0x000000); outline.visible = true;
   } else outline.visible = false;
-  targetEl.textContent = aimWater ? (held?.id === 'bottle' ? 'Water: right click to fill the bottle' : 'Water: right click to drink') : t ? targetName(t) : '';
+  targetEl.textContent = aimWater ? (held?.id === 'bottle' ? 'Water: right click to fill the bottle' : 'Water: right click to drink (unpurified, makes you sick)') : t ? targetName(t) : '';
 
   if (active && mouse.left) {
     if (t?.kind === 'animal') {

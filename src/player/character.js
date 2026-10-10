@@ -132,6 +132,8 @@ export const player = {
   walkPhase: 0,
   spawn: new THREE.Vector3(),
   inWater: false,
+  swimming: false,
+  swimDepth: 0,
 };
 export const FOOT_OFFSET = PLAYER.segment + PLAYER.radius;
 export const EYE_OFFSET = 0.2;

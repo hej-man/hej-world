@@ -9,6 +9,7 @@ export const state = {
   selectedSlot: 0,
   heldStack: null, // stack on the mouse cursor while the inventory is open
   buildShape: 'block',
+  buildTilt: 0, // index into TILTS: upright, on its side, upside down
   creative: false,
   burning: 0,
   testMode: false, // lets headless tests act without pointer lock

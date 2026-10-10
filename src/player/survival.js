@@ -10,9 +10,18 @@ import { gameState } from '../ui/menu.js';
 // ---------------------------------------------------------------------------
 
 export const MAX_HEALTH = 150;
-export const stats = { health: MAX_HEALTH, hunger: 100, thirst: 100, mana: 100, armour: 0 };
-export const fullStats = () => ({ health: MAX_HEALTH, hunger: 100, thirst: 100, mana: 100 });
-let regenTimer = 0, starveTimer = 0, thirstTimer = 0, burnTimer = 0;
+export const stats = { health: MAX_HEALTH, hunger: 100, thirst: 100, mana: 100, armour: 0, sick: 0 };
+export const fullStats = () => ({ health: MAX_HEALTH, hunger: 100, thirst: 100, mana: 100, sick: 0 });
+let regenTimer = 0, starveTimer = 0, thirstTimer = 0, burnTimer = 0, sickTimer = 0;
+
+// Drinking unpurified water (straight from a lake or the sea, or a bottle of murky water) makes you
+// sick for a while: thirst drains three times as fast and you lose health every couple of seconds.
+// Each drink adds to how long it lasts, up to two minutes.
+export function drankDirtyWater(seconds) {
+  if (state.creative) return;
+  stats.sick = Math.min(120, stats.sick + seconds);
+  damagePlayer(3, 'got sick from dirty water');
+}
 export const BOLT_COST = 15;
 
 export function damagePlayer(amount, reason) {
@@ -41,7 +50,14 @@ export function updateStats(dt) {
   stats.hunger = Math.max(0, stats.hunger - drain * dt);
   // water: about 10 minutes; faster when sprinting or near a volcano's heat
   const heat = terrainFns.volcanoInfluence(player.position.x, player.position.z) > 0.3 ? 2 : 1;
-  stats.thirst = Math.max(0, stats.thirst - (player.sprinting ? 2 : 1) * heat * (100 / 600) * dt);
+  const sick = stats.sick > 0 ? 3 : 1;
+  stats.thirst = Math.max(0, stats.thirst - (player.sprinting ? 2 : 1) * heat * sick * (100 / 600) * dt);
+  if (stats.sick > 0) {
+    stats.sick = Math.max(0, stats.sick - dt);
+    sickTimer += dt;
+    if (sickTimer > 2) { sickTimer = 0; damagePlayer(1, 'got sick from dirty water'); }
+    if (stats.sick === 0) toast('You feel better');
+  }
   stats.mana = Math.min(100, stats.mana + 3 * dt);
   if (stats.hunger <= 0) {
     starveTimer += dt;
@@ -57,18 +73,23 @@ export function updateStats(dt) {
     thirstTimer += dt;
     if (thirstTimer > 1.5) { thirstTimer = 0; damagePlayer(2, 'died of thirst'); }
   }
-  if (stats.hunger > 45 && stats.thirst > 30 && stats.health < MAX_HEALTH) {
+  if (stats.hunger > 45 && stats.thirst > 30 && !stats.sick && stats.health < MAX_HEALTH) {
     regenTimer += dt; // a well-fed, watered player heals slowly
     if (regenTimer > 0.6) { regenTimer = 0; stats.health = Math.min(MAX_HEALTH, stats.health + 1); stats.hunger -= 0.25; stats.thirst -= 0.15; }
   }
 }
 
-const statEls = { hp: document.querySelector('#hp i'), hpText: document.querySelector('#hp span'), food: document.querySelector('#food i'), water: document.querySelector('#water i'), mana: document.querySelector('#mana i') };
+const statEls = { hp: document.querySelector('#hp i'), hpText: document.querySelector('#hp span'), food: document.querySelector('#food i'), water: document.querySelector('#water i'), waterBar: document.getElementById('water'), waterText: document.querySelector('#water span'), mana: document.querySelector('#mana i') };
 export function renderStats() {
   statEls.hp.style.width = `${Math.max(0, stats.health) / MAX_HEALTH * 100}%`;
   statEls.hpText.textContent = `Health ${Math.max(0, Math.ceil(stats.health))}`;
   statEls.food.style.width = `${stats.hunger}%`;
   statEls.water.style.width = `${stats.thirst}%`;
+  const sick = stats.sick > 0;
+  if (statEls.waterBar.classList.contains('sick') !== sick) {
+    statEls.waterBar.classList.toggle('sick', sick);
+    statEls.waterText.textContent = sick ? 'Thirst · sick' : 'Thirst';
+  }
   statEls.mana.style.width = `${stats.mana}%`;
 }
 

@@ -6,6 +6,7 @@ import { sampleField } from '../terrain/material.js';
 import { CELL, cellKey, isLoaded, obstacleGrid, terrainFns, world } from '../world/world.js';
 import { groundAt } from '../world/query.js';
 import { lavaAt, lavaFlows } from '../world/volcano.js';
+import { fluidAt } from '../world/fluids.js';
 import { FOOT_OFFSET, player } from '../player/character.js';
 import { damagePlayer } from '../player/survival.js';
 import { give } from '../player/interaction.js';
@@ -16,7 +17,7 @@ import { gameState } from '../ui/menu.js';
 // ---------------------------------------------------------------------------
 // per: how many live on a 256 x 256 m map. shy: runs from you inside this range. hostile: chases you
 // inside this range. bite: damage per attack, knock: how hard it shoves you. home 'cave' lives underground.
-const SPECIES = {
+export const SPECIES = {
   cow:     { name: 'Cow', hp: 30, walk: 1.3, run: 4.5, r: 0.75, h: 1.5, graze: true, home: 'meadow', herd: [2, 4], per: 7, drops: [['raw_meat', 2, 3], ['leather', 1, 2]] },
   pig:     { name: 'Pig', hp: 20, walk: 1.2, run: 4.2, r: 0.55, h: 1.0, graze: true, home: 'meadow', herd: [2, 3], per: 5, drops: [['raw_meat', 2, 3]] },
   sheep:   { name: 'Sheep', hp: 20, walk: 1.2, run: 4.2, r: 0.6, h: 1.25, graze: true, home: 'meadow', herd: [3, 5], per: 8, drops: [['raw_meat', 1, 2], ['wool', 2, 3]] },
@@ -188,6 +189,7 @@ export function spawnAnimal(kind, x, y, z, rand) {
   const a = {
     kind, sp, ...model, x, y, z, hp: sp.hp, facing: rand() * Math.PI * 2, angle: rand() * Math.PI * 2,
     mode: 'idle', timer: rand() * 3, kx: 0, kz: 0, phase: 0, hurtT: 0, flee: 0, aggro: 0, attackCd: 0, groundT: 0,
+    side: rand() < 0.5 ? 1 : -1, stuckT: 0, calm: 0, herd: null,
   };
   world.add(a.group);
   animals.push(a);
@@ -207,12 +209,16 @@ function caveFloorAt(x, z) {
   return null;
 }
 
+// Animals live around the player (within ANIMAL_RANGE), where the ground is loaded; ones that end up
+// much further away are taken out again, so herds keep turning up wherever you go.
+const ANIMAL_RANGE = 220, ANIMAL_DROP = 380;
 function findAnimalSpot(home, rand, awayFromPlayer) {
-  const T = terrainFns, S = WORLD.size, L = T.ledge;
-  for (let tries = 0; tries < (home === 'cave' ? 160 : 50); tries++) {
-    const x = 10 + rand() * (S - 20), z = 10 + rand() * (S - 20);
-    if (awayFromPlayer && Math.hypot(x - player.position.x, z - player.position.z) < 50) continue;
-    if (!isLoaded(x, z, 8)) return null; // terrain there isn't generated yet: try again later
+  const T = terrainFns, S = WORLD.size, L = T.ledge, px = player.position.x, pz = player.position.z;
+  for (let tries = 0; tries < (home === 'cave' ? 160 : 60); tries++) {
+    const a = rand() * Math.PI * 2, d = (awayFromPlayer ? 50 : 0) + Math.sqrt(rand()) * (ANIMAL_RANGE - (awayFromPlayer ? 50 : 0));
+    const x = px + Math.cos(a) * d, z = pz + Math.sin(a) * d;
+    if (x < 10 || z < 10 || x > S - 10 || z > S - 10) continue;
+    if (!isLoaded(x, z, 8)) continue; // terrain there isn't generated yet
     if (home === 'cave') {
       if (Math.hypot(x - L.x, z - L.z) < 40 || T.volcanoInfluence(x, z) > 0.2) continue; // not right at the start
       const g = caveFloorAt(x, z);
@@ -239,11 +245,12 @@ function spawnHerd(kind, rand, awayFromPlayer) {
   if (!spot) return 0;
   const n = sp.herd[0] + Math.floor(rand() * (sp.herd[1] - sp.herd[0] + 1));
   let made = 0;
+  const herd = { kind };
   for (let i = 0; i < n * 3 && made < n; i++) {
     const x = spot.x + (rand() - 0.5) * 8, z = spot.z + (rand() - 0.5) * 8;
     const g = sp.home === 'cave' ? groundAt(x, z, spot.y + 2.5) : groundAt(x, z);
     if (!g || g.point.y < terrainFns.waterAt(x, z) + 1 || g.face.normal.y < 0.7 || Math.abs(g.point.y - spot.y) > 4) continue;
-    spawnAnimal(kind, x, g.point.y, z, rand);
+    spawnAnimal(kind, x, g.point.y, z, rand).herd = herd;
     made++;
   }
   return made;
@@ -251,7 +258,7 @@ function spawnHerd(kind, rand, awayFromPlayer) {
 
 export function spawnAnimals(seed) {
   animalRand = mulberry32(seed * 17 + 11);
-  const area = (WORLD.size / 256) ** 2;
+  const area = (Math.PI * ANIMAL_RANGE ** 2) / 256 ** 2; // populations are per 256 x 256 m, counted around you
   for (const [kind, sp] of Object.entries(SPECIES)) {
     population[kind] = Math.max(1, Math.round(sp.per * area));
     for (let tries = 0; tries < 12 && animals.filter((a) => a.kind === kind).length < population[kind]; tries++) spawnHerd(kind, animalRand, false);
@@ -267,6 +274,8 @@ function tryMoveAnimal(a, mx, mz) {
   if (!g || g.point.y < terrainFns.waterAt(nx, nz) + 0.2 || g.face.normal.y < 0.6 || Math.abs(g.point.y - a.y) > 0.9) return false;
   const gy = g.point.y;
   if (lavaFlows.length && terrainFns.volcanoInfluence(nx, nz) > 0.25 && lavaAt(nx, gy, nz, 0.5)) return false;
+  // stays out of poured water and lava (but can always walk out of a pool it is standing in)
+  if (fluidAt(nx, gy + 0.2, nz) && !fluidAt(a.x, a.y + 0.2, a.z)) return false;
   const list = obstacleGrid.get(cellKey(Math.floor(nx / CELL), Math.floor(nz / CELL)));
   if (list) for (const o of list) {
     if (o.min) { if (nx > o.min.x - a.sp.r * 0.5 && nx < o.max.x + a.sp.r * 0.5 && nz > o.min.z - a.sp.r * 0.5 && nz < o.max.z + a.sp.r * 0.5 && gy + 0.3 < o.max.y && gy + a.sp.h > o.min.y) return false; }
@@ -281,15 +290,18 @@ export function hurtAnimal(a, dmg, dx, dz) {
   a.hurtT = 0.25;
   const len = Math.hypot(dx, dz) || 1;
   a.kx = dx / len * 6; a.kz = dz / len * 6;
-  if (a.sp.hostile) a.aggro = 20; else a.flee = 6;
+  if (a.sp.hostile) { a.aggro = 20; a.calm = 0; } else a.flee = 6;
   if (a.hp <= 0) killAnimal(a);
 }
 
-function killAnimal(a) {
+function removeAnimal(a) {
   world.remove(a.group);
   a.mats.forEach((m) => m.dispose());
   animals.splice(animals.indexOf(a), 1);
   if (state.currentTarget?.animal === a) state.currentTarget = null;
+}
+function killAnimal(a) {
+  removeAnimal(a);
   if (state.creative) return;
   const got = [];
   for (const [id, lo, hi] of a.sp.drops) {
@@ -305,10 +317,18 @@ export function updateAnimals(dt) {
     const sp = a.sp;
     const dx = px - a.x, dz = pz - a.z, dist = Math.hypot(dx, dz) || 1e-3, dy = pfeet - a.y;
     if (dist > 140) continue; // far away animals stay put
-    a.timer -= dt; a.hurtT -= dt; a.attackCd -= dt; a.flee -= dt; a.aggro -= dt;
+    a.timer -= dt; a.hurtT -= dt; a.attackCd -= dt; a.flee -= dt; a.aggro -= dt; a.calm -= dt;
+
+    // burning in poured lava
+    if (fluidAt(a.x, a.y + 0.2, a.z)?.type === 'lava') {
+      a.burnT = (a.burnT || 0) - dt;
+      if (a.burnT <= 0) { a.burnT = 0.5; hurtAnimal(a, 5, 0, 0); if (a.hp <= 0) continue; a.flee = 2; }
+    }
 
     let wx = 0, wz = 0, speed = 0;
-    const hunting = sp.hostile && !state.creative && gameState === 'playing' && Math.abs(dy) < 6 && (dist < sp.hostile || (a.aggro > 0 && dist < 30));
+    // a predator that can't get to you (you're up on blocks, across water) gives up for a while
+    const hunting = sp.hostile && a.calm <= 0 && !state.creative && gameState === 'playing' && Math.abs(dy) < 6 && (dist < sp.hostile || (a.aggro > 0 && dist < 30));
+    if (!hunting && a.mode === 'chase') { a.mode = 'idle'; a.timer = 0; }
     if (hunting) {
       a.mode = 'chase'; wx = dx / dist; wz = dz / dist; speed = sp.run;
       if (dist < 1.3 + sp.r && Math.abs(dy) < 1.8 && a.attackCd <= 0) {
@@ -323,7 +343,15 @@ export function updateAnimals(dt) {
     } else {
       if (a.timer <= 0) {
         if (animalRand() < 0.45) { a.mode = 'idle'; a.timer = 2 + animalRand() * 5; }
-        else { a.mode = 'walk'; a.angle = animalRand() * Math.PI * 2; a.timer = 2 + animalRand() * 4; }
+        else {
+          a.mode = 'walk'; a.angle = animalRand() * Math.PI * 2; a.timer = 2 + animalRand() * 4;
+          // herd animals that strayed head back toward the others
+          const mates = a.herd ? animals.filter((b) => b.herd === a.herd && b !== a) : [];
+          if (mates.length) {
+            const cx = mates.reduce((t, b) => t + b.x, 0) / mates.length - a.x, cz = mates.reduce((t, b) => t + b.z, 0) / mates.length - a.z;
+            if (Math.hypot(cx, cz) > 9) a.angle = Math.atan2(-cx, -cz) + (animalRand() - 0.5) * 0.8;
+          }
+        }
       }
       if (a.mode === 'walk') { wx = -Math.sin(a.angle); wz = -Math.cos(a.angle); speed = sp.walk; }
       else a.mode = 'idle';
@@ -333,19 +361,33 @@ export function updateAnimals(dt) {
     const decay = Math.exp(-6 * dt);
     a.kx *= decay; a.kz *= decay;
     let mx = (wx * speed + a.kx) * dt, mz = (wz * speed + a.kz) * dt;
+    // keep a little apart from other animals instead of walking through them
+    if (speed) for (const b of animals) {
+      if (b === a) continue;
+      const ox = a.x - b.x, oz = a.z - b.z, gap = sp.r + b.sp.r;
+      if (Math.abs(ox) > gap || Math.abs(oz) > gap || Math.abs(a.y - b.y) > 2) continue;
+      const d = Math.hypot(ox, oz) || 0.01;
+      if (d < gap) { mx += (ox / d) * (gap - d) * Math.min(1, dt * 4); mz += (oz / d) * (gap - d) * Math.min(1, dt * 4); }
+    }
     let moved = 0;
     if (mx || mz) {
       if (tryMoveAnimal(a, mx, mz)) moved = Math.hypot(mx, mz);
       else {
+        // blocked: steer around it, sticking to one side so it doesn't jitter back and forth
         let ok = false;
-        for (const turn of [0.8, -0.8, 1.6, -1.6]) {
-          const c = Math.cos(turn), s = Math.sin(turn);
-          if (tryMoveAnimal(a, mx * c - mz * s, mx * s + mz * c)) { ok = true; moved = Math.hypot(mx, mz); wx = (mx * c - mz * s); wz = (mx * s + mz * c); break; }
+        for (const turn of [0.7, 1.4, 2.1, -0.7, -1.4, -2.1]) {
+          const t = turn * a.side, c = Math.cos(t), s = Math.sin(t);
+          if (tryMoveAnimal(a, mx * c - mz * s, mx * s + mz * c)) { ok = true; moved = Math.hypot(mx, mz); wx = (mx * c - mz * s); wz = (mx * s + mz * c); if (turn < 0) a.side = -a.side; break; }
         }
         if (!ok && a.mode === 'walk') { a.angle += Math.PI * (0.5 + animalRand()); a.timer = 1 + animalRand() * 2; }
-        if (!ok && a.mode === 'flee') a.flee = Math.min(a.flee, 0.5);
+        if (!ok && a.mode === 'flee') a.side = -a.side;
       }
     }
+    // a chasing predator that makes no headway toward you for a few seconds gives up for a while
+    if (a.mode === 'chase') {
+      if (a.closest === undefined || dist < a.closest - 0.3 || (dist < 1.4 + sp.r && Math.abs(dy) < 1.8)) { a.closest = dist; a.stuckT = 0; }
+      else if ((a.stuckT += dt) > 5) { a.calm = 8; a.aggro = 0; a.stuckT = 0; a.closest = undefined; }
+    } else a.closest = undefined;
     if (!moved) {
       // settle onto the ground (it might have been dug away)
       a.groundT -= dt;
@@ -382,8 +424,11 @@ export function updateAnimals(dt) {
   if (animalRespawnTimer <= 0) {
     const want = Object.values(population).reduce((a, b) => a + b, 0);
     animalRespawnTimer = animals.length < want * 0.7 ? 1.5 : 20;
-    for (const kind of Object.keys(SPECIES)) {
-      if (animals.filter((a) => a.kind === kind).length < population[kind]) { spawnHerd(kind, animalRand, true); break; }
-    }
+    // animals left far behind make room for new ones near you
+    for (const a of [...animals]) if (Math.hypot(a.x - player.position.x, a.z - player.position.z) > ANIMAL_DROP && a.aggro <= 0) removeAnimal(a);
+    // top up the kind that is furthest below its population (every kind gets its turn, so a kind
+    // that can't find a spot right now doesn't hold the others up)
+    const short = Object.keys(SPECIES).map((k) => [k, animals.filter((a) => a.kind === k).length / population[k]]).filter(([, f]) => f < 1).sort((p, q) => p[1] - q[1]);
+    for (const [kind] of short.slice(0, 3)) if (spawnHerd(kind, animalRand, true)) break;
   }
 }
