@@ -19,7 +19,7 @@ export const WORLD = {
   waterLevel: 20,
   treeSpacing: 2.6,  // smaller = denser forests
 };
-WORLD.caveFloor = WORLD.waterLevel + 1;                                // caves stay above the water
+WORLD.caveFloor = 6;                 // the lowest cave floors (bedrock below); under low ground caves stay above the water
 WORLD.volcanoes = Math.min(4, Math.max(1, Math.round((WORLD.size / 512) ** 2)));  // about one per 512 x 512 m, at most 4
 
 export const PLAYER = {

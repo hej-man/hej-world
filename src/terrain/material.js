@@ -3,7 +3,20 @@ import { WORLD } from '../config.js';
 import { smoothstep } from '../noise.js';
 import { TEX_GLSL, TEX_LAYERS, initGroundTextures, texUniforms } from './textures.js';
 import { terrainField } from '../world/world.js';
+import { BIOMES, BIOME_IDS } from './biomes.js';
 import { editedMaterialAt } from '../world/query.js';
+import { STONES } from '../world/block-catalog.js';
+
+// How each kind of stone tints the rock texture (plain stone is about 52% grey), and each ore's colour.
+const STONE_TINT = { stone: [1, 1, 1] };
+for (const s of STONES) {
+  const c = new THREE.Color().setHSL(s.hsl[0] / 360, s.hsl[1] / 100, s.hsl[2] / 100, THREE.SRGBColorSpace);
+  c.convertLinearToSRGB();
+  STONE_TINT[s.id] = [c.r / 0.52, c.g / 0.52, c.b / 0.52];
+}
+// Ores by index, in the order the shader picks their colours (see oreRaw).
+const ORE_INDEX = { iron: 0, coal: 1, copper: 2, gold: 3 };
+const SAND_LIKE = new Set(['sand', 'red_sand', 'gravel', 'snow']), DIRT_LIKE = new Set(['dirt', 'clay', 'mud', 'podzol']);
 
 // ---------------------------------------------------------------------------
 // Terrain surface. Per vertex (here): a smooth normal taken from the density field, so the ground
@@ -35,7 +48,8 @@ export function buildRenderGeometry(colliderGeo, T) {
   geo.setIndex(colliderGeo.index);
   const pos = posAttr.array, count = pos.length / 3;
   const normals = new Float32Array(count * 3), tint = new Float32Array(count * 3);
-  const splat = new Float32Array(count * 4), info = new Float32Array(count * 4), extra = new Float32Array(count * 2);
+  const splat = new Float32Array(count * 4), info = new Float32Array(count * 4), extra = new Float32Array(count * 3), biome = new Float32Array(count * 4);
+  const rock = new Float32Array(count * 3);
   const nrm = new THREE.Vector3();
 
   for (let v = 0; v < count; v++) {
@@ -50,13 +64,14 @@ export function buildRenderGeometry(colliderGeo, T) {
     const lake = T.lakeAt(x, z, T.LAKE_EDGE + 0.15), W0 = lake ? lake.level : WORLD.waterLevel;
     const W = T.surfaceHeight(x, z) < W0 + 2.5 ? W0 : -1000; // no wet waterline in caves under land
     let g = 0, f = 0, d = 0, s = 0, stone = 0, glow = 0, tr = 1, tg = 1, tb = 1;
+    let snow = 0, mesa = 0, sandstone = 0, redsand = 0; // biome looks (see the shader)
     const cave = smoothstep(surface - 3, surface - 8, y);
     const edited = editedMaterialAt(x - nrm.x * 0.8, y - nrm.y * 0.8, z - nrm.z * 0.8);
 
     if (edited) {
       // ground the player dug into or added
-      if (edited === 'sand') s = 1;
-      else if (edited === 'dirt') { d = 1; if (ny > 0.75 && y > surface - 3) g = 0.4; }
+      if (SAND_LIKE.has(edited)) { s = 1; if (edited === 'snow') snow = 1; if (edited === 'red_sand') redsand = 1; }
+      else if (DIRT_LIKE.has(edited)) { d = 1; if (edited === 'dirt' && ny > 0.75 && y > surface - 3) g = 0.4; }
       else stone = 1;
     } else if (cave > 0.5) {
       stone = 1;
@@ -82,27 +97,42 @@ export function buildRenderGeometry(colliderGeo, T) {
       if (y < W - 0.5) { tr = tg = tb = 0.72; } // wet sand under the water
       d = 0.15 + 0.15 * n;
     } else {
-      const fm = smoothstep(0, 1, T.forestMask(x, z) + nb * 0.25);
-      g = 1 - fm; f = fm;
+      // the biomes' ground, blended where they meet (biomes.js)
+      const w = T.biomeWeights(x + nb * 12, z - nb * 12);
+      for (let i = 0; i < w.length; i++) {
+        if (!w[i]) continue;
+        const gr = BIOMES[BIOME_IDS[i]].ground, k = w[i], t = gr.tint || [1, 1, 1];
+        g += (gr.grass || 0) * k; f += (gr.forest || 0) * k; d += (gr.dirt || 0) * k; s += ((gr.sand || 0) + (gr.redsand || 0)) * k;
+        snow += (gr.snow || 0) * k; mesa += (gr.terracotta || 0) * k; sandstone += (gr.sandstone || 0) * k; redsand += (gr.redsand || 0) * k;
+        tr += (t[0] - 1) * k; tg += (t[1] - 1) * k; tb += (t[2] - 1) * k;
+      }
       // dry grass patches on sunny open slopes, tundra higher up, bare dirt on rough ground
-      const dry = smoothstep(0.35, 0.7, n + nb) * (1 - fm) * 0.6;
-      tr = 1 + dry * 0.35; tg = 1 + dry * 0.12; tb = 1 - dry * 0.45;
-      const tundra = smoothstep(56, 78, y + nb * 10);
-      g *= 1 - tundra * 0.6; d += tundra * 0.6 + smoothstep(0.82, 0.65, ny) * 0.5 + Math.max(0, n - 0.45) * 0.8;
+      const dry = smoothstep(0.35, 0.7, n + nb) * g * 0.6;
+      tr *= 1 + dry * 0.35; tg *= 1 + dry * 0.12; tb *= 1 - dry * 0.45;
+      const tundra = smoothstep(56, 78, y + nb * 10) * (1 - s);
+      g *= 1 - tundra * 0.6; d += tundra * 0.6 + smoothstep(0.82, 0.65, ny) * 0.5 * (1 - s) + Math.max(0, n - 0.45) * 0.8 * (g + f);
       tr *= 1 + tundra * 0.1; tb *= 1 - tundra * 0.2;
     }
     splat[v * 4] = g; splat[v * 4 + 1] = f; splat[v * 4 + 2] = d; splat[v * 4 + 3] = s;
     if (g + f + d + s < 0.01) splat[v * 4 + 2] = 0.01;
     info[v * 4] = cave; info[v * 4 + 1] = vi; info[v * 4 + 2] = glow; info[v * 4 + 3] = stone;
     tint[v * 3] = tr; tint[v * 3 + 1] = tg; tint[v * 3 + 2] = tb;
-    extra[v * 2] = vi < 0.3 && !(glow < 0) ? T.oreAt(x, y, z) : 0;
-    extra[v * 2 + 1] = W;
+    // the kind of stone the rock is here, and any ore in it
+    const st = STONE_TINT[vi < 0.3 ? T.stoneAt(x, y, z) : 'stone'] || STONE_TINT.stone;
+    rock[v * 3] = st[0]; rock[v * 3 + 1] = st[1]; rock[v * 3 + 2] = st[2];
+    const ore = vi < 0.3 && !(glow < 0) ? T.oreKind(x, y, z) : null;
+    extra[v * 3] = ore ? ore[1] : 0;
+    extra[v * 3 + 2] = ore ? ORE_INDEX[ore[0]] : 0;
+    extra[v * 3 + 1] = W;
+    biome[v * 4] = snow; biome[v * 4 + 1] = mesa; biome[v * 4 + 2] = sandstone; biome[v * 4 + 3] = redsand;
   }
   geo.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
   geo.setAttribute('color', new THREE.BufferAttribute(tint, 3));
   geo.setAttribute('splat', new THREE.BufferAttribute(splat, 4));
   geo.setAttribute('tinfo', new THREE.BufferAttribute(info, 4));
-  geo.setAttribute('extra', new THREE.BufferAttribute(extra, 2));
+  geo.setAttribute('extra', new THREE.BufferAttribute(extra, 3));
+  geo.setAttribute('biome', new THREE.BufferAttribute(biome, 4));
+  geo.setAttribute('rock', new THREE.BufferAttribute(rock, 3));
   return geo;
 }
 
@@ -122,16 +152,22 @@ export function makeTerrainMaterial() {
       .replace('#include <common>', `#include <common>
         attribute vec4 splat;
         attribute vec4 tinfo;
-        attribute vec2 extra;
+        attribute vec3 extra;
+        attribute vec4 biome;
+        attribute vec3 rock;
+        varying vec3 vRock;
         varying vec4 vSplat;
         varying vec4 vInfo;
-        varying vec2 vExtra;
+        varying vec3 vExtra;
+        varying vec4 vBiome;
         varying vec3 vWorldPos;
         varying vec3 vWorldNormal;`)
       .replace('#include <project_vertex>', `#include <project_vertex>
         vSplat = splat;
         vInfo = tinfo;
         vExtra = extra;
+        vBiome = biome;
+        vRock = rock;
         vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
         vWorldNormal = normalize(mat3(modelMatrix) * objectNormal);`);
     shader.fragmentShader = shader.fragmentShader
@@ -142,7 +178,9 @@ export function makeTerrainMaterial() {
         uniform vec4 uVolc[4];
         varying vec4 vSplat;
         varying vec4 vInfo;
-        varying vec2 vExtra; // iron ore amount, water level here
+        varying vec3 vExtra; // ore amount, water level here, which ore (ORE_INDEX)
+        varying vec3 vRock;  // the kind of stone: a tint for the rock layer
+        varying vec4 vBiome; // snow cover, mesa terracotta, desert sandstone, red sand
         varying vec3 vWorldPos;
         varying vec3 vWorldNormal;
         vec3 srgb(vec3 c) { return pow(c, vec3(2.2)); }`)
@@ -158,7 +196,7 @@ export function makeTerrainMaterial() {
         float steep = 1.0 - smoothstep(0.6 + alpine * 0.12 + edge, 0.78 + alpine * 0.1 + edge, wN.y);
         float rockW = clamp(max(max(steep, stone), smoothstep(0.1, 0.45, volc) * 0.85), 0.0, 1.0);
         float snowLine = uSnowLine + (n1 - 0.5) * 10.0;
-        float snowW = smoothstep(snowLine, snowLine + 6.0, vWorldPos.y) * smoothstep(0.45, 0.7, wN.y + (n2 - 0.5) * 0.2)
+        float snowW = max(smoothstep(snowLine, snowLine + 6.0, vWorldPos.y), vBiome.x) * smoothstep(0.45, 0.7, wN.y + (n2 - 0.5) * 0.2)
                     * surf * (1.0 - smoothstep(0.1, 0.4, volc));
         vec4 sp = vSplat / max(dot(vSplat, vec4(1.0)), 1e-3);
         float W[6];
@@ -188,15 +226,39 @@ export function makeTerrainMaterial() {
         col *= mix(0.78, 1.15, macro);
         // basalt: rock on the volcano is nearly black
         col *= mix(vec3(1.0), vec3(0.3, 0.28, 0.27), smoothstep(0.08, 0.45, volc) * W[4] / max(total, 1e-4));
-        // iron ore: bright orange-rust nuggets in darker rock, with metal flecks that catch the light
+        // the kind of stone (granite, diorite, deepslate...) tints the rock
         float rockFrac = W[4] / max(total, 1e-4);
-        float oreAmt = smoothstep(0.35, 0.6, vExtra.x) * rockFrac; // matches where mining gives iron (above 0.5)
-        float nug = smoothstep(0.52, 0.62, vnoise(vWorldPos * 1.7) * 0.7 + vnoise(vWorldPos * 4.3) * 0.3);
+        col *= mix(vec3(1.0), srgb(vRock), rockFrac * (1.0 - smoothstep(0.08, 0.45, volc)));
+        // ore: chunky nuggets with a lighter top edge and a dark rim, set in rock that's darker
+        // around them, with metal flecks that catch the light (not for coal)
+        float oreAmt = smoothstep(0.45, 0.62, vExtra.x) * rockFrac; // matches where mining gives ore (above 0.5)
+        // small separate nuggets: a fine noise cut off high, so they're specks, not blotches
+        float nn = vnoise(vWorldPos * 3.4) * 0.65 + vnoise(vWorldPos * 8.1) * 0.35;
+        float nug = smoothstep(0.6, 0.66, nn), rim = smoothstep(0.55, 0.6, nn) - nug;
         float ore = oreAmt * nug;
-        col *= 1.0 - oreAmt * 0.35; // ore-bearing rock is darker around the nuggets
-        col = mix(col, srgb(vec3(0.85, 0.42, 0.14)) * (0.75 + 0.6 * tAlb.r), ore);
-        float fleck = oreAmt * smoothstep(0.72, 0.8, vnoise(vWorldPos * 11.0));
-        col = mix(col, srgb(vec3(0.78, 0.8, 0.84)), fleck * 0.8);
+        int oi = int(vExtra.z + 0.5);
+        vec3 oreRaw = oi == 1 ? vec3(0.07, 0.07, 0.08) : oi == 2 ? vec3(0.25, 0.68, 0.55) : oi == 3 ? vec3(1.0, 0.8, 0.2) : vec3(0.85, 0.42, 0.14);
+        vec3 oreC = srgb(oreRaw);
+        col *= 1.0 - oreAmt * (0.12 + rim * 0.45);
+        float facet = 0.7 + 0.6 * smoothstep(0.3, 0.8, vnoise(vWorldPos * 3.1 + 7.0));
+        col = mix(col, oreC * facet, ore);
+        float shiny = oi == 1 ? 0.0 : 1.0; // coal doesn't glint
+        float fleck = oreAmt * smoothstep(0.72, 0.8, vnoise(vWorldPos * 11.0)) * shiny;
+        col = mix(col, mix(srgb(vec3(0.85, 0.86, 0.9)), oreC * 1.4, 0.5), fleck * 0.8);
+        // biome looks: red sand, terracotta bands on mesa cliffs, sandstone strata in the desert
+        float lum = dot(tAlb.rgb, vec3(0.3, 0.59, 0.11));
+        float sandFrac = W[3] / max(total, 1e-4);
+        col = mix(col, srgb(vec3(0.86, 0.45, 0.24)) * (0.6 + 1.4 * lum), vBiome.w * sandFrac * surf);
+        if (vBiome.y > 0.01) {
+          float by = floor((vWorldPos.y + (vnoise(vWorldPos * vec3(0.03, 0.0, 0.03)) - 0.5) * 5.0) / 2.3);
+          float bi = by - 8.0 * floor(by / 8.0);
+          vec3 band = bi < 1.0 ? vec3(0.66, 0.38, 0.26) : bi < 2.0 ? vec3(0.84, 0.58, 0.40) : bi < 3.0 ? vec3(0.78, 0.50, 0.22)
+                    : bi < 4.0 ? vec3(0.88, 0.80, 0.68) : bi < 5.0 ? vec3(0.56, 0.30, 0.22) : bi < 6.0 ? vec3(0.82, 0.64, 0.26)
+                    : bi < 7.0 ? vec3(0.66, 0.54, 0.50) : vec3(0.72, 0.34, 0.20);
+          col = mix(col, srgb(band) * (0.7 + 0.6 * lum), vBiome.y * rockFrac * surf);
+        }
+        float strata = 0.86 + 0.14 * sin(vWorldPos.y * 2.6 + vnoise(vWorldPos * 0.2) * 3.0);
+        col = mix(col, srgb(vec3(0.86, 0.75, 0.54)) * strata * (0.65 + 0.7 * lum), vBiome.z * rockFrac * surf);
         // wet, darker ground right at the waterline, and after rain on open ground
         float wet = (1.0 - smoothstep(vExtra.y - 0.3, vExtra.y + 0.9, vWorldPos.y)) * surf;
         float rainWet = uRainWet * surf * smoothstep(0.3, 0.8, wN.y);
@@ -231,8 +293,8 @@ export function makeTerrainMaterial() {
         float vein = (1.0 - smoothstep(0.0, 0.025, vn)) * smoothstep(0.45, 0.7, volc) * W[4] / max(total, 1e-4);
         totalEmissiveRadiance += lavaCol * (heat * 0.5 * surf + vein * 1.6) * pulse;
         totalEmissiveRadiance += srgb(vec3(0.35, 0.8, 0.9)) * crystal * 0.6;
-        // a faint warm glow, so iron ore can be spotted in dark caves too
-        totalEmissiveRadiance += srgb(vec3(0.9, 0.4, 0.12)) * ore * 0.08;`);
+        // a faint glow, so ore can be spotted in dark caves too
+        totalEmissiveRadiance += oreC * ore * 0.08 * shiny;`);
   };
   return mat;
 }

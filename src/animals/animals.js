@@ -12,6 +12,7 @@ import { damagePlayer } from '../player/survival.js';
 import { give } from '../player/interaction.js';
 import { gameState } from '../ui/menu.js';
 import { litMaterial } from '../render/scene.js';
+import { BIOMES } from '../terrain/biomes.js';
 
 // ---------------------------------------------------------------------------
 // Animals: livestock and wildlife that wander, graze and flee, and predators that hunt you
@@ -28,6 +29,15 @@ export const SPECIES = {
   wolf:    { name: 'Wolf', hp: 26, walk: 1.7, run: 7.2, r: 0.5, h: 1.15, hostile: 16, bite: 11, home: 'forest', herd: [2, 4], per: 2.5, drops: [['leather', 1, 2], ['raw_meat', 0, 1]] },
   bear:    { name: 'Bear', hp: 80, walk: 1.3, run: 6.6, r: 0.95, h: 1.75, hostile: 11, bite: 24, knock: 10, attackEvery: 1.6, home: 'forest', herd: [1, 1], per: 1.2, drops: [['raw_meat', 3, 5], ['leather', 2, 3]] },
   boar:    { name: 'Boar', hp: 32, walk: 1.2, run: 7.5, r: 0.6, h: 1.0, graze: true, hostile: 4.5, bite: 13, knock: 8, home: 'forest', herd: [2, 3], per: 2, drops: [['raw_meat', 2, 3], ['leather', 1, 1]] },
+  // the animals of the newer biomes (biomes.js says which live where)
+  camel:   { name: 'Camel', hp: 36, walk: 1.2, run: 5, r: 0.8, h: 2.2, graze: true, home: 'any', herd: [1, 3], per: 3, drops: [['raw_meat', 2, 3], ['leather', 1, 2]] },
+  zebra:   { name: 'Zebra', hp: 26, walk: 1.5, run: 8.5, r: 0.65, h: 1.6, graze: true, shy: 9, home: 'any', herd: [3, 5], per: 5, drops: [['raw_meat', 2, 3], ['leather', 1, 2]] },
+  goat:    { name: 'Goat', hp: 18, walk: 1.3, run: 6, r: 0.45, h: 1.1, graze: true, home: 'any', herd: [2, 4], per: 4, drops: [['raw_meat', 1, 2], ['leather', 0, 1]] },
+  fox:     { name: 'Fox', hp: 12, walk: 1.5, run: 7.5, r: 0.35, h: 0.7, shy: 8, home: 'any', herd: [1, 2], per: 4, drops: [['leather', 0, 1]] },
+  parrot:  { name: 'Parrot', hp: 6, walk: 1.0, run: 4, r: 0.25, h: 0.6, shy: 5, hop: true, home: 'any', herd: [2, 3], per: 4, drops: [['feather', 1, 3]] },
+  polar_bear: { name: 'Polar bear', hp: 90, walk: 1.2, run: 6.4, r: 0.95, h: 1.8, hostile: 8, bite: 22, knock: 10, attackEvery: 1.6, home: 'any', herd: [1, 2], per: 1.5, drops: [['raw_meat', 3, 5], ['leather', 2, 3]] },
+  jaguar:  { name: 'Jaguar', hp: 34, walk: 1.6, run: 8.4, r: 0.55, h: 0.95, hostile: 12, bite: 14, knock: 6, home: 'any', herd: [1, 1], per: 1.5, drops: [['leather', 1, 2], ['raw_meat', 1, 2]] },
+  scorpion: { name: 'Scorpion', hp: 14, walk: 1.4, run: 5.5, r: 0.4, h: 0.45, hostile: 8, bite: 9, home: 'any', herd: [1, 2], per: 2.5, drops: [['silk', 0, 1], ['raw_meat', 0, 1]] },
   spider:  { name: 'Cave spider', hp: 18, walk: 1.8, run: 6.2, r: 0.6, h: 0.6, hostile: 13, bite: 8, home: 'cave', herd: [1, 3], per: 2.5, drops: [['silk', 1, 2]] },
 };
 export const animals = [];
@@ -215,6 +225,97 @@ function buildAnimal(kind, rand) {
       box(head, 0.1, 0.12, 0.06, bristle, -0.16, 0.26, -0.06); box(head, 0.1, 0.12, 0.06, bristle, 0.16, 0.26, -0.06);
       break;
     }
+    case 'camel': {
+      const tan = M(0xc8a06a), dark = M(0x8a6a44);
+      for (const [x, z] of [[-0.25, -0.55], [0.25, -0.55], [-0.25, 0.55], [0.25, 0.55]]) leg(tan, 0.16, 1.05, x, 1.05, z);
+      box(g, 0.7, 0.66, 1.55, tan, 0, 1.35, 0);
+      box(g, 0.5, 0.42, 0.55, tan, 0, 1.85, 0.05); box(g, 0.4, 0.2, 0.4, dark, 0, 2.08, 0.05); // the hump
+      box(g, 0.08, 0.36, 0.08, dark, 0, 1.25, 0.82, -0.3);
+      head.position.set(0, 1.55, -0.75);
+      box(head, 0.26, 0.7, 0.26, tan, 0, 0.32, -0.08, -0.35); // long neck
+      box(head, 0.3, 0.28, 0.5, tan, 0, 0.7, -0.38); box(head, 0.2, 0.14, 0.14, dark, 0, 0.62, -0.62);
+      box(head, 0.08, 0.1, 0.06, dark, -0.12, 0.88, -0.24); box(head, 0.08, 0.1, 0.06, dark, 0.12, 0.88, -0.24);
+      break;
+    }
+    case 'zebra': {
+      const white = M(0xf0eee8), black = M(0x1e1c1c);
+      for (const [x, z] of [[-0.19, -0.5], [0.19, -0.5], [-0.19, 0.5], [0.19, 0.5]]) leg(white, 0.13, 0.8, x, 0.8, z);
+      box(g, 0.56, 0.6, 1.3, white, 0, 1.1, 0);
+      for (let i = 0; i < 5; i++) box(g, 0.58, 0.62, 0.08, black, 0, 1.1, -0.5 + i * 0.25); // stripes
+      box(g, 0.08, 0.5, 0.08, black, 0, 1.05, 0.7, -0.3);
+      head.position.set(0, 1.35, -0.6);
+      box(head, 0.24, 0.5, 0.26, white, 0, 0.15, -0.08, -0.5);
+      box(head, 0.06, 0.5, 0.3, black, 0, 0.32, 0.02, -0.5); // mane
+      box(head, 0.26, 0.26, 0.5, white, 0, 0.38, -0.36); box(head, 0.2, 0.18, 0.14, black, 0, 0.32, -0.62);
+      box(head, 0.06, 0.16, 0.06, white, -0.09, 0.56, -0.2); box(head, 0.06, 0.16, 0.06, white, 0.09, 0.56, -0.2);
+      break;
+    }
+    case 'goat': {
+      const coat = M(rand() < 0.5 ? 0xe8e2d4 : 0x8a7a68), horn = M(0x6a6058), beard = M(0xd8d0c0);
+      for (const [x, z] of [[-0.14, -0.3], [0.14, -0.3], [-0.14, 0.3], [0.14, 0.3]]) leg(coat, 0.11, 0.5, x, 0.5, z);
+      box(g, 0.42, 0.42, 0.8, coat, 0, 0.72, 0);
+      head.position.set(0, 0.95, -0.42);
+      box(head, 0.24, 0.26, 0.34, coat, 0, 0, -0.1); box(head, 0.08, 0.14, 0.06, beard, 0, -0.18, -0.22);
+      box(head, 0.06, 0.24, 0.06, horn, -0.08, 0.2, 0.0, 0.5); box(head, 0.06, 0.24, 0.06, horn, 0.08, 0.2, 0.0, 0.5);
+      break;
+    }
+    case 'fox': {
+      const orange = M(0xe0702a), white = M(0xf4efe6), dark = M(0x2a1e18);
+      for (const [x, z] of [[-0.1, -0.22], [0.1, -0.22], [-0.1, 0.22], [0.1, 0.22]]) leg(dark, 0.08, 0.28, x, 0.28, z);
+      box(g, 0.3, 0.28, 0.62, orange, 0, 0.42, 0); box(g, 0.22, 0.08, 0.44, white, 0, 0.3, -0.02);
+      box(g, 0.18, 0.18, 0.5, orange, 0, 0.45, 0.52, -0.3); box(g, 0.14, 0.14, 0.12, white, 0, 0.36, 0.78, -0.3); // bushy tail, white tip
+      head.position.set(0, 0.55, -0.34);
+      box(head, 0.26, 0.22, 0.24, orange, 0, 0, -0.06); box(head, 0.12, 0.1, 0.18, white, 0, -0.05, -0.24);
+      box(head, 0.05, 0.04, 0.04, dark, 0, -0.02, -0.34);
+      box(head, 0.07, 0.12, 0.04, orange, -0.08, 0.16, -0.02); box(head, 0.07, 0.12, 0.04, orange, 0.08, 0.16, -0.02);
+      break;
+    }
+    case 'parrot': {
+      const body = M([0xd8302a, 0x2a8ad8, 0x3cb83c, 0xe8c030][Math.floor(rand() * 4)]), wing = M(0x2050c0), beak = M(0x2a2a2a), tail = M(0xe8c030);
+      leg(beak, 0.04, 0.12, -0.05, 0.12, 0); leg(beak, 0.04, 0.12, 0.05, 0.12, 0);
+      box(g, 0.2, 0.3, 0.22, body, 0, 0.3, 0);
+      box(g, 0.04, 0.22, 0.16, wing, -0.12, 0.3, 0.02); box(g, 0.04, 0.22, 0.16, wing, 0.12, 0.3, 0.02);
+      box(g, 0.08, 0.06, 0.26, tail, 0, 0.18, 0.18, 0.6);
+      head.position.set(0, 0.48, -0.04);
+      box(head, 0.16, 0.16, 0.16, body, 0, 0.02, -0.02); box(head, 0.06, 0.08, 0.08, beak, 0, -0.02, -0.12);
+      break;
+    }
+    case 'polar_bear': {
+      const fur = M(0xf2efe6), dark = M(0x1c1a18), muzzle = M(0xe0dad0);
+      for (const [x, z] of [[-0.32, -0.55], [0.32, -0.55], [-0.32, 0.55], [0.32, 0.55]]) leg(fur, 0.28, 0.64, x, 0.64, z);
+      box(g, 0.96, 0.84, 1.7, fur, 0, 1.06, 0);
+      head.position.set(0, 1.28, -0.9);
+      box(head, 0.52, 0.48, 0.56, fur, 0, 0, -0.16); box(head, 0.3, 0.24, 0.3, muzzle, 0, -0.1, -0.52);
+      box(head, 0.12, 0.08, 0.06, dark, 0, -0.02, -0.68);
+      box(head, 0.12, 0.12, 0.08, fur, -0.2, 0.28, -0.06); box(head, 0.12, 0.12, 0.08, fur, 0.2, 0.28, -0.06);
+      box(head, 0.06, 0.06, 0.02, dark, -0.13, 0.08, -0.45); box(head, 0.06, 0.06, 0.02, dark, 0.13, 0.08, -0.45);
+      break;
+    }
+    case 'jaguar': {
+      const coat = M(0xd8a040), spot = M(0x3a2a1a), belly = M(0xf0e2c0), eye = M(0x9ad030);
+      eye.emissive.set(0x3a5a00);
+      for (const [x, z] of [[-0.15, -0.4], [0.15, -0.4], [-0.15, 0.4], [0.15, 0.4]]) leg(coat, 0.12, 0.45, x, 0.45, z);
+      box(g, 0.42, 0.4, 1.05, coat, 0, 0.66, 0); box(g, 0.34, 0.08, 0.8, belly, 0, 0.46, 0);
+      for (const [x, y, z] of [[-0.18, 0.75, -0.3], [0.2, 0.8, -0.05], [-0.15, 0.82, 0.2], [0.17, 0.7, 0.36], [0, 0.87, -0.15], [0.05, 0.86, 0.38]]) box(g, 0.1, 0.1, 0.12, spot, x, y, z);
+      box(g, 0.1, 0.1, 0.6, coat, 0, 0.6, 0.78, -0.2);
+      head.position.set(0, 0.8, -0.56);
+      box(head, 0.32, 0.28, 0.32, coat, 0, 0, -0.1); box(head, 0.16, 0.12, 0.12, belly, 0, -0.07, -0.3);
+      box(head, 0.08, 0.08, 0.04, coat, -0.11, 0.17, -0.02); box(head, 0.08, 0.08, 0.04, coat, 0.11, 0.17, -0.02);
+      box(head, 0.06, 0.04, 0.02, eye, -0.08, 0.04, -0.27); box(head, 0.06, 0.04, 0.02, eye, 0.08, 0.04, -0.27);
+      break;
+    }
+    case 'scorpion': {
+      const shell = M(0x8a5a2a), dark = M(0x4a2e14), sting = M(0x1a1a1a);
+      for (let i = 0; i < 4; i++) for (const side of [-1, 1]) leg(dark, 0.05, 0.2, side * 0.2, 0.2, -0.12 + i * 0.1);
+      box(g, 0.34, 0.16, 0.5, shell, 0, 0.24, 0);
+      // a tail curling up and over the back
+      box(g, 0.1, 0.1, 0.3, shell, 0, 0.32, 0.36, -0.6); box(g, 0.09, 0.3, 0.09, shell, 0, 0.55, 0.46); box(g, 0.08, 0.08, 0.22, shell, 0, 0.72, 0.36, 0.5);
+      box(g, 0.05, 0.08, 0.05, sting, 0, 0.7, 0.24);
+      head.position.set(0, 0.24, -0.26);
+      box(head, 0.26, 0.12, 0.14, shell, 0, 0, -0.04);
+      box(head, 0.08, 0.08, 0.22, dark, -0.18, 0, -0.18); box(head, 0.08, 0.08, 0.22, dark, 0.18, 0, -0.18); // claws
+      break;
+    }
     case 'spider': {
       const black = M(0x1d1b1e), hair = M(0x3a3236), eye = M(0xff2a1a);
       eye.emissive.set(0xc01000);
@@ -267,7 +368,7 @@ function caveFloorAt(x, z) {
 // Animals live around the player (within ANIMAL_RANGE), where the ground is loaded; ones that end up
 // much further away are taken out again, so herds keep turning up wherever you go.
 const ANIMAL_RANGE = 220, ANIMAL_DROP = 380;
-function findAnimalSpot(home, rand, awayFromPlayer) {
+function findAnimalSpot(kind, home, rand, awayFromPlayer) {
   const T = terrainFns, S = WORLD.size, L = T.ledge, px = player.position.x, pz = player.position.z;
   for (let tries = 0; tries < (home === 'cave' ? 160 : 60); tries++) {
     const a = rand() * Math.PI * 2, d = (awayFromPlayer ? 50 : 0) + Math.sqrt(rand()) * (ANIMAL_RANGE - (awayFromPlayer ? 50 : 0));
@@ -280,6 +381,7 @@ function findAnimalSpot(home, rand, awayFromPlayer) {
       if (g) return { x, y: g.point.y, z };
       continue;
     }
+    if (!BIOMES[T.biomeAt(x, z)].animals.includes(kind)) continue; // each kind lives in its own biomes
     const W = T.waterAt(x, z);
     const g = groundAt(x, z);
     if (!g) continue;
@@ -296,7 +398,7 @@ function findAnimalSpot(home, rand, awayFromPlayer) {
 
 function spawnHerd(kind, rand, awayFromPlayer) {
   const sp = SPECIES[kind];
-  const spot = findAnimalSpot(sp.home, rand, awayFromPlayer);
+  const spot = findAnimalSpot(kind, sp.home, rand, awayFromPlayer);
   if (!spot) return 0;
   const n = sp.herd[0] + Math.floor(rand() * (sp.herd[1] - sp.herd[0] + 1));
   let made = 0;

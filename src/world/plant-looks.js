@@ -124,7 +124,7 @@ export function pineTier(radius, height, cards, seed) {
 }
 // Two geometries in one, as material groups 0 (core) and 1 (cards)
 function mergeWithGroups(a, b) {
-  a = a.index ? a.toNonIndexed() : a; b = b.toNonIndexed();
+  a = a.index ? a.toNonIndexed() : a; b = b.index ? b.toNonIndexed() : b;
   const g = new THREE.BufferGeometry();
   for (const name of ['position', 'normal', 'uv']) {
     const A = a.attributes[name].array, B = b.attributes[name].array, out = new Float32Array(A.length + B.length);
@@ -225,3 +225,99 @@ export const foliageMaterials = (needles, distant = false) => [
   new THREE.MeshStandardMaterial({ color: distant ? 0xb4bca4 : 0x7a8270, roughness: 0.95 }),
   new THREE.MeshStandardMaterial({ map: needles ? needleTexture() : leafTexture(), alphaTest: 0.45, side: THREE.DoubleSide, roughness: 0.75 }),
 ];
+
+// ---------------------------------------------------------------------------
+// Plants of the other biomes. All are drawn nearly white or grey and tinted per instance.
+// ---------------------------------------------------------------------------
+// Palm fronds: long drooping leaf cards fanning out from the top of the trunk.
+export function frondGeometry(count = 9, length = 3.2) {
+  const quads = [], rand = mulberry32(41);
+  for (let i = 0; i < count; i++) {
+    const a = (i / count) * Math.PI * 2 + rand() * 0.3, dir = new THREE.Vector3(Math.cos(a), 0, Math.sin(a));
+    const side = new THREE.Vector3(-dir.z, 0, dir.x);
+    // two cards per frond: rising from the crown, then drooping towards the tip
+    const p0 = new THREE.Vector3(0, 0, 0), p1 = dir.clone().multiplyScalar(length * 0.5).setY(0.45), p2 = dir.clone().multiplyScalar(length).setY(-0.7);
+    for (const [a0, a1, w0, w1] of [[p0, p1, 0.25, 0.7], [p1, p2, 0.7, 0.2]]) {
+      quads.push([a0.clone().addScaledVector(side, -w0), a0.clone().addScaledVector(side, w0), a1.clone().addScaledVector(side, w1), a1.clone().addScaledVector(side, -w1)]);
+    }
+  }
+  return cardGeometry(quads, new THREE.Vector3(0, -1, 0));
+}
+// A saguaro-style cactus: a ribbed column with one or two arms (1 m tall before scaling).
+export function cactusGeometry() {
+  const parts = [], rib = (r, h) => new THREE.CylinderGeometry(r, r, h, 8, 1).translate(0, h / 2, 0);
+  parts.push(rib(0.22, 1), new THREE.SphereGeometry(0.22, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2).translate(0, 1, 0));
+  for (const [s, y, h] of [[1, 0.4, 0.35], [-1, 0.55, 0.28]]) {
+    parts.push(new THREE.CylinderGeometry(0.13, 0.13, 0.32, 6).rotateZ(Math.PI / 2).translate(s * 0.3, y, 0));
+    parts.push(rib(0.13, h).translate(s * 0.44, y, 0), new THREE.SphereGeometry(0.13, 6, 3, 0, Math.PI * 2, 0, Math.PI / 2).translate(s * 0.44, y + h, 0));
+  }
+  return mergeSimple(parts);
+}
+// Thin twigs sticking up out of the sand.
+export function deadBushGeometry() {
+  const parts = [], rand = mulberry32(7);
+  for (let i = 0; i < 7; i++) {
+    const g = new THREE.CylinderGeometry(0.012, 0.025, 0.55 + rand() * 0.3, 3).translate(0, 0.3, 0);
+    g.rotateZ((rand() - 0.5) * 1.3).rotateY(rand() * Math.PI * 2);
+    parts.push(g);
+  }
+  return mergeSimple(parts);
+}
+// Flowers: a few stems with a round head each. Returns [stems, heads] (instanced separately, so
+// only the heads take the flower's colour).
+export function flowerGeometries() {
+  const stems = [], heads = [], rand = mulberry32(13);
+  for (let i = 0; i < 4; i++) {
+    const x = (rand() - 0.5) * 0.35, z = (rand() - 0.5) * 0.35, h = 0.25 + rand() * 0.15;
+    stems.push(new THREE.CylinderGeometry(0.008, 0.012, h, 3).translate(x, h / 2, z));
+    heads.push(new THREE.IcosahedronGeometry(0.05, 0).scale(1, 0.6, 1).translate(x, h, z));
+  }
+  return [mergeSimple(stems), mergeSimple(heads)];
+}
+// A mushroom: [pale stem, cap].
+export function mushroomGeometries() {
+  return [new THREE.CylinderGeometry(0.035, 0.045, 0.16, 6).translate(0, 0.08, 0),
+    new THREE.SphereGeometry(0.11, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 0.7, 1).translate(0, 0.15, 0)];
+}
+// Pumpkins and melons: a squashed ribbed ball.
+export function gourdGeometry() {
+  const g = new THREE.SphereGeometry(0.4, 14, 8), p = g.attributes.position, v = new THREE.Vector3();
+  for (let i = 0; i < p.count; i++) {
+    v.fromBufferAttribute(p, i);
+    const a = Math.atan2(v.z, v.x), rib = 1 + Math.cos(a * 8) * 0.05;
+    p.setXYZ(i, v.x * rib, v.y * 0.75 + 0.3, v.z * rib);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+// A clump of bamboo canes (1 m tall before scaling; scaled up tall).
+export function bambooGeometry() {
+  const parts = [], rand = mulberry32(21);
+  for (let i = 0; i < 5; i++) {
+    const x = (rand() - 0.5) * 0.6, z = (rand() - 0.5) * 0.6, h = 0.7 + rand() * 0.3;
+    parts.push(new THREE.CylinderGeometry(0.035, 0.04, h, 5).translate(x, h / 2, z));
+  }
+  return mergeSimple(parts);
+}
+// An ice spike: a tall tapering spire.
+export function iceSpikeGeometry() {
+  const g = new THREE.ConeGeometry(1, 1, 7, 4).translate(0, 0.5, 0), p = g.attributes.position, v = new THREE.Vector3();
+  for (let i = 0; i < p.count; i++) { v.fromBufferAttribute(p, i); const k = 1 + Math.sin(v.y * 9 + Math.atan2(v.z, v.x) * 3) * 0.08; p.setXYZ(i, v.x * k, v.y, v.z * k); }
+  g.computeVertexNormals();
+  return g;
+}
+// Fallen petals: a flat scatter of little pink discs on the ground.
+export function petalsGeometry() {
+  const parts = [], rand = mulberry32(31);
+  for (let i = 0; i < 26; i++) parts.push(new THREE.CircleGeometry(0.035 + rand() * 0.03, 5).rotateX(-Math.PI / 2).translate((rand() - 0.5) * 1.4, 0.02 + rand() * 0.01, (rand() - 0.5) * 1.4));
+  return mergeSimple(parts);
+}
+function mergeSimple(list) {
+  const out = { position: [], normal: [] };
+  for (let g of list) { g = g.index ? g.toNonIndexed() : g; for (const k in out) out[k].push(...g.attributes[k].array); }
+  const g = new THREE.BufferGeometry();
+  for (const k in out) g.setAttribute(k, new THREE.Float32BufferAttribute(out[k], 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array((out.position.length / 3) * 2), 2));
+  g.computeBoundingSphere();
+  return g;
+}

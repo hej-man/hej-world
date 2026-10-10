@@ -8,9 +8,10 @@ import { EYE_OFFSET, player } from './character.js';
 import { aimRay } from './camera.js';
 import { ITEMS, addItem, inventoryOpen, renderInventory, setInventoryOpen, slots } from '../inventory/inventory.js';
 import { BLOCKS, blockKey, blocks, placeBlock, removeBlock, voxelRay } from '../world/blocks.js';
+import { PLANT_KINDS, TREE_KINDS } from '../world/vegetation.js';
 import { BOLT_COST, MAX_HEALTH, drankDirtyWater, stats } from './survival.js';
 import { animals, hurtAnimal, spawnAnimal } from '../animals/animals.js';
-import { addSource, fluidRay, floodFromNature, removeFluid, wakeArea } from '../world/fluids.js';
+import { addSource, fluidRay, floodFromNature, removeFluid, sourceOf, wakeArea } from '../world/fluids.js';
 import { craterLavaAt, lavaAt } from '../world/volcano.js';
 import { cameraUnderwater } from '../effects/underwater.js';
 import { toast } from '../ui/hud.js';
@@ -94,40 +95,63 @@ function terrainMaterialAt(hit) {
   return naturalMaterial(p.x, p.y, p.z, n.y);
 }
 
+// What the natural ground can be made of: [how it breaks, what you get, name]. Anything not listed
+// (granite, diorite and the other stones) breaks like stone and gives itself.
+const GROUND = {
+  dirt: ['dirt', 'dirt', 'Dirt'], sand: ['sand', 'sand', 'Sand'], stone: ['stone', 'stone', 'Stone'], crystal: ['crystal', 'crystal', 'Crystal'],
+  iron: ['iron', 'iron_ore', 'Iron ore'], coal: ['stone', 'coal', 'Coal ore'], copper: ['stone', 'raw_copper', 'Copper ore'], gold: ['iron', 'raw_gold', 'Gold ore'],
+  red_sand: ['sand', 'red_sand', 'Red sand'], gravel: ['sand', 'gravel', 'Gravel'], clay: ['dirt', 'clay', 'Clay'], snow: ['sand', 'snow_block', 'Snow'],
+  podzol: ['dirt', 'podzol', 'Podzol'], mud: ['dirt', 'mud', 'Mud'], ice: ['ice', 'ice', 'Ice'],
+};
+const ground = (m) => GROUND[m] || ['stone', m, BLOCKS[m]?.name || m];
+
 function materialOf(t) {
   switch (t.kind) {
     case 'tree': return 'wood';
-    case 'bush': return 'plant';
+    case 'plant': return PLANT_KINDS[t.target.plant].tool === 'pickaxe' ? 'ice' : 'plant';
     case 'rock': return 'stone';
     case 'block': return BLOCKS[t.type].mat;
-    case 'terrain': return t.material || (t.material = terrainMaterialAt(t.hit));
+    case 'terrain': return ground(t.material || (t.material = terrainMaterialAt(t.hit)))[0];
   }
   return 'soft';
 }
 
+const nice = (id) => id.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
 function targetName(t) {
   switch (t.kind) {
-    case 'tree': return { pine: 'Pine tree', oak: 'Oak tree', birch: 'Birch tree' }[t.target.species];
-    case 'bush': return 'Berry bush';
+    case 'tree': return TREE_KINDS[t.target.species].name;
+    case 'plant': return t.target.flower ? nice(t.target.flower) : t.target.plant === 'mushrooms' ? (t.target.red ? 'Red mushroom' : 'Brown mushroom') : PLANT_KINDS[t.target.plant].name;
     case 'rock': return t.target.iron ? 'Iron-rich boulder' : 'Boulder';
-    case 'block': return BLOCKS[t.type].name;
+    case 'block': { const b = blocks.get(t.key); return BLOCKS[t.type].name + (b?.plantedAt !== undefined ? ' (growing)' : ''); }
     case 'animal': return `${t.animal.sp.name}  ${Math.max(0, Math.ceil(t.animal.hp))}/${t.animal.sp.hp}`;
-    case 'terrain': return { dirt: 'Dirt', sand: 'Sand', stone: 'Stone', crystal: 'Crystal', iron: 'Iron ore' }[materialOf(t)];
+    case 'terrain': materialOf(t); return ground(t.material)[2];
   }
   return '';
 }
 
-// Seconds to break something with the item in hand (Infinity = can't).
-export function breakTime(mat, def) {
+// The pickaxe tier something needs: placed blocks say so; deepslate and blackstone in the ground
+// need the same as their blocks.
+function needTier(t) {
+  if (t.kind === 'block') return BLOCKS[t.type].tier || 0;
+  if (t.kind === 'terrain') { materialOf(t); return BLOCKS[t.material]?.tier || 0; }
+  return 0;
+}
+
+// Seconds to break something with the item in hand (Infinity = can't). `need` is the pickaxe tier
+// some blocks need (obsidian, deepslate).
+export function breakTime(mat, def, need = 0) {
   if (state.creative) return 0.12;
-  const tool = def?.tool, tier = def?.tier || 0, speed = [1, 1, 1.6, 2.6][tier];
+  const tool = def?.tool, tier = def?.tier || 0, speed = def?.speed ?? [1, 1, 1.6, 2.6][tier];
+  if (need > 1 && !(tool === 'pickaxe' && tier >= need)) return Infinity;
   switch (mat) {
     case 'wood': return tool === 'axe' ? 1.1 / speed : 2.6;
     case 'plant': return 0.35;
     case 'soft': return 0.5;
+    case 'glass': return 0.4;
     case 'dirt': case 'sand': return tool === 'shovel' ? 0.4 / speed : 0.9;
-    case 'stone': case 'crystal': return tool === 'pickaxe' ? 1.4 / speed : Infinity;
-    case 'iron': return tool === 'pickaxe' && tier >= 2 ? 2 / speed : Infinity;
+    case 'ice': return tool === 'pickaxe' ? 0.6 / speed : 1.6;
+    case 'stone': case 'crystal': return tool === 'pickaxe' ? 1.4 * (need === 3 ? 4 : 1) / speed : Infinity;
+    case 'iron': case 'metal': return tool === 'pickaxe' && tier >= 2 ? 2 / speed : Infinity;
   }
   return 1;
 }
@@ -151,25 +175,31 @@ function harvest(tg) {
   for (const [mesh, i] of tg.parts) { mesh.setMatrixAt(i, _hide); mesh.instanceMatrix.needsUpdate = true; }
   if (tg.obstacle) gridRemove(obstacleGrid, tg.obstacle);
   gridRemove(targetGrid, tg);
-  const r = Math.random;
+  const r = Math.random, between = (a, b) => a + Math.floor(r() * (b - a + 1));
   if (tg.kind === 'tree') {
+    const kind = TREE_KINDS[tg.species], wood = kind.wood, [fruit, chance] = kind.fruit || [];
     give([
-      ['log', 2 + Math.round(tg.scale * 2)],
-      ['stick', 1 + Math.floor(r() * 2) + (tg.species === 'pine' ? 1 : 0)],
-      ['apple', tg.species === 'oak' && r() < 0.5 ? 1 + Math.floor(r() * 2) : 0],
+      [wood === 'oak' ? 'log' : `${wood}_log`, Math.round((2 + tg.scale * 2) * (kind.big ? 2 : 1))],
+      ['stick', between(1, 2) + (tg.species === 'pine' ? 1 : 0)],
+      [`${wood}_sapling`, r() < 0.55 ? between(1, 2) : 0],
+      [`${wood}_leaves`, r() < 0.4 ? between(1, 3) : 0],
+      [fruit, fruit && r() < chance ? between(1, 2) : 0],
     ]);
-  } else if (tg.kind === 'bush') {
-    give([['berries', r() < 0.8 ? 1 + Math.floor(r() * 3) : 0], ['stick', 1]]);
+  } else if (tg.kind === 'plant') {
+    if (tg.flower) give([[tg.flower, between(1, 2)]]);
+    else if (tg.plant === 'mushrooms') give([[tg.red ? 'red_mushroom' : 'brown_mushroom', between(1, 2)]]);
+    else give(PLANT_KINDS[tg.plant].drops.map(([id, a, b]) => [id, between(a, b)]));
   } else if (tg.kind === 'rock') {
     give(tg.iron ? [['stone', 1 + Math.round(tg.s)], ['iron_ore', 1 + Math.round(tg.s * 1.5)]] : [['stone', 2 + Math.round(tg.s * 2)]]);
   }
 }
 
 export function doBreak(t) {
-  if (t.kind === 'tree' || t.kind === 'bush' || t.kind === 'rock') { harvest(t.target); return; }
+  if (t.kind === 'tree' || t.kind === 'plant' || t.kind === 'rock') { harvest(t.target); return; }
   if (t.kind === 'block') { const b = removeBlock(t.key); if (b) { give([[b.type, 1]]); wakeArea(b.x, b.y, b.z, 1); } return; }
   if (t.kind === 'terrain') {
-    const mat = materialOf(t);
+    materialOf(t);
+    const mat = t.material;
     const center = t.point.clone().addScaledVector(t.normal, -0.6);
     const flipped = editTerrain(center, 1.9, false);
     if (!flipped) return;
@@ -183,7 +213,8 @@ export function doBreak(t) {
         if (Math.hypot(tg.x - center.x, tg.y - center.y, tg.z - center.z) < 2.6) harvest(tg);
       }
     }
-    give(mat === 'crystal' ? [['crystal', 1 + Math.floor(Math.random() * 2)]] : mat === 'iron' ? [['iron_ore', 1], ['stone', Math.random() < 0.5 ? 1 : 0]] : [[mat, 1]]);
+    const drop = ground(mat)[1], ore = ['iron', 'coal', 'copper', 'gold'].includes(mat);
+    give(mat === 'crystal' ? [['crystal', 1 + Math.floor(Math.random() * 2)]] : ore ? [[drop, mat === 'coal' ? 1 + Math.floor(Math.random() * 2) : 1], ['stone', Math.random() < 0.5 ? 1 : 0]] : [[drop, 1]]);
   }
 }
 
@@ -237,6 +268,8 @@ export function useWater() {
 export function useItem(t) {
   const s = slots[state.selectedSlot], def = s && ITEMS[s.id];
   // water in front of whatever you're aiming at: drink or fill a bottle, unless you're building
+  // an empty bottle fills from poured water too
+  if (s?.id === 'bottle' && !aimWater) { const f = fluidRay(_aimO, _aimD, PLAYER.reach); if (f?.type === 'water' && (!t || f.t < t.t)) { useWater(); return; } }
   if (aimWater && !(def && (def.place || def.bucket || def.fluid || def.spawn || def.food || def.drink || def.heal || def.mana || def.armour || def.wand))) { useWater(); return; }
   if (t?.kind === 'block' && BLOCKS[t.type].station && !(def && def.place)) { setInventoryOpen(true); return; }
   if (!def) return;
@@ -248,7 +281,7 @@ export function useItem(t) {
     // scoop up poured fluid, the sea or a lake, or lava from a flow or crater
     const f = fluidRay(_aimO, _aimD, PLAYER.reach);
     let got = null;
-    if (f && (!t || f.t < t.t)) { got = f.type; if (f.src) removeFluid(f.x, f.y, f.z); }
+    if (f && (!t || f.t < t.t)) { got = f.type; const src = sourceOf(f); if (src) removeFluid(src.x, src.y, src.z); }
     else if (aimWater) got = 'water';
     else if (t?.kind === 'terrain' && (lavaAt(t.point.x, t.point.y - 0.2, t.point.z, 0.3) || t.point.y < craterLavaAt(t.point.x, t.point.z) + 1)) got = 'lava';
     if (!got) { toast('Aim at water or lava to fill the bucket'); return; }
@@ -271,6 +304,7 @@ export function useItem(t) {
     if (def.drink) stats.thirst = Math.min(100, stats.thirst + def.drink);
     if (def.heal) stats.health = Math.min(MAX_HEALTH, stats.health + def.heal);
     consumeSelected();
+    if (def.leaves && !state.creative) addItem(def.leaves, 1);
     toast(`Ate ${def.name.toLowerCase()}`);
     state.useCd = 0.5;
   } else if (def.drink) {
@@ -295,7 +329,7 @@ export function useItem(t) {
     castBolt();
   } else if (def.armour) {
     if (stats.armour >= def.armour) { toast('Already wearing armour'); return; }
-    stats.armour = def.armour;
+    stats.armour = def.armour; stats.armourLook = def.look;
     consumeSelected();
     toast(`Wearing ${def.name.toLowerCase()}`);
   }
@@ -384,9 +418,13 @@ export function updateInteraction(dt) {
     } else if (t) {
       const id = targetId(t);
       if (id !== breakKey) { breakKey = id; breakProgress = 0; }
-      const time = breakTime(materialOf(t), def);
+      const need = needTier(t), time = breakTime(materialOf(t), def, need);
       if (!isFinite(time)) {
-        if (warnCd <= 0) { const m = materialOf(t); toast(m === 'iron' ? 'Iron ore needs a stone or iron pickaxe' : `You need a pickaxe to break ${m === 'crystal' ? 'crystal' : 'stone'}`); warnCd = 2.5; }
+        if (warnCd <= 0) {
+          const m = materialOf(t), name = targetName(t);
+          toast(def?.tool === 'pickaxe' || m === 'iron' || m === 'metal' ? `${name} needs a ${need >= 3 ? 'iron' : 'stone or better'} pickaxe` : `You need a pickaxe to break ${name.toLowerCase()}`);
+          warnCd = 2.5;
+        }
         breakProgress = 0;
       } else {
         breakProgress += dt / time;

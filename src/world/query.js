@@ -40,12 +40,22 @@ export function editedMaterialAt(x, y, z) {
 }
 
 // What the natural ground is made of at a point (used for drops and to colour dug ground).
+// Rock gives its ore or the kind of stone; the top few metres depend on the biome.
 export function naturalMaterial(x, y, z, ny = 1) {
   const T = terrainFns;
-  if (T.volcanoInfluence(x, z) > 0.3) return 'stone';
-  const surf = T.surfaceHeight(x, z);
-  if (y < surf - 3.5 || y > 72 || ny < 0.5) return T.oreAt(x, y, z) > 0.5 ? 'iron' : 'stone';
-  return y < T.waterAt(x, z) + 1.8 ? 'sand' : 'dirt';
+  if (T.volcanoInfluence(x, z) > 0.3) return 'basalt';
+  const surf = T.surfaceHeight(x, z), b = T.biomeAt(x, z);
+  const rock = () => T.oreKind(x, y, z)?.[0] || (b === 'mesa' && y > surf - 14 ? 'terracotta' : b === 'desert' && y > surf - 14 ? 'sandstone' : T.stoneAt(x, y, z));
+  if (y < surf - 3.5 || y > 72 || ny < 0.5) return rock();
+  if (y < T.waterAt(x, z) + 1.8) return T.lakeAt(x, z) && y < T.waterAt(x, z) ? 'clay' : 'sand';
+  switch (b) {
+    case 'desert': return y > surf - 2.5 ? 'sand' : 'sandstone';
+    case 'mesa': return y > surf - 1.5 ? 'red_sand' : 'terracotta';
+    case 'snowy_plains': case 'ice_spikes': case 'snowy_taiga': return y > surf - 1.2 ? 'snow' : 'dirt';
+    case 'taiga': case 'redwood_forest': return y > surf - 1.2 ? 'podzol' : 'dirt';
+    case 'savanna': return y > surf - 1.2 && T.noise2(x * 0.1, z * 0.1) > 0.3 ? 'gravel' : 'dirt';
+  }
+  return 'dirt';
 }
 
 // Returns how many grid points flipped between ground and air.

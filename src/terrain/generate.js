@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { WORLD } from '../config.js';
 import { lerp, makeNoise, mulberry32, smax, smoothstep } from '../noise.js';
+import { BIOMES, BIOME_IDS, makeBiomes } from './biomes.js';
+import { STONES } from '../world/block-catalog.js';
 
 // ---------------------------------------------------------------------------
 // Terrain: height functions + 3D density field (positive = rock, negative = air)
@@ -38,13 +40,39 @@ export function createTerrainFunctions(seed) {
     return m * smoothstep(25, 75, riverDist(x, z));
   }
 
+  // Biomes (see biomes.js). The start area is kept temperate; `home` is set when the start is chosen.
+  const home = { x: 0, z: 0, r: 0 };
+  const biomes = makeBiomes(noise2, mountainMask, home);
+  const SHAPE = (k) => Float32Array.from(BIOME_IDS, (id) => (BIOMES[id].shape === k ? 1 : 0));
+  const FLAT = SHAPE('flat'), HILLS = SHAPE('hills'), DUNES = SHAPE('dunes'), TERRACES = SHAPE('terraces');
+  const TREES = Float32Array.from(BIOME_IDS, (id) => BIOMES[id].trees.density);
+  const sumW = (w, k) => { let v = 0; for (let i = 0; i < w.length; i++) v += w[i] * k[i]; return v; };
+
+  // How thickly trees grow here (0..1): the biome's density, with clearings.
   function forestMask(x, z) {
-    return smoothstep(-0.05, 0.3, fbm2(x * 0.009 + 400, z * 0.009 - 120, 3));
+    const dens = sumW(biomes.biomeWeights(x, z), TREES);
+    return dens * smoothstep(-0.35, 0.1, fbm2(x * 0.009 + 400, z * 0.009 - 120, 3));
+  }
+
+  // Mesa plateaus: flat tops with stepped cliffs between them.
+  function terraces(x, z) {
+    const p = smoothstep(-0.15, 0.35, fbm2(x * 0.011 + 61, z * 0.011 - 17, 3)) * 30;
+    const step = 5, k = p / step, f = k - Math.floor(k);
+    return (Math.floor(k) + smoothstep(0.75, 1, f)) * step;
+  }
+  // Desert dunes: long ridges with a gentle side and a steeper one.
+  function dunes(x, z) {
+    const r = 1 - Math.abs(noise2(x * 0.018 + noise2(x * 0.005, z * 0.005) * 2, z * 0.007));
+    return r * r * 6 + noise2(x * 0.05, z * 0.05) * 0.8;
   }
 
   function landHeight(x, z) {
-    const wx = warpX(x, z), wz = warpZ(x, z);
-    let h = 34 + fbm2(wx * 0.007, wz * 0.007, 5) * 12;            // rolling land
+    const wx = warpX(x, z), wz = warpZ(x, z), w = biomes.biomeWeights(x, z);
+    const flat = sumW(w, FLAT), hills = sumW(w, HILLS), dune = sumW(w, DUNES), mesa = sumW(w, TERRACES);
+    let h = 34 + fbm2(wx * 0.007, wz * 0.007, 5) * 12 * (1 - flat * 0.55);  // rolling land
+    if (hills > 0.01) h += hills * (fbm2(wx * 0.016 + 30, wz * 0.016, 3) + 0.3) * 12;
+    if (dune > 0.01) h += dune * dunes(x, z);
+    if (mesa > 0.01) h += mesa * terraces(x, z);
     const mm = mountainMask(x, z);
     if (mm > 0) {
       // tall ridged mountains; the ridges only reach full height in the middle of a range, so the
@@ -138,13 +166,16 @@ export function createTerrainFunctions(seed) {
       caveX = S * (0.2 + rand() * 0.6);
       side = rand() < 0.5 ? -1 : 1;
       z0 = riverZ(caveX) + side * 8;
+      Object.assign(home, { x: caveX, z: z0 + side * 30, r: 1 }); biomes.forgetCache();
       while (Math.abs(z0 - S / 2) < S * 0.42 && surfaceHeight(caveX, z0) < W + 11) z0 += side * 2;
       const farFromVolcano = volcanoes.every((v) => Math.hypot(caveX - v.x, z0 - v.z) > v.R + 20);
       if (farFromVolcano && Math.abs(z0 - S / 2) < S * 0.42) break;
     }
+    // keep the start temperate around where it really ended up (z0 moves uphill above)
+    Object.assign(home, { x: caveX, z: z0 + side * 10, r: 1 }); biomes.forgetCache();
     Object.assign(ledge, { x: caveX, z: z0 - side * 6, y: W + 3, r: 10 });
     const y0 = ledge.y + 2.6;
-    const yEnd = WORLD.caveFloor + 6;
+    const yEnd = W + 7;
     const len = Math.max(20, Math.min(56, side > 0 ? S - 24 - z0 : z0 - 24));
     const steps = 10;
     for (let i = 0; i <= steps; i++) {
@@ -182,8 +213,37 @@ export function createTerrainFunctions(seed) {
     }
   }
 
-  // Iron ore: veins in the rock, found in cliffs, caves and anywhere you dig into stone.
+  // Ores: veins in the rock, found in cliffs, caves and anywhere you dig into stone. Each kind has
+  // its own noise field and depths: coal is common and fairly high up, copper in the middle, gold
+  // rare and deep. oreAt gives the amount of iron (0..1; above 0.5 is ore); oreKind the ore here.
   const oreAt = (x, y, z) => smoothstep(0.42, 0.56, noise3(x * 0.09 + 500, y * 0.11, z * 0.09 - 200));
+  const ORES = [
+    // [kind, offset, threshold, lowest y, highest y]
+    ['coal', 900, 0.4, 16, 128], ['copper', 1700, 0.45, 8, 64], ['gold', 2500, 0.52, 4, 26],
+  ];
+  // Returns null or [kind, amount]; the array is reused by the next call.
+  const _ore = ['', 0];
+  function oreKind(x, y, z) {
+    const iron = oreAt(x, y, z);
+    if (iron > 0.5) { _ore[0] = 'iron'; _ore[1] = iron; return _ore; }
+    for (const [kind, o, th, y0, y1] of ORES) {
+      if (y < y0 || y > y1) continue;
+      const a = smoothstep(th - 0.08, th + 0.06, noise3(x * 0.1 + o, y * 0.12 - o * 0.3, z * 0.1 - o));
+      if (a > 0.5) { _ore[0] = kind; _ore[1] = a; return _ore; }
+    }
+    return null;
+  }
+  // Stone: plain stone, with pockets of other stones (granite, marble, tuff...) at the depths each
+  // is found (block-catalog.js), and deepslate and blackstone near the bottom.
+  const STONES_AT = Array.from({ length: WORLD.height + 1 }, (_, y) => STONES.filter((s) => y >= s.depth[0] && y <= s.depth[1] && s.id !== 'deepslate' && s.id !== 'blackstone'));
+  function stoneAt(x, y, z) {
+    if (y < 10 + noise2(x * 0.05 + 3, z * 0.05 - 8) * 3) return y < 6.5 ? 'blackstone' : 'deepslate';
+    const blob = noise3(x * 0.035 + 41, y * 0.05, z * 0.035 - 17);
+    if (blob < 0.3) return 'stone';
+    const choices = STONES_AT[Math.max(0, Math.min(STONES_AT.length - 1, Math.round(y)))];
+    const pickN = noise3(x * 0.012 - 300, y * 0.02 + 5, z * 0.012 + 120) * 0.5 + 0.5;
+    return choices.length ? choices[Math.min(choices.length - 1, Math.floor(pickN * choices.length))].id : 'stone';
+  }
   const _seg = new THREE.Line3(), _p = new THREE.Vector3(), _c = new THREE.Vector3();
   const tMin = new THREE.Vector3(Infinity, Infinity, Infinity), tMax = new THREE.Vector3(-Infinity, -Infinity, -Infinity);
   for (const p of tunnel) { tMin.min(p); tMax.max(p); }
@@ -202,31 +262,56 @@ export function createTerrainFunctions(seed) {
     return Math.min(best, (Math.sqrt(dx * dx + dy * dy + dz * dz) - 1) * 8);
   }
 
+  // Caves, in the style of Minecraft's Caves and Cliffs update. Three kinds overlap:
+  //   cheese caves: huge open caverns where a slow 3D noise is high, with stone pillars left
+  //                 standing from floor to roof where a column noise is high;
+  //   spaghetti:    long winding tunnels where two noise fields are both near zero (the line
+  //                 where two surfaces cross), wider in some places than others;
+  //   the guaranteed cave near the start (tunnelDistance).
+  // Caves reach down to just above the bedrock under hills and mountains. Under low ground they
+  // stay above the sea, since the sea would show through their roofs (see waterAt).
+  const BEDROCK = 4;
+  // Per column (x, z) values, worked out once for all the heights in the column.
+  let colX = NaN, colZ = NaN, colFloor = 0, colPillar = 0, colMouth = 0;
+  function caveDistance(x, y, z, h) {
+    if (x !== colX || z !== colZ) {
+      colX = x; colZ = z;
+      // how deep caves may go here: right down where the ground is high, only to sea level where it's low
+      colFloor = lerp(W + 1, WORLD.caveFloor, smoothstep(W + DRY_ABOVE + 3, W + DRY_ABOVE + 14, h));
+      colPillar = noise2(x * 0.09 + 13, z * 0.09 - 71);
+      colMouth = smoothstep(0.45, 0.6, noise2(x * 0.012 - 77, z * 0.012 + 41));
+    }
+    const floor = colFloor, pillar = colPillar, mouth = colMouth;
+    if (y < floor) return 30;
+    // cheese: big rounded caverns, flattened a little so they're wider than tall
+    const c = noise3(x * 0.0105 + 200, y * 0.02, z * 0.0105 - 300) + noise3(x * 0.03 - 50, y * 0.04, z * 0.03 + 80) * 0.18;
+    let cave = (0.32 - c) * 60;
+    // pillars: thin columns of rock left standing in the caverns
+    if (pillar > 0.55) cave = Math.max(cave, (pillar - 0.55) * 80 - 2);
+    // spaghetti tunnels, thicker where `thick` is high
+    const a = noise3(x * 0.016, y * 0.022, z * 0.016), b = noise3(x * 0.016 + 57.1, y * 0.022 - 13.7, z * 0.016 + 91.3);
+    const thick = 0.07 + 0.06 * noise3(x * 0.007 - 9, y * 0.01, z * 0.007 + 4);
+    cave = Math.min(cave, (Math.sqrt(a * a + b * b) - thick) * 55);
+    // a roof of at least 6 m under the surface (more over the big caverns), except where a cave
+    // mouth is allowed to open to the sky
+    cave += Math.max(0, y - (h - 6)) * 6 * (1 - mouth) + Math.max(0, y - (h - 14)) * 2.5 * (1 - mouth) * smoothstep(0.3, 0.5, c);
+    cave = Math.min(cave, tunnelDistance(x, y, z));
+    // fade out towards the floor, so caves get rounded bottoms instead of flat cut-offs (and
+    // never reach below the floor, which under low ground is just above the sea)
+    return cave + Math.max(0, floor + 3 - y) * 15;
+  }
+
   function density(x, y, z, h, mm, vi, lake) {
     let d = h - y;
     // 3D detail: overhangs and crags on mountains, gentle lumps elsewhere
     d += noise3(x * 0.045, y * 0.045, z * 0.045) * (1.0 + mm * 3.5);
-    if (y > WORLD.caveFloor && vi < 0.75 && !lake) { // no caves under lakes, or they would drain
-      const fade = smoothstep(WORLD.caveFloor, WORLD.caveFloor + 5, y);
-      // big worm caves: where two noise fields are both near zero
-      const a = noise3(x * 0.02, y * 0.028, z * 0.02);
-      const b = noise3(x * 0.02 + 57.1, y * 0.028 - 13.7, z * 0.02 + 91.3);
-      let cave = (Math.sqrt(a * a + b * b) - 0.15) * 45;
-      // keep a roof of at least 5 m, except where a cave mouth is allowed to open
-      const mouth = smoothstep(0.45, 0.6, noise2(x * 0.012 - 77, z * 0.012 + 41));
-      cave += Math.max(0, y - (h - 5)) * 6 * (1 - mouth);
-      // huge caverns, kept well below the surface
-      const c = noise3(x * 0.011 + 200, y * 0.018, z * 0.011 - 300);
-      cave = Math.min(cave, (0.6 - c) * 70 + Math.max(0, y - (h - 10)) * 4);
-      cave = Math.min(cave, tunnelDistance(x, y, z));
-      d = Math.min(d, lerp(30, cave, fade));
-    }
-    return Math.max(d, 4 - y); // solid bedrock floor
+    if (y > BEDROCK + 1 && vi < 0.75 && !lake) d = Math.min(d, caveDistance(x, y, z, h)); // no caves under lakes, or they would drain
+    return Math.max(d, BEDROCK - y); // solid bedrock floor
   }
 
   return {
-    surfaceHeight, landHeight, mountainMask, forestMask, volcanoInfluence, density, tunnel, cavern, riverZ, ledge, volcanoes,
-    lakes, lakeAt, lakeRadius, waterAt, oreAt, LAKE_EDGE, noise2, noise3,
+    surfaceHeight, landHeight, mountainMask, forestMask, volcanoInfluence, ...biomes, density, tunnel, cavern, riverZ, ledge, volcanoes,
+    lakes, lakeAt, lakeRadius, waterAt, oreAt, oreKind, stoneAt, LAKE_EDGE, noise2, noise3,
   };
 }
 

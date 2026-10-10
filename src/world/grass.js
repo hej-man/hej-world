@@ -108,10 +108,12 @@ function grassAmount(x, y, z) {
   if (_gn.y < 0.8) return 0;
   if (editedMat.size && editedMaterialAt(x, y - 0.8, z)) return 0; // dug or built ground stays bare
   const nb = T.noise2(x * 0.03 + 50, z * 0.03 - 20);
-  const forest = smoothstep(0, 1, T.forestMask(x, z) + nb * 0.25);
-  return (1 - forest * 0.75) * (1 - smoothstep(50, 70, y)) * smoothstep(0.8, 0.9, _gn.y);
+  // the same jittered point the ground texture uses, so grass stops where the grassy ground does
+  const amount = T.blend(x + nb * 12, z - nb * 12, (b) => b.grass.amount);
+  return amount * (1 - smoothstep(50, 70, y)) * smoothstep(0.8, 0.9, _gn.y);
 }
 
+const grassR = (b) => (b.grass.color ? b.grass.color[0] : 1), grassG = (b) => (b.grass.color ? b.grass.color[1] : 1), grassB = (b) => (b.grass.color ? b.grass.color[2] : 1);
 function buildGrassPatch(i, j) {
   if (!grassGeo) { grassGeo = grassGeometry(); grassMat = grassMaterial(); }
   const rand = mulberry32((i * 7919 + j * 104729) ^ (worldStats?.seed || 1));
@@ -129,8 +131,10 @@ function buildGrassPatch(i, j) {
     im.setMatrixAt(n, m);
     // dry, yellower grass on open sunny patches, as on the ground texture
     const dry = smoothstep(0.35, 0.7, T.noise3(x * 0.06, y * 0.06, z * 0.06) + T.noise2(x * 0.03 + 50, z * 0.03 - 20)) * 0.6;
-    const v = 0.85 + rand() * 0.3;
-    im.setColorAt(n, c.setRGB(v * (1 + dry * 0.35), v * (1 + dry * 0.1), v * (1 - dry * 0.45)));
+    const v = 0.85 + rand() * 0.3, nb = T.noise2(x * 0.03 + 50, z * 0.03 - 20);
+    const bx = x + nb * 12, bz = z - nb * 12; // the biomes' grass colour (the weights are cached between the three calls)
+    const br = T.blend(bx, bz, grassR), bg = T.blend(bx, bz, grassG), bb = T.blend(bx, bz, grassB);
+    im.setColorAt(n, c.setRGB(v * br * (1 + dry * 0.35), v * bg * (1 + dry * 0.1), v * bb * (1 - dry * 0.45)));
     n++;
   }
   im.count = n;
