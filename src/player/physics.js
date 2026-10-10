@@ -109,6 +109,34 @@ function collideCapsule() {
 
 
 
+// Walking into a low ledge (a slab, a stair, a crease or lump in the ground) steps up onto it instead
+// of stopping you dead: try the same move from up to STEP higher, and keep it if that gets further.
+const STEP = 0.55, _from = new THREE.Vector3(), _blocked = new THREE.Vector3(), _steepN = new THREE.Vector3(), _saved = { ground: false, steep: false, slope: false, ceiling: false };
+function stepUp(dt) {
+  const want = Math.hypot(player.velocity.x, player.velocity.z) * dt;
+  if (want < 1e-4) return;
+  _blocked.copy(player.position);
+  _saved.ground = contact.ground; _saved.steep = contact.steep; _saved.slope = contact.slope; _saved.ceiling = contact.ceiling;
+  _steepN.copy(contact.steepN);
+  const gotBlocked = Math.hypot(_blocked.x - _from.x, _blocked.z - _from.z);
+  // lift, move across, then settle back down onto whatever is there
+  player.position.set(_from.x + player.velocity.x * dt, _from.y + STEP, _from.z + player.velocity.z * dt);
+  contact.ground = contact.steep = contact.slope = contact.ceiling = false; contact.steepN.set(0, 0, 0);
+  collideCapsule();
+  player.position.copy(_seg.start);
+  const lifted = !contact.ceiling;
+  player.position.y -= STEP;
+  contact.ground = contact.steep = contact.slope = contact.ceiling = false; contact.steepN.set(0, 0, 0);
+  collideCapsule();
+  player.position.copy(_seg.start);
+  const got = Math.hypot(player.position.x - _from.x, player.position.z - _from.z);
+  if (lifted && contact.ground && got > gotBlocked + want * 0.3 && player.position.y - _from.y < STEP + 0.05) return; // stepped up
+  // no better: back to where the wall stopped you
+  player.position.copy(_blocked);
+  contact.ground = _saved.ground; contact.steep = _saved.steep; contact.slope = _saved.slope; contact.ceiling = _saved.ceiling;
+  contact.steepN.copy(_steepN);
+}
+
 function stepPhysics(dt, inputDir, speed) {
   const feet = player.position.y - FOOT_OFFSET;
   // water and lava you can swim in: the sea, lakes, the crater lakes and poured fluid cells
@@ -136,13 +164,15 @@ function stepPhysics(dt, inputDir, speed) {
   player.velocity.x += (inputDir.x * speed - player.velocity.x) * k;
   player.velocity.z += (inputDir.z * speed - player.velocity.z) * k;
 
+  _from.copy(player.position);
   player.position.addScaledVector(player.velocity, dt);
-  const fallSpeed = -player.velocity.y;
+  const fallSpeed = -player.velocity.y, wasOnGround = player.onGround;
 
   contact.ground = contact.steep = contact.slope = contact.ceiling = false;
   contact.steepN.set(0, 0, 0);
   collideCapsule();
   player.position.copy(_seg.start);
+  if (contact.steep && wasOnGround && !swimming && !state.creative && inputDir.lengthSq() > 0) stepUp(dt);
 
   player.onGround = contact.ground;
   // fall damage: hitting the ground faster than after about a 5 m drop hurts, on flat ground and
@@ -212,6 +242,10 @@ export function updatePlayer(dt) {
 
   if (player.position.y < -20) respawn();
   unbury();
+  // the view follows small steps up and down smoothly instead of jerking (not jumps, falls or teleports)
+  const dy = player.position.y - player.viewY, settled = state.gameTime - player.lastGroundTime < 0.15 && player.velocity.y < 1;
+  if (!settled || Math.abs(dy) > 1.2 || state.creative) player.viewY = player.position.y;
+  else player.viewY += dy * Math.min(1, dt * 14);
   // lava burns while you're in it (and a little longer); creative mode just bounces you out
   const feet = player.position.y - FOOT_OFFSET;
   player.inLava = lavaTouching(player.position.x, feet, player.position.z) || fluidAt(player.position.x, feet + 0.05, player.position.z)?.type === 'lava';

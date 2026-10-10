@@ -20,7 +20,10 @@ export function animateCharacter(dt) {
   const walk = Math.min(1, hSpeed / 4), run = smoothstep(PLAYER.walkSpeed, PLAYER.sprintSpeed, hSpeed);
   if (!grounded) C.air += dt; else { if (C.air > 0.35) C.land = 0.22; C.air = 0; }
   C.land = Math.max(0, C.land - dt);
-  C.phase += dt * (swimming ? 2 + hSpeed * 0.9 : grounded ? hSpeed * 1.75 : 0);
+  // the walk cycle advances with the distance covered, by as much as the stride the legs actually
+  // take, so the feet stay put on the ground instead of sliding (a running stride also flies a bit)
+  const amp = walk * (0.62 + run * 0.28), stride = Math.max(0.35, 2 * 0.88 * Math.sin(amp) + run * 0.7);
+  C.phase += dt * (swimming ? 2 + hSpeed * 0.9 : grounded ? hSpeed * Math.PI / stride : 0);
   const p = C.phase, t = state.gameTime;
   const attacking = swingTime > 0 || (mouse.left && (state.locked || state.testMode));
   if (attacking) C.swing = (C.swing + dt * 3.2) % 1; else C.swing = 0;
@@ -54,7 +57,6 @@ export function animateCharacter(dt) {
     T.hip = [0.75, -0.15]; T.knee = [-1.1, -0.55 * fall]; T.ankle = [0.3, 0.2];
     T.shX = [-0.5, -0.9]; T.shZ = [0.55, -0.55]; T.elbow = [0.4, 0.5]; T.spineX = 0.05;
   } else {
-    const amp = walk * (0.5 + run * 0.35);
     for (let i = 0; i < 2; i++) {
       const ph = p + i * Math.PI, s = Math.sin(ph);
       T.hip[i] = s * amp;
@@ -101,7 +103,7 @@ export function animateCharacter(dt) {
   const kp = 1 - Math.exp(-dt * 8);
   C.root.position.y += (ry - C.root.position.y) * kp;
   C.root.position.z += (rz - C.root.position.z) * kp;
-  character.position.set(player.position.x, player.position.y - FOOT_OFFSET, player.position.z);
+  character.position.set(player.position.x, player.viewY - FOOT_OFFSET, player.position.z);
   character.rotation.y = player.facing;
   character.visible = state.thirdPerson;
 
@@ -116,7 +118,10 @@ export function animateCharacter(dt) {
   }
   const arm = stats.armour;
   C.armour.visible = arm > 0;
-  if (arm > 0) { C.armour.material.color.set(arm >= 0.5 ? 0xa9afb7 : 0x7a4a26); C.armour.material.metalness = arm >= 0.5 ? 0.75 : 0; C.armour.material.roughness = arm >= 0.5 ? 0.35 : 0.85; }
+  if (arm > 0) {
+    const metal = arm >= 0.45; // copper, gold and iron
+    C.armour.material.color.set(stats.armourLook ?? (metal ? 0xa9afb7 : 0x7a4a26)); C.armour.material.metalness = metal ? 0.75 : 0; C.armour.material.roughness = metal ? 0.35 : 0.85;
+  }
 }
 
 // First person: your right hand and the held item at the bottom right of the view, swinging when you use it.

@@ -27,7 +27,9 @@ function buildCharacter() {
   const legs = [-1, 1].map((side) => {
     const hip = joint(root, side * 0.115, 0.93, 0);
     M(cap(0.085, 0.28), pants, 0, -0.22, 0, hip);
+    M(new THREE.SphereGeometry(0.088, 12, 8), pants, 0, 0, 0, hip); // round joints, so no gaps show when they bend
     const knee = joint(hip, 0, -0.44, 0);
+    M(new THREE.SphereGeometry(0.08, 12, 8), pants, 0, 0, 0, knee);
     M(cap(0.075, 0.27), pants, 0, -0.2, 0, knee);
     const ankle = joint(knee, 0, -0.42, 0);
     M(new THREE.BoxGeometry(0.15, 0.12, 0.28), boots, 0, -0.01, -0.05, ankle);
@@ -74,6 +76,7 @@ function buildCharacter() {
     M(new THREE.SphereGeometry(0.075, 10, 8), shirt, 0, -0.01, 0, shoulder);
     M(cap(0.065, 0.2), shirt, 0, -0.15, 0, shoulder);
     const elbow = joint(shoulder, 0, -0.29, 0);
+    M(new THREE.SphereGeometry(0.062, 10, 8), shirt, 0, 0, 0, elbow);
     M(cap(0.056, 0.18), skin, 0, -0.12, 0, elbow);
     const hand = joint(elbow, 0, -0.27, 0);
     M(new THREE.SphereGeometry(0.062, 10, 8), skin, 0, 0, 0, hand).scale.set(0.9, 1.1, 0.9);
@@ -96,7 +99,7 @@ export function heldItemModel(id) {
     const o = new THREE.Mesh(geo, color.isMaterial ? color : new THREE.MeshStandardMaterial({ color, roughness: metal ? 0.35 : 0.8, metalness: metal ? 0.7 : 0 }));
     o.position.set(x, y, z); o.castShadow = true; g.add(o); return o;
   };
-  const head = TIER_COLOR[def.tier || 0], metal = def.tier === 3;
+  const head = def.head ?? TIER_COLOR[def.tier || 0], metal = def.tier === 3 || def.head !== undefined;
   if (def.tool) {
     if (def.tool === 'sword') {
       M(new THREE.BoxGeometry(0.03, 0.12, 0.03), 0x5a3c22, 0, 0, 0);
@@ -112,7 +115,7 @@ export function heldItemModel(id) {
     M(new THREE.CylinderGeometry(0.012, 0.016, 0.4, 6), 0x6b4a2f, 0, 0.12, 0);
     const c = M(new THREE.OctahedronGeometry(0.05), 0x9fe8ff, 0, 0.35, 0);
     c.material.emissive.set(0x3aa8d0);
-  } else if (def.place && BLOCKS[def.place] && !BLOCKS[def.place].station) {
+  } else if (def.place && BLOCKS[def.place] && !BLOCKS[def.place].station && !BLOCKS[def.place].model) {
     const b = M(shapeGeometry('block'), blockMaterial(def.place), 0, 0.08, -0.04);
     b.scale.setScalar(0.2);
   } else return null;
@@ -130,6 +133,7 @@ export const player = {
   lastGroundTime: -1,
   facing: 0,
   walkPhase: 0,
+  viewY: 0,          // position.y smoothed over small steps and bumps, for the camera and the body
   spawn: new THREE.Vector3(),
   inWater: false,
   swimming: false,

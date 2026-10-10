@@ -11,7 +11,7 @@ const camState = { dist: 6 };
 const _target = new THREE.Vector3(), _camDir = new THREE.Vector3(), _back = new THREE.Vector3();
 
 export function updateCamera(dt) {
-  _target.set(player.position.x, player.position.y + EYE_OFFSET, player.position.z);
+  _target.set(player.position.x, player.viewY + EYE_OFFSET, player.position.z);
   if (!state.thirdPerson) {
     camera.position.copy(_target);
     camera.rotation.set(state.pitch, state.yaw, 0, 'YXZ');
