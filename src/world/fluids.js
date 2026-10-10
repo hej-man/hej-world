@@ -150,6 +150,24 @@ export function fluidAt(px, py, pz) {
 }
 const cellHeight = (f) => (fluids.get(blockKey(f.x, f.y + 1, f.z))?.type === f.type ? 1 : f.level === 8 ? 0.9 : 0.12 + (f.level / 8) * 0.7);
 
+// The source feeding a poured fluid cell: the nearest source cell joined to it through cells of
+// the same fluid (null if none is close). Scooping any part of a poured pool takes its source, and
+// the rest drains away.
+export function sourceOf(f) {
+  if (f.src) return f;
+  const seen = new Set([blockKey(f.x, f.y, f.z)]), queue = [f];
+  for (let i = 0; i < queue.length && i < 400; i++) {
+    const c = queue[i];
+    for (const [dx, dy, dz] of [[0, 1, 0], [0, -1, 0], ...SIDES]) {
+      const key = blockKey(c.x + dx, c.y + dy, c.z + dz), n = fluids.get(key);
+      if (!n || n.type !== f.type || seen.has(key)) continue;
+      if (n.src) return n;
+      seen.add(key); queue.push(n);
+    }
+  }
+  return null;
+}
+
 // The first fluid cell along a ray (for scooping it up with a bucket).
 export function fluidRay(o, d, far) {
   for (let t = 0.3; t < far; t += 0.1) {

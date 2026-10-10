@@ -3,34 +3,38 @@ import { ExtendedTriangle } from 'three-mesh-bvh';
 import { state } from '../state.js';
 import { hash1, mulberry32 } from '../noise.js';
 import { canvasTexture } from './plant-looks.js';
-import { litMaterial } from '../render/scene.js';
+import { litMaterial, scene } from '../render/scene.js';
+import { PLAYER } from '../config.js';
+import { sampleField } from '../terrain/material.js';
+import { FOOT_OFFSET, player } from '../player/character.js';
 import { addObstacle, gridRemove, obstacleGrid, world } from './world.js';
-import { roundedBox, shapeGeometry, sharpShape } from './shapes.js';
+import { boxUVs, mergeGeometries, roundedBox, shapeGeometry, sharpShape } from './shapes.js';
+import { catalogBlocks } from './block-catalog.js';
+import { blockIconURL, drawTexture } from './block-textures.js';
 export { SHAPES, SHAPE_NAMES, shapeGeometry } from './shapes.js';
 
 // ---------------------------------------------------------------------------
 // Placed blocks: 1 m cells on a grid, drawn with one InstancedMesh per block type and shape
 // ---------------------------------------------------------------------------
 export const BLOCKS = {
-  dirt:         { name: 'Dirt', colors: [0x7a5a3a], mat: 'dirt' },
-  sand:         { name: 'Sand', colors: [0xd9c793], mat: 'sand' },
-  log:          { name: 'Log', colors: [0x7a5532, 0xc29a64], mat: 'wood' },  // [sides, top]
-  planks:       { name: 'Planks', colors: [0xb8894d], mat: 'wood' },
-  stone:        { name: 'Stone', colors: [0x86837e], mat: 'stone' },
-  stone_bricks: { name: 'Stone bricks', colors: [0xa19e98], mat: 'stone' },
-  smooth_stone: { name: 'Smooth stone', colors: [0xb4b1ab], mat: 'stone' },
-  glass:        { name: 'Glass', colors: [0xcdeaf5], mat: 'soft', glass: true },
-  wool:         { name: 'Wool', colors: [0xf2efe6], mat: 'soft' },
-  workbench:    { name: 'Workbench', colors: [0x5a2f1c, 0xd8bf8f], mat: 'wood', station: true },
-  campfire:     { name: 'Campfire', mat: 'soft', solid: false, station: true },
-  furnace:      { name: 'Furnace', mat: 'stone', station: true, facing: true },
+  dirt:         { name: 'Dirt', mat: 'dirt', natural: true },
+  sand:         { name: 'Sand', mat: 'sand', natural: true },
+  stone:        { name: 'Stone', mat: 'stone', natural: true },
+  stone_bricks: { name: 'Stone bricks', mat: 'stone' },
+  smooth_stone: { name: 'Smooth stone', mat: 'stone' },
+  glass:        { name: 'Glass', mat: 'glass', glass: true },
+  workbench:    { name: 'Workbench', mat: 'wood', station: true },
+  campfire:     { name: 'Campfire', mat: 'soft', solid: false, station: true, glow: 0xff8a30 },
+  furnace:      { name: 'Furnace', mat: 'stone', station: true, facing: true, glow: 0xff7a30 },
   purifier:     { name: 'Water filter', mat: 'wood', station: true },
+  // woods, stones, ground, metal and coloured blocks, torches and lanterns (see block-catalog.js)
+  ...catalogBlocks(),
 };
 const MAX_BLOCKS = 4096;       // per block type and shape
 export const blockGroups = {};         // "type|shape" -> { meshes: InstancedMesh[], keys: string[] }
 export const blocks = new Map();       // "x,y,z" -> { type, shape, x, y, z, idx, obstacles }
 export const blockKey = (x, y, z) => `${x},${y},${z}`;
-export function resetBlocks() { blocks.clear(); for (const k in blockGroups) delete blockGroups[k]; }
+export function resetBlocks() { blocks.clear(); glowing.clear(); saplings.clear(); for (const k in blockGroups) delete blockGroups[k]; }
 
 // Merges [geometry, colour] pairs into one vertex-coloured geometry, keeping each part's normals.
 function mergeColored(parts) {
@@ -60,21 +64,6 @@ function drawBlockTexture(type) {
         g.fillRect(x0 + rand() * w, rand() * H, 1 + rand() * 1.5, 1 + rand() * 1.5);
       }
     };
-    const planks = (x0, w, hue = 32, lit = 52) => {
-      const rows = 4, bh = H / rows;
-      for (let r = 0; r < rows; r++) {
-        const l = lit + (rand() - 0.5) * 10;
-        g.fillStyle = `hsl(${hue + (rand() - 0.5) * 6}, 42%, ${l}%)`; g.fillRect(x0, r * bh, w, bh);
-        for (let k = 0; k < 9; k++) { // grain
-          g.strokeStyle = `hsla(${hue - 6}, 45%, ${l - 14 - rand() * 10}%, ${0.25 + rand() * 0.35})`; g.lineWidth = 0.8 + rand();
-          const y = r * bh + 2 + rand() * (bh - 4), amp = 0.6 + rand() * 1.5, ph = rand() * 6;
-          g.beginPath(); for (let x = 0; x <= w; x += 4) g.lineTo(x0 + x, y + Math.sin(x * 0.05 + ph) * amp); g.stroke();
-        }
-        g.fillStyle = 'rgba(30, 18, 8, 0.75)'; g.fillRect(x0, r * bh, w, 1.5);  // gap between boards
-        const j = x0 + 12 + rand() * (w - 24); g.fillRect(j, r * bh, 1.5, bh);     // end joint
-        g.fillStyle = 'rgba(25,20,15,0.8)'; for (const nx of [j - 5, j + 5]) g.fillRect(nx, r * bh + bh / 2 - 1, 2, 2); // nails
-      }
-    };
     const stoneBase = (x0, w) => {
       g.fillStyle = '#56534f'; g.fillRect(x0, 0, w, H);
       for (let i = 0; i < 22; i++) { // rounded stones with darker gaps between them
@@ -88,7 +77,6 @@ function drawBlockTexture(type) {
     };
     const halves = (fn) => { fn(0, H); fn(H, H); };
     switch (type) {
-      case 'planks': halves((x0, w) => planks(x0, w)); break;
       case 'workbench': {
         // sides: dark red-brown frame with corner legs, a drawer and a tool rack, so it can't be
         // mistaken for planks; top: a pale worn slab with a carved crafting grid and a tool on it
@@ -133,19 +121,6 @@ function drawBlockTexture(type) {
         speckle(x0, w, 0.1); speckle(x0, w, 0.1, true);
         g.strokeStyle = 'rgba(70, 68, 64, 0.5)'; g.lineWidth = 3; g.strokeRect(x0 + 6, 6, w - 12, H - 12); // a chiselled border
       }); break;
-      case 'log': {
-        g.fillStyle = '#5e4129'; g.fillRect(0, 0, H, H);
-        for (let i = 0; i < 26; i++) { // bark furrows
-          const x = rand() * H; g.strokeStyle = `rgba(${20 + rand() * 20}, 12, 6, ${0.5 + rand() * 0.4})`; g.lineWidth = 1.5 + rand() * 3;
-          g.beginPath(); for (let y = 0; y <= H; y += 8) g.lineTo(x + Math.sin(y * 0.08 + i) * 3, y); g.stroke();
-        }
-        speckle(0, H, 0.2, true);
-        g.fillStyle = '#c99d63'; g.fillRect(H, 0, H, H);
-        for (let r = 6; r < 56; r += 5 + rand() * 4) { g.strokeStyle = `rgba(120, 78, 38, ${0.4 + rand() * 0.3})`; g.lineWidth = 1 + rand(); g.beginPath(); g.arc(H * 1.5, H / 2, r, 0, Math.PI * 2); g.stroke(); }
-        g.strokeStyle = '#4a3220'; g.lineWidth = 9; g.beginPath(); g.arc(H * 1.5, H / 2, 60, 0, Math.PI * 2); g.stroke();
-        g.lineWidth = 8; g.strokeRect(H + 4, 4, H - 8, H - 8);
-        break;
-      }
       case 'stone': halves(stoneBase); break;
       case 'stone_bricks': halves((x0, w) => {
         g.fillStyle = '#8f8b85'; g.fillRect(x0, 0, w, H);
@@ -160,13 +135,6 @@ function drawBlockTexture(type) {
         }
         speckle(x0, w, 0.2);
       }); break;
-      case 'wool': halves((x0, w) => {
-        g.fillStyle = '#efebe1'; g.fillRect(x0, 0, w, H);
-        for (let i = 0; i < 500; i++) { // little curls of fibre
-          g.strokeStyle = `rgba(150, 140, 120, ${0.15 + rand() * 0.2})`; g.lineWidth = 1;
-          const x = x0 + rand() * w, y = rand() * H; g.beginPath(); g.arc(x, y, 2 + rand() * 3, rand() * 6, rand() * 6 + 3); g.stroke();
-        }
-      }); break;
       case 'glass': halves((x0, w) => {
         g.clearRect(x0, 0, w, H);
         g.fillStyle = 'rgba(200, 230, 240, 0.18)'; g.fillRect(x0, 0, w, H);
@@ -178,15 +146,41 @@ function drawBlockTexture(type) {
     }
   });
 }
+// A block's texture: catalogue blocks are drawn from their description, the first few by hand above.
+const _blockTex = {};
+function blockTexture(type) {
+  if (_blockTex[type]) return _blockTex[type];
+  const tex = BLOCKS[type].tex;
+  let t;
+  if (tex) {
+    const c = document.createElement('canvas');
+    c.width = 256; c.height = 128;
+    drawTexture(c.getContext('2d'), 256, 128, tex, mulberry32(hashString(type)));
+    t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+  } else t = drawBlockTexture(type);
+  t.anisotropy = 8;
+  return (_blockTex[type] = t);
+}
+const hashString = (s) => { let h = 7; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return h; };
+// A little picture of the block for the inventory, made the first time it's shown.
+const _icons = {};
+export const blockIcon = (type) => _icons[type] || (_icons[type] = blockIconURL(blockTexture(type).image));
+export const hasBlockIcon = (type) => !!_icons[type];
+
 const _blockMats = {};
 export function blockMaterial(type) {
   if (_blockMats[type]) return _blockMats[type];
-  const glass = !!BLOCKS[type].glass, map = drawBlockTexture(type);
-  map.anisotropy = 8;
-  return (_blockMats[type] = new THREE.MeshStandardMaterial({
-    map, bumpMap: map, bumpScale: glass ? 0 : 1.6, roughness: glass ? 0.05 : type === 'smooth_stone' ? 0.55 : type === 'stone' || type === 'stone_bricks' ? 0.9 : 0.8,
-    transparent: glass, depthWrite: !glass, side: glass ? THREE.DoubleSide : THREE.FrontSide,
-  }));
+  const def = BLOCKS[type], glass = !!def.glass, map = blockTexture(type);
+  const rough = { glass: 0.05, ice: 0.12, metal: 0.35, stone: 0.85 }[def.mat] ?? 0.8;
+  const m = new THREE.MeshStandardMaterial({
+    map, bumpMap: glass || def.cutout ? null : map, bumpScale: 1.6, roughness: type === 'smooth_stone' || type.startsWith('polished_') ? 0.5 : rough,
+    metalness: def.mat === 'metal' ? 0.55 : 0,
+    transparent: glass, depthWrite: !glass, side: glass || def.cutout ? THREE.DoubleSide : THREE.FrontSide,
+    alphaTest: def.cutout ? 0.5 : 0,
+  });
+  if (def.glow) { m.emissive.set(0xffffff); m.emissiveMap = map; m.emissiveIntensity = 0.7; }
+  return (_blockMats[type] = m);
 }
 
 function campfireParts() {
@@ -228,12 +222,60 @@ function purifierParts() {
   return [base, jar];
 }
 
+// A young tree: a thin stem with a few leaves; base at y = 0.
+function saplingParts(def) {
+  const leaf = new THREE.Color().setHSL(def.leaves[0] / 360, def.leaves[1] / 100, def.leaves[2] / 100).getHex();
+  const parts = [[new THREE.CylinderGeometry(0.025, 0.04, 0.5, 5).translate(0, 0.25, 0), 0x6b4a2f]];
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2;
+    parts.push([new THREE.IcosahedronGeometry(0.11 + (i % 2) * 0.03, 0).scale(1, 0.7, 1).translate(Math.cos(a) * 0.1, 0.42 + (i % 3) * 0.07, Math.sin(a) * 0.1), leaf]);
+  }
+  return [new THREE.Mesh(mergeColored(parts), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85 }))];
+}
+// A fence: a post with two rails running sideways across the cell (it turns with the way you look),
+// textured with the wood's planks; centred like a block.
+function fenceParts(type) {
+  const box = (w, h, d, y) => new THREE.BoxGeometry(w, h, d).translate(0, y, 0);
+  const geo = boxUVs(mergeGeometries([box(0.24, 1, 0.24, 0), box(1, 0.12, 0.1, 0.25), box(1, 0.12, 0.1, -0.12)]));
+  return [new THREE.Mesh(geo, blockMaterial(type))];
+}
+// A torch on a stick, and a lantern: an iron cage around a glowing light; base at y = 0.
+function torchParts() {
+  const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.04, 0.55, 6).translate(0, 0.275, 0), new THREE.MeshStandardMaterial({ color: 0x6b4a2f, roughness: 0.9 }));
+  const flame = new THREE.Mesh(new THREE.OctahedronGeometry(0.08, 0).scale(1, 1.6, 1).translate(0, 0.62, 0), new THREE.MeshStandardMaterial({ color: 0xffc060, emissive: 0xff8a20, emissiveIntensity: 2 }));
+  return [stick, flame];
+}
+function lanternParts() {
+  const cage = new THREE.Mesh(mergeColored([
+    [roundedBox(0.36, 0.06, 0.36, 0, 0.03, 0), 0x3a3c40], [roundedBox(0.3, 0.06, 0.3, 0, 0.47, 0), 0x3a3c40], [new THREE.TorusGeometry(0.06, 0.012, 4, 10).translate(0, 0.54, 0), 0x3a3c40],
+    ...[[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([x, z]) => [new THREE.BoxGeometry(0.03, 0.4, 0.03).translate(x * 0.15, 0.24, z * 0.15), 0x3a3c40]),
+  ]), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, metalness: 0.6 }));
+  const light = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.36, 0.24).translate(0, 0.24, 0), new THREE.MeshStandardMaterial({ color: 0xffd080, emissive: 0xffa040, emissiveIntensity: 1.8, transparent: true, opacity: 0.85 }));
+  return [cage, light];
+}
+// Blocks drawn with their own model stand on the bottom of their cell instead of being centred.
+const BASED = new Set(['campfire', 'furnace', 'purifier']);
+const isBased = (type) => BASED.has(type) || ['sapling', 'torch', 'lantern'].includes(BLOCKS[type].model);
+function blockTemplates(type, shape) {
+  const def = BLOCKS[type];
+  switch (def.model || type) {
+    case 'campfire': return campfireParts();
+    case 'furnace': return furnaceParts();
+    case 'purifier': return purifierParts();
+    case 'sapling': return saplingParts(def);
+    case 'fence': return fenceParts(type);
+    case 'torch': return torchParts();
+    case 'lantern': return lanternParts();
+  }
+  return [new THREE.Mesh(shapeGeometry(shape), blockMaterial(type))];
+}
+
 // The instanced meshes for one block type in one shape, made the first time one is placed.
 function blockGroup(type, shape) {
   const k = `${type}|${shape}`;
   if (blockGroups[k]) return blockGroups[k];
   const def = BLOCKS[type];
-  const templates = type === 'campfire' ? campfireParts() : type === 'furnace' ? furnaceParts() : type === 'purifier' ? purifierParts() : [new THREE.Mesh(shapeGeometry(shape), blockMaterial(type))];
+  const templates = blockTemplates(type, shape);
   const meshes = templates.map((t) => {
     const im = new THREE.InstancedMesh(t.geometry, t.material, MAX_BLOCKS);
     im.setColorAt(0, new THREE.Color(1, 1, 1));
@@ -255,6 +297,7 @@ const LOCAL_BOXES = {
   block: [[-0.5, -0.5, -0.5, 0.5, 0.5, 0.5]],
   slab: [[-0.5, -0.5, -0.5, 0.5, 0, 0.5]],
   pillar: [[-0.3, -0.5, -0.3, 0.3, 0.5, 0.3]],
+  fence: [[-0.5, -0.5, -0.14, 0.5, 0.5, 0.14]],  // turned with the fence
   stairs: [[-0.5, -0.5, -0.5, 0.5, 0, 0.5], [-0.5, 0, -0.5, 0.5, 0.5, 0]], // the upper step on the local -z half
 };
 const _ba = new THREE.Vector3(), _bb = new THREE.Vector3();
@@ -286,15 +329,15 @@ const _tilt = new THREE.Matrix4();
 const _bm = new THREE.Matrix4(), _bc = new THREE.Color();
 export function placeBlock(type, x, y, z, shape = 'block', tilt = 0) {
   const def = BLOCKS[type];
-  if (def.station || def.solid === false) shape = 'block';
+  if (def.station || def.solid === false || def.model) shape = 'block';
   const key = blockKey(x, y, z), bt = blockGroup(type, shape);
   if (blocks.has(key) || bt.keys.length >= MAX_BLOCKS) return false;
   const idx = bt.keys.length;
   // campfires get a random turn; furnaces, slopes, stairs and prisms turn with the way you look
   const facing = Math.round(state.yaw / (Math.PI / 2)) * (Math.PI / 2);
-  if (def.station || def.solid === false) tilt = 0;
-  const turn = type === 'campfire' ? hash1(x + z * 7) * 6 : def.facing || shape !== 'block' || tilt ? facing : 0;
-  const based = type === 'campfire' || type === 'furnace' || type === 'purifier'; // these models stand on y = 0 instead of being centred
+  if (def.station || def.solid === false || def.model) tilt = 0;
+  const turn = type === 'campfire' || def.model === 'sapling' ? hash1(x + z * 7) * 6 : def.facing || def.model === 'fence' || shape !== 'block' || tilt ? facing : 0;
+  const based = isBased(type); // these models stand on y = 0 instead of being centred
   _bm.makeRotationY(turn).multiply(_tilt.makeRotationX(tilt === 1 ? Math.PI / 2 : tilt === 2 ? Math.PI : 0)).setPosition(x + 0.5, based ? y : y + 0.5, z + 0.5);
   _bc.setScalar(0.93 + hash1(x * 7.1 + y * 3.3 + z * 1.7) * 0.1);
   for (const im of bt.meshes) {
@@ -303,9 +346,11 @@ export function placeBlock(type, x, y, z, shape = 'block', tilt = 0) {
     im.instanceMatrix.needsUpdate = true; im.instanceColor.needsUpdate = true;
   }
   bt.keys.push(key);
-  const b = { type, shape, x, y, z, idx, obstacles: def.solid === false ? [] : blockObstacles(shape, x, y, z, _bm) };
+  const b = { type, shape, x, y, z, idx, obstacles: def.solid === false ? [] : blockObstacles(def.model === 'fence' ? 'fence' : shape, x, y, z, _bm) };
   for (const o of b.obstacles) addObstacle(o);
   blocks.set(key, b);
+  if (def.glow) glowing.add(b);
+  if (def.model === 'sapling') { b.plantedAt = state.gameTime; saplings.add(b); }
   return true;
 }
 
@@ -326,10 +371,74 @@ export function removeBlock(key) {
   for (const im of bt.meshes) { im.count = last; im.instanceMatrix.needsUpdate = true; im.instanceColor.needsUpdate = true; }
   for (const o of b.obstacles) gridRemove(obstacleGrid, o);
   blocks.delete(key);
+  glowing.delete(b); saplings.delete(b);
   return b;
 }
 
-export function updateCampfires(time) {
+// Torches, lanterns, campfires and other glowing blocks light up what's around them. Lights are
+// expensive (and adding one makes every material rebuild its shader), so there's a small fixed set,
+// made the first time something glowing is placed and moved each frame to the glowing blocks
+// nearest the camera.
+const glowing = new Set(), saplings = new Set();
+const LIGHTS = 4, blockLights = [];
+const _near = new Array(LIGHTS).fill(null), _nearD = new Float32Array(LIGHTS);
+function updateBlockLights(time, cam) {
+  if (!glowing.size && !blockLights.length) return;
+  // lights belong to the scene, not the world group, so they survive making a new world
+  if (!blockLights.length) for (let i = 0; i < LIGHTS; i++) { const l = new THREE.PointLight(0xffb060, 0, 11, 1.6); scene.add(l); blockLights.push(l); }
+  // the LIGHTS nearest glowing blocks within 50 m (insertion into a small sorted list)
+  _near.fill(null); _nearD.fill(50 * 50);
+  for (const b of glowing) {
+    const d = (b.x + 0.5 - cam.x) ** 2 + (b.y + 0.5 - cam.y) ** 2 + (b.z + 0.5 - cam.z) ** 2;
+    if (d >= _nearD[LIGHTS - 1]) continue;
+    let k = LIGHTS - 1;
+    while (k > 0 && _nearD[k - 1] > d) { _nearD[k] = _nearD[k - 1]; _near[k] = _near[k - 1]; k--; }
+    _nearD[k] = d; _near[k] = b;
+  }
+  blockLights.forEach((l, i) => {
+    const b = _near[i];
+    if (!b) { l.intensity = 0; return; }
+    l.color.set(BLOCKS[b.type].glow);
+    l.position.set(b.x + 0.5, b.y + (isBased(b.type) ? 0.7 : 0.5), b.z + 0.5);
+    l.intensity = (b.type === 'campfire' || b.type === 'torch' ? 9 + Math.sin(time * 9 + i) * 1.2 : 8);
+  });
+}
+
+// Saplings grow into trees of blocks after a while, if there's room.
+const GROW_AFTER = 60; // seconds, plus up to the same again
+function growSaplings(time) {
+  for (const b of [...saplings]) {
+    if (time - b.plantedAt < GROW_AFTER * (1 + hash1(b.x * 3.1 + b.z * 1.7))) continue;
+    const def = BLOCKS[b.type], w = def.wood, big = w === 'dark_oak' || w === 'redwood' || w === 'jungle';
+    const log = w === 'oak' ? 'log' : `${w}_log`, leaves = `${w}_leaves`;
+    const h = (big ? 6 : 4) + Math.floor(hash1(b.x + b.z * 13) * 3);
+    // the trunk needs open air all the way up, and not you standing in it; otherwise try again later
+    let room = true;
+    for (let k = 1; k < h + 2 && room; k++) room = cellOpen(b.x, b.y + k, b.z);
+    if (!room || !cellOpen(b.x, b.y, b.z, true)) { b.plantedAt = time; continue; }
+    removeBlock(blockKey(b.x, b.y, b.z));
+    for (let k = 0; k < h; k++) placeBlock(log, b.x, b.y + k, b.z);
+    const top = b.y + h, r = big ? 3 : 2;
+    for (let dy = -2; dy <= 1; dy++) for (let dx = -r; dx <= r; dx++) for (let dz = -r; dz <= r; dz++) {
+      const rr = r - (dy === 1 ? 1 : 0);
+      if (dx * dx + dz * dz > rr * rr + 1 || (dx === 0 && dz === 0 && dy < 0)) continue;
+      if (hash1(b.x + dx * 7 + (top + dy) * 3 + dz * 11) < 0.12) continue; // a few gaps
+      if (cellOpen(b.x + dx, top + dy, b.z + dz)) placeBlock(leaves, b.x + dx, top + dy, b.z + dz); // leaves only where there's room
+    }
+  }
+}
+// Is a cell free for a growing tree: no block, no ground, and not where the player is?
+// (`self`: the sapling's own cell, which only needs to be clear of the player.)
+function cellOpen(x, y, z, self = false) {
+  if (!self && (blocks.has(blockKey(x, y, z)) || sampleField(x + 0.5, y + 0.5, z + 0.5) > 0)) return false;
+  const p = player.position, feet = p.y - FOOT_OFFSET;
+  return !(p.x + PLAYER.radius > x && p.x - PLAYER.radius < x + 1 && p.z + PLAYER.radius > z && p.z - PLAYER.radius < z + 1 && feet < y + 1 && p.y + PLAYER.radius > y);
+}
+let _growTimer = 0; // saplings are checked a couple of times a second, not every frame
+
+export function updateBlocks(time, dt, cam) {
+  updateBlockLights(time, cam);
+  if ((_growTimer += dt) > 0.5) { _growTimer = 0; growSaplings(time); }
   const bt = blockGroups['campfire|block'];
   if (!bt || !bt.keys.length) return;
   const flame = bt.meshes[1];

@@ -25,7 +25,7 @@ function trianglesGeometry(tris, inside) {
   g.computeVertexNormals();
   return g;
 }
-function mergeGeometries(list) {
+export function mergeGeometries(list) {
   const out = { position: [], normal: [] };
   for (let g of list) { g = g.index ? g.toNonIndexed() : g; for (const k in out) out[k].push(...g.attributes[k].array); }
   const g = new THREE.BufferGeometry();
@@ -34,7 +34,7 @@ function mergeGeometries(list) {
 }
 // Texture coordinates projected along each face's main axis; sides use the left half of a block's
 // texture and tops/bottoms the right half (a log's rings, a workbench's top).
-function boxUVs(g) {
+export function boxUVs(g) {
   const p = g.attributes.position, uv = new Float32Array(p.count * 2), a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), n = new THREE.Vector3();
   for (let i = 0; i < p.count; i += 3) {
     a.fromBufferAttribute(p, i); b.fromBufferAttribute(p, i + 1); c.fromBufferAttribute(p, i + 2);

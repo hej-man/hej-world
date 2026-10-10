@@ -5,38 +5,24 @@ import { BLOCKS, blocks } from '../world/blocks.js';
 import { SPECIES } from '../animals/animals.js';
 import { BOLT_COST } from '../player/survival.js';
 import { toast } from '../ui/hud.js';
+import { TAGS, defineCatalogItems } from './catalog-items.js';
 
 // ---------------------------------------------------------------------------
 // Items and recipes
 // ---------------------------------------------------------------------------
 const SWATCH = {
   stick: 'linear-gradient(45deg, transparent 40%, #9a6a3a 40%, #9a6a3a 60%, transparent 60%)',
-  planks: 'repeating-linear-gradient(0deg, #c89a5e 0 5px, #9c7140 5px 6px)',
-  stone: 'radial-gradient(circle at 35% 30%, #a3a09b, #6f6c68)',
-  bricks: 'linear-gradient(#5c5a56 0 0) 0 8px / 100% 1px no-repeat, linear-gradient(#5c5a56 0 0) 0 17px / 100% 1px no-repeat, linear-gradient(#5c5a56 0 0) 12px 0 / 1px 8px no-repeat, linear-gradient(#5c5a56 0 0) 6px 9px / 1px 8px no-repeat, linear-gradient(#5c5a56 0 0) 18px 9px / 1px 8px no-repeat, #a29f99',
-  glass: 'linear-gradient(135deg, rgba(220,245,255,0.85) 0 30%, rgba(160,210,235,0.45) 30% 100%)',
-  wool: 'radial-gradient(circle at 40% 35%, #ffffff, #dcd8cc)',
   leather: 'linear-gradient(160deg, #a8703c, #6e4421)',
-  dirt: 'radial-gradient(circle at 35% 30%, #8d6a46, #5e4228)',
-  sand: 'radial-gradient(circle at 35% 30%, #eadbb0, #c7b07c)',
-  smooth_stone: 'linear-gradient(#6f6c67 0 0) 3px 3px / calc(100% - 6px) 1px no-repeat, linear-gradient(#6f6c67 0 0) 3px calc(100% - 4px) / calc(100% - 6px) 1px no-repeat, linear-gradient(135deg, #c2bfb9, #9c9993)',
   iron_ore: 'radial-gradient(circle at 30% 35%, #ff9a4a 0 4px, transparent 5px), radial-gradient(circle at 68% 60%, #e8772e 0 4px, transparent 5px), radial-gradient(circle at 45% 75%, #ffb070 0 3px, transparent 4px), radial-gradient(circle at 72% 25%, #d86a28 0 3px, transparent 4px), radial-gradient(circle at 35% 30%, #8a8680, #55524e)',
   iron_ingot: 'linear-gradient(160deg, #f1f2f4 0%, #b9bcc2 45%, #8b8f96 100%)',
 };
 export function defineItems() {
+  // look: an emoji, or a CSS background for a swatch; blocks are drawn as little cubes instead
   const reg = (id, name, look, extra = {}) =>
-    registerItem({ id, name, ...(look.length > 3 ? { color: look } : { icon: look }), ...extra });
-  reg('log', 'Log', '🪵', { place: 'log' });
-  reg('planks', 'Planks', SWATCH.planks, { place: 'planks' });
+    registerItem({ id, name, ...(look == null ? {} : look.length > 3 ? { color: look } : { icon: look }), ...extra });
   reg('stick', 'Stick', SWATCH.stick, { flat: true });
-  reg('stone', 'Stone', SWATCH.stone, { place: 'stone' });
-  reg('dirt', 'Dirt', SWATCH.dirt, { place: 'dirt' });
-  reg('sand', 'Sand', SWATCH.sand, { place: 'sand' });
+  for (const id of ['stone', 'dirt', 'sand', 'stone_bricks', 'smooth_stone', 'glass']) reg(id, BLOCKS[id].name, null, { place: id, block: true });
   reg('crystal', 'Crystal', '💎');
-  reg('stone_bricks', 'Stone bricks', SWATCH.bricks, { place: 'stone_bricks' });
-  reg('smooth_stone', 'Smooth stone', SWATCH.smooth_stone, { place: 'smooth_stone' });
-  reg('glass', 'Glass', SWATCH.glass, { place: 'glass' });
-  reg('wool', 'Wool', SWATCH.wool, { place: 'wool' });
   reg('workbench', 'Workbench', '🛠️', { place: 'workbench' });
   reg('furnace', 'Furnace', '🧱', { place: 'furnace' });
   reg('iron_ore', 'Iron ore', SWATCH.iron_ore);
@@ -64,13 +50,15 @@ export function defineItems() {
   reg('water_bucket', 'Water bucket', '🌊', { fluid: 'water', maxStack: 1 });
   reg('lava_bucket', 'Lava bucket', '🌋', { fluid: 'lava', maxStack: 1 });
   // spawners only come from the creative item list
-  const ANIMAL_ICONS = { cow: '🐄', pig: '🐖', sheep: '🐑', chicken: '🐔', deer: '🦌', rabbit: '🐇', wolf: '🐺', bear: '🐻', boar: '🐗', spider: '🕷️' };
+  const ANIMAL_ICONS = { cow: '🐄', pig: '🐖', sheep: '🐑', chicken: '🐔', deer: '🦌', rabbit: '🐇', wolf: '🐺', bear: '🐻', boar: '🐗', spider: '🕷️',
+    camel: '🐫', zebra: '🦓', goat: '🐐', fox: '🦊', parrot: '🦜', polar_bear: '🐻‍❄️', jaguar: '🐆', scorpion: '🦂' };
   for (const [kind, sp] of Object.entries(SPECIES)) reg(`spawn_${kind}`, `${sp.name} spawner`, ANIMAL_ICONS[kind] || '🥚', { spawn: kind });
   reg('crystal_wand', 'Crystal wand', '🪄', { wand: true, maxStack: 1 });
   reg('mana_tonic', 'Mana tonic', '🧪', { mana: 50 });
   reg('bandage', 'Bandage', '🩹', { heal: 30 });
   reg('leather_armour', 'Leather armour', '🦺', { armour: 0.35, maxStack: 1 });
   reg('iron_armour', 'Iron armour', '🛡️', { armour: 0.6, maxStack: 1 });
+  defineCatalogItems(reg, RECIPES);
 }
 
 export function itemHint(def) {
@@ -97,24 +85,23 @@ export function itemHint(def) {
 
 // `at` names a block you need to stand near (within 4.5 m) to craft the recipe.
 export const RECIPES = [
-  { out: 'planks', n: 4, in: { log: 1 } },
-  { out: 'stick', n: 4, in: { planks: 2 } },
-  { out: 'workbench', in: { planks: 4 } },
-  { out: 'campfire', in: { log: 3, stick: 2 } },
-  { out: 'wood_pickaxe', in: { planks: 3, stick: 2 }, at: 'workbench' },
-  { out: 'wood_axe', in: { planks: 3, stick: 2 }, at: 'workbench' },
-  { out: 'wood_shovel', in: { planks: 1, stick: 2 }, at: 'workbench' },
-  { out: 'wood_sword', in: { planks: 2, stick: 1 }, at: 'workbench' },
+  { out: 'stick', n: 4, in: { '#planks': 2 } },
+  { out: 'workbench', in: { '#planks': 4 } },
+  { out: 'campfire', in: { '#logs': 3, stick: 2 } },
+  { out: 'wood_pickaxe', in: { '#planks': 3, stick: 2 }, at: 'workbench' },
+  { out: 'wood_axe', in: { '#planks': 3, stick: 2 }, at: 'workbench' },
+  { out: 'wood_shovel', in: { '#planks': 1, stick: 2 }, at: 'workbench' },
+  { out: 'wood_sword', in: { '#planks': 2, stick: 1 }, at: 'workbench' },
   { out: 'stone_pickaxe', in: { stone: 3, stick: 2 }, at: 'workbench' },
   { out: 'stone_axe', in: { stone: 3, stick: 2 }, at: 'workbench' },
   { out: 'stone_shovel', in: { stone: 1, stick: 2 }, at: 'workbench' },
   { out: 'stone_sword', in: { stone: 2, stick: 1 }, at: 'workbench' },
   { out: 'stone_bricks', n: 4, in: { stone: 4 }, at: 'workbench' },
   { out: 'furnace', in: { stone: 8 }, at: 'workbench' },
-  { out: 'iron_ingot', n: 2, in: { iron_ore: 2, log: 1 }, at: 'furnace' },
-  { out: 'smooth_stone', n: 2, in: { stone: 2, log: 1 }, at: 'furnace' },
-  { out: 'glass', n: 3, in: { sand: 3, log: 1 }, at: 'furnace' },
-  { out: 'cooked_meat', n: 3, in: { raw_meat: 3, log: 1 }, at: 'furnace' },
+  { out: 'iron_ingot', n: 2, in: { iron_ore: 2, '#fuel': 1 }, at: 'furnace' },
+  { out: 'smooth_stone', n: 2, in: { stone: 2, '#fuel': 1 }, at: 'furnace' },
+  { out: 'glass', n: 3, in: { sand: 3, '#fuel': 1 }, at: 'furnace' },
+  { out: 'cooked_meat', n: 3, in: { raw_meat: 3, '#fuel': 1 }, at: 'furnace' },
   { out: 'iron_pickaxe', in: { iron_ingot: 3, stick: 2 }, at: 'workbench' },
   { out: 'iron_axe', in: { iron_ingot: 3, stick: 2 }, at: 'workbench' },
   { out: 'iron_shovel', in: { iron_ingot: 1, stick: 2 }, at: 'workbench' },
@@ -123,15 +110,15 @@ export const RECIPES = [
   { out: 'bucket', in: { iron_ingot: 3 }, at: 'workbench' },
   { out: 'iron_armour', in: { iron_ingot: 6, leather: 2 }, at: 'workbench' },
   { out: 'bottle', n: 2, in: { glass: 1 }, at: 'workbench' },
-  { out: 'purifier', in: { planks: 4, sand: 3, glass: 1 }, at: 'workbench' },
+  { out: 'purifier', in: { '#planks': 4, sand: 3, glass: 1 }, at: 'workbench' },
   { out: 'water_bottle', in: { murky_water: 1 }, at: 'purifier' },
   { out: 'water_bottle', in: { murky_water: 1, stick: 1 }, at: 'campfire' },
-  { out: 'water_bottle', n: 3, in: { murky_water: 3, log: 1 }, at: 'furnace' },
+  { out: 'water_bottle', n: 3, in: { murky_water: 3, '#fuel': 1 }, at: 'furnace' },
   { out: 'crystal_wand', in: { stick: 1, crystal: 3, feather: 1 }, at: 'workbench' },
   { out: 'cooked_meat', in: { raw_meat: 1 }, at: 'campfire' },
   { out: 'glass', in: { sand: 2 }, at: 'campfire' },
   { out: 'mana_tonic', in: { crystal: 1, berries: 2 }, at: 'campfire' },
-  { out: 'bandage', n: 2, in: { wool: 2 } },
+  { out: 'bandage', n: 2, in: { '#wool': 2 } },
   { out: 'bandage', n: 2, in: { silk: 3 } },
 ];
 
@@ -150,9 +137,22 @@ function stationsNear() {
   return near;
 }
 
+// Ingredients: an item id, or a group of items such as '#planks' (any item tagged 'planks').
+const tagged = (key) => Object.keys(ITEMS).filter((id) => ITEMS[id].tags?.includes(key.slice(1)));
+const have = (key) => key[0] === '#' ? tagged(key).reduce((n, id) => n + countItem(id), 0) : countItem(key);
+const ingredientName = (key) => key[0] === '#' ? TAGS[key] : ITEMS[key].name;
+function take(key, n) {
+  if (key[0] !== '#') { removeItem(key, n); return; }
+  // from the kinds you have most of first
+  for (const id of tagged(key).sort((a, b) => countItem(b) - countItem(a))) {
+    const k = Math.min(n, countItem(id));
+    if (k) { removeItem(id, k); n -= k; }
+    if (!n) break;
+  }
+}
 function canCraft(r, near) {
   if (r.at && !near.has(r.at)) return false;
-  return Object.entries(r.in).every(([id, n]) => countItem(id) >= n);
+  return Object.entries(r.in).every(([id, n]) => have(id) >= n);
 }
 
 export function craft(r, all) {
@@ -161,8 +161,9 @@ export function craft(r, all) {
   do {
     if (!canCraft(r, near)) break;
     if (roomFor(r.out) < (r.n || 1)) { toast('Inventory full'); break; }
-    for (const [id, n] of Object.entries(r.in)) removeItem(id, n);
+    for (const [id, n] of Object.entries(r.in)) take(id, n);
     addItem(r.out, r.n || 1);
+    for (const [id, n] of Object.entries(r.also || {})) addItem(id, n);
     made++;
   } while (all && made < 100);
   if (made) toast(`Crafted ${made * (r.n || 1)} ${ITEMS[r.out].name}`);
@@ -212,7 +213,7 @@ export function renderCrafting() {
     if (!matches(f, ITEMS[r.out]) || (f.only && !ok)) return;
     fillSlotEl(iconEl, { id: r.out, count: r.n || 1 });
     iconEl.className = 'slot';
-    const parts = Object.entries(r.in).map(([id, n]) => `<span class="${countItem(id) < n ? 'miss' : ''}">${n} ${ITEMS[id].name}</span>`);
+    const parts = Object.entries(r.in).map(([id, n]) => `<span class="${have(id) < n ? 'miss' : ''}">${n} ${ingredientName(id)}</span>`);
     if (r.at) parts.push(`<span class="${near.has(r.at) ? '' : 'miss'}">at a ${BLOCKS[r.at].name.toLowerCase()}</span>`);
     rows += `<div class="recipe${ok ? ' ok' : ''}" data-r="${i}">${iconEl.outerHTML}<div><b>${ITEMS[r.out].name}${r.n > 1 ? ' ×' + r.n : ''}</b><small>${parts.join(' · ')}</small></div></div>`;
   });

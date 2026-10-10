@@ -16,7 +16,7 @@ import { contact, updatePlayer } from './player/physics.js';
 import { viewModel } from './player/animation.js';
 import { ITEMS, addItem, countItem, getSelectedItem, inventoryOpen, registerItem, removeItem, selectSlot, setInventoryOpen, slots } from './inventory/inventory.js';
 import { RECIPES, craft, defineItems } from './inventory/items.js';
-import { blockGroups, blocks, placeBlock, updateCampfires } from './world/blocks.js';
+import { blockGroups, blocks, placeBlock, updateBlocks } from './world/blocks.js';
 import { addSource, fluidAt, fluids, updateFluids } from './world/fluids.js';
 import { MAX_HEALTH, damagePlayer, renderStats, setCreative, stats, updateStats } from './player/survival.js';
 import { animals, spawnAnimal, spawnAnimals, updateAnimals } from './animals/animals.js';
@@ -116,7 +116,7 @@ function frame() {
   updateWeather(dt);
   viewModel.update(dt);
   updateGrass(camera.position.x, camera.position.z, gameState === 'playing' ? 2 : 1);
-  updateCampfires(state.gameTime);
+  updateBlocks(state.gameTime, dt, camera.position);
   updateVolcanoes(dt, state.gameTime);
   updateFluids(dt, state.gameTime);
   terrainUniforms.uTime.value = state.gameTime;

@@ -63,6 +63,8 @@
   #held { position: fixed; pointer-events: none; z-index: 30; display: none; background: none; border: none; }
   #tooltip { position: fixed; pointer-events: none; z-index: 31; display: none; background: rgba(0,0,0,0.85); color: #fff; font-size: 12px; padding: 3px 7px; border-radius: 4px; max-width: 260px; white-space: normal; }
   .slot .swatch.flat { box-shadow: none; }
+  .slot .swatch.cube { width: 32px; height: 32px; border-radius: 0; box-shadow: none; background: center / contain no-repeat; }
+  .recipe .slot .swatch.cube { width: 24px; height: 24px; }
   .slot .badge { position: absolute; left: 4px; bottom: 4px; width: 8px; height: 8px; border-radius: 2px; box-shadow: 0 0 0 1px rgba(0,0,0,0.5); }
 
   /* Inventory window: tabs for the backpack, crafting and (creative) every item, with the hotbar
