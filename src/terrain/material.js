@@ -48,8 +48,9 @@ export function buildRenderGeometry(colliderGeo, T) {
   geo.setIndex(colliderGeo.index);
   const pos = posAttr.array, count = pos.length / 3;
   const normals = new Float32Array(count * 3), tint = new Float32Array(count * 3);
-  const splat = new Float32Array(count * 4), info = new Float32Array(count * 4), extra = new Float32Array(count * 3), biome = new Float32Array(count * 4);
-  const rock = new Float32Array(count * 3);
+  const splat = new Float32Array(count * 4), info = new Float32Array(count * 4), extra = new Float32Array(count * 3);
+  // 0–1 values kept as bytes: a quarter of the memory, and caves made the meshes much bigger
+  const biome = new Uint8Array(count * 4), rock = new Uint8Array(count * 3);
   const nrm = new THREE.Vector3();
 
   for (let v = 0; v < count; v++) {
@@ -119,20 +120,20 @@ export function buildRenderGeometry(colliderGeo, T) {
     tint[v * 3] = tr; tint[v * 3 + 1] = tg; tint[v * 3 + 2] = tb;
     // the kind of stone the rock is here, and any ore in it
     const st = STONE_TINT[vi < 0.3 ? T.stoneAt(x, y, z) : 'stone'] || STONE_TINT.stone;
-    rock[v * 3] = st[0]; rock[v * 3 + 1] = st[1]; rock[v * 3 + 2] = st[2];
+    rock[v * 3] = st[0] * 127.5; rock[v * 3 + 1] = st[1] * 127.5; rock[v * 3 + 2] = st[2] * 127.5; // halved: tints reach 1.9
     const ore = vi < 0.3 && !(glow < 0) ? T.oreKind(x, y, z) : null;
     extra[v * 3] = ore ? ore[1] : 0;
     extra[v * 3 + 2] = ore ? ORE_INDEX[ore[0]] : 0;
     extra[v * 3 + 1] = W;
-    biome[v * 4] = snow; biome[v * 4 + 1] = mesa; biome[v * 4 + 2] = sandstone; biome[v * 4 + 3] = redsand;
+    biome[v * 4] = snow * 255; biome[v * 4 + 1] = mesa * 255; biome[v * 4 + 2] = sandstone * 255; biome[v * 4 + 3] = redsand * 255;
   }
   geo.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
   geo.setAttribute('color', new THREE.BufferAttribute(tint, 3));
   geo.setAttribute('splat', new THREE.BufferAttribute(splat, 4));
   geo.setAttribute('tinfo', new THREE.BufferAttribute(info, 4));
   geo.setAttribute('extra', new THREE.BufferAttribute(extra, 3));
-  geo.setAttribute('biome', new THREE.BufferAttribute(biome, 4));
-  geo.setAttribute('rock', new THREE.BufferAttribute(rock, 3));
+  geo.setAttribute('biome', new THREE.BufferAttribute(biome, 4, true));
+  geo.setAttribute('rock', new THREE.BufferAttribute(rock, 3, true));
   return geo;
 }
 
@@ -167,7 +168,7 @@ export function makeTerrainMaterial() {
         vInfo = tinfo;
         vExtra = extra;
         vBiome = biome;
-        vRock = rock;
+        vRock = rock * 2.0;
         vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
         vWorldNormal = normalize(mat3(modelMatrix) * objectNormal);`);
     shader.fragmentShader = shader.fragmentShader

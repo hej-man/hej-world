@@ -106,11 +106,24 @@ export async function openGame({
       if (ok) console.log('ok  ', label);
       else fail(label, detail === undefined ? '' : JSON.stringify(detail));
     },
+    // Draws two frames and keeps them on screen for the picture. Leaving rendering on for a while
+    // instead queues up dozens of software-GL frames of the whole world, which then take minutes to
+    // drain and slow every later step to a crawl (and can run the browser out of memory).
     async shot(file) {
-      await renderOn(true);
-      await page.waitForTimeout(1500);
+      await page.evaluate(
+        () =>
+          new Promise((res) => {
+            let left = 2;
+            window.__game.renderer.render = (...a) => {
+              window.__realRender(...a);
+              if (--left === 0) {
+                window.__game.renderer.render = () => {};
+                res();
+              }
+            };
+          }),
+      );
       await page.screenshot({ path: path.join(shotsDir, `${name}-${file}.png`), timeout: 600000 });
-      await renderOn(false);
     },
     async finish() {
       await browser.close();

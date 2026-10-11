@@ -21,6 +21,8 @@
   animal that looks alike, instead of hundreds of separate boxes each. Spawning a hundred animals
   takes milliseconds, and each frame draws far fewer objects.
 - Animals more than 60 m away update a few times a second instead of every frame.
+- The ground keeps its biome and stone colours as bytes instead of floats, which offsets some of
+  the memory the bigger caves add.
 
 ### Inventory
 
