@@ -1,5 +1,36 @@
 # Changelog
 
+## Round 10: animal models, livelier weather and block ice spikes
+
+- Ice spikes are now built from separate blocks: packed ice (with a little clear ice) stacked into
+  a spire that steps in with slopes wherever it narrows and ends in a thin ice pillar. Most are
+  small and a few tower over 20 blocks, the tall ones leaning slightly. Each block mines on its own
+  and gives itself back; the inside of a spike is filled in as you dig into it. The ice spikes
+  biome has a few fewer of them than before, and distant ones are drawn as plain sharp blocks.
+
+- Weather changes about three times as often: a clear spell lasts 2 to 5 minutes instead of 4 to 9,
+  cloudy skies more often turn to rain than back to sun, and a full round from clear through rain and
+  back takes around ten minutes.
+- A new world starts on random weather (usually clear, sometimes cloudy or already raining) partway
+  through its spell, so the first change comes sooner.
+- Cloud cover and rain drift gently while a state lasts, so clear skies gather a few clouds and
+  rain comes in heavier and lighter spells instead of holding perfectly still.
+
+- Every animal is rebuilt from bevelled boxes that taper (legs thin toward the hoof, snouts narrow,
+  humps round off), with darker undersides, instead of plain sharp cubes.
+- All of them have eyes with a glint (hunters' eyes still glow), and hooves, paws or claws.
+- Tails are a separate part that swishes now and then, faster when the animal runs.
+- New details per animal: cows have three patch patterns, horns, ears and an udder (and some are
+  brown and white); pigs have floppy ears, a snout with nostrils and a curly tail; sheep have a puffy
+  fleece and the odd black sheep; chickens have a comb, wattle, toes and tail feathers (some are
+  brown); deer have a white rump and branching antlers on stags; rabbits have big hind feet and pink
+  inner ears; wolves have a deep ruff and a bushy tail; bears have claws and a shoulder hump (polar
+  bears a longer neck); boars have a bristly ridge and curved tusks; camels a long curved neck,
+  knobbly knees and a round hump; zebras stripes down their flanks, legs and mane; goats curled
+  horns and a beard; foxes black socks, a white chest and a white-tipped tail; parrots a hooked beak
+  and coloured wing tips; jaguars ring-shaped rosettes; scorpions a plated back, jointed legs and a
+  segmented tail; cave spiders fangs, six eyes and a red mark.
+
 ## Round 9: metalwork, living water, puddles and titanium
 
 ### Fixes

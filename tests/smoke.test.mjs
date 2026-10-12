@@ -47,5 +47,31 @@ check('the whole map generates', all?.terrain.meshed === all?.terrain.total, all
 check('forests, bushes and rocks', all?.trees > 1000 && all.bushes > 100 && all.rocks > 100, all);
 check('animals fill the map', all?.animals > 100, all);
 check('volcanoes have lava flows', all?.lavaFlows > 0, all);
+
+// ice spikes are built of blocks; taking one out of a spike shows the ice behind it, not a hole
+const spikes = await log('iceSpikes', () => {
+  const G = window.__game,
+    ice = [...G.blocks.values()].filter((b) => b.type.includes('ice'));
+  const shapes = {};
+  for (const b of ice) shapes[b.shape] = (shapes[b.shape] || 0) + 1;
+  // a seen block with a hidden one next to it
+  const [hk] = [...G.hiddenBlocks.entries()].find(([, h]) => G.blocks.has(`${h[1] + 1},${h[2]},${h[3]}`)) || [];
+  const [hx, hy, hz] = hk ? hk.split(',').map(Number) : [];
+  const taken = hk && G.removeBlock(`${hx + 1},${hy},${hz}`);
+  return {
+    spikes: G.vegStats.spikes,
+    blocks: ice.length,
+    hidden: G.hiddenBlocks.size,
+    shapes,
+    took: taken?.type,
+    revealed: hk ? G.blocks.has(hk) : null,
+  };
+});
+check(
+  'ice spikes are made of ice blocks and slopes',
+  spikes?.spikes > 20 && spikes.shapes.block > spikes.spikes * 5 && spikes.shapes.slope > spikes.spikes,
+  spikes,
+);
+check('mining into a spike uncovers the ice inside', spikes?.revealed === true, spikes);
 await shot('game');
 await finish();

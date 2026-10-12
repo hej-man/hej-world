@@ -77,7 +77,7 @@ export const BIOMES = {
   ice_spikes: {
     name: 'Ice spikes', at: [0.04, 0.78],
     ground: { snow: 1, tint: [0.92, 0.97, 1.08] }, grass: { amount: 0 },
-    trees: { density: 0 }, plants: { ice_spikes: 0.03 },
+    trees: { density: 0 }, plants: { ice_spikes: 0.02 },
     animals: ['polar_bear'],
   },
   desert: {

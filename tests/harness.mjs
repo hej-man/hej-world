@@ -80,6 +80,7 @@ export async function openGame({
     await page.evaluate((mode) => {
       window.__game.setTestMode(true);
       window.__game.startGame(mode);
+      window.__game.setWeather('clear', true); // the real game starts on random weather
     }, start);
   await page.waitForTimeout(500);
 

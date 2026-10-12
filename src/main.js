@@ -17,13 +17,13 @@ import { contact, updatePlayer } from './player/physics.js';
 import { viewModel } from './player/animation.js';
 import { ITEMS, addItem, countItem, getSelectedItem, inventoryOpen, registerItem, removeItem, selectSlot, setInventoryOpen, slots } from './inventory/inventory.js';
 import { RECIPES, craft, defineItems, updateJobs } from './inventory/items.js';
-import { blockGroups, blocks, placeBlock, updateBlocks } from './world/blocks.js';
+import { blockGroups, blocks, farBlockGeometry, hidden as hiddenBlocks, placeBlock, removeBlock, shapeGeometry, updateBlocks } from './world/blocks.js';
 import { addSource, fluidAt, fluids, poolAmount, pourFluid, takeFluid, updateFluids, weatherOnFluids } from './world/fluids.js';
 import { MAX_HEALTH, damagePlayer, renderStats, setCreative, stats, updateStats } from './player/survival.js';
 import { animals, spawnAnimal, spawnAnimals, updateAnimals } from './animals/animals.js';
 import { aimWater, breakTime, doBreak, mouse, pickTarget, updateBolts, updateInteraction, useItem, useWater } from './player/interaction.js';
 import { cameraUnderwater, updateUnderwater } from './effects/underwater.js';
-import { WEATHER, cycleWeather, nextWeather, setWeather, updateWeather, weather } from './effects/weather.js';
+import { WEATHER, cycleWeather, nextWeather, setWeather, startWeather, updateWeather, weather } from './effects/weather.js';
 import { crosshair, hud } from './ui/hud.js';
 import { $, clampPitch, gameState, startGame, toMainMenu, updateOverlay } from './ui/menu.js';
 import { keys, setView } from './ui/input.js';
@@ -48,7 +48,7 @@ export function newWorld(seed) {
     state.spawnFacing = findSpawn();
     player.facing = state.yaw = state.spawnFacing;
     respawn();
-    setWeather('clear', true);
+    startWeather();
     const url = new URL(location.href);
     url.searchParams.set('seed', seed);
     history.replaceState(null, '', url);
@@ -88,6 +88,13 @@ function updateCulling() {
     t.far.visible = d >= VEG_NEAR && d < VEG_FAR;
   }
   for (const a of animals) a.group.visible = Math.hypot(a.x - cx, a.z - cz) < 220;
+  // blocks the world built (ice spikes) go with the far trees
+  for (const k in blockGroups) {
+    const bt = blockGroups[k];
+    if (!bt.area) continue;
+    const d = away(bt.area.cx, bt.area.cz, VEG_TILE / 2), geo = d < VEG_NEAR ? shapeGeometry(bt.shape) : farBlockGeometry(bt.shape);
+    for (const im of bt.meshes) { im.visible = d < VEG_FAR; im.geometry = geo; }
+  }
 }
 
 function frame() {
@@ -166,7 +173,7 @@ requestAnimationFrame(() => setTimeout(() => {
     startGame, toMainMenu, state: () => gameState, ready: () => !!worldStats && !generating, weather, setWeather, nextWeather, cycleWeather, WEATHER, updateWeather,
     aimWater: () => aimWater, useWater, grassPatches, MAX_HEALTH, updateGrass,
     loadAll: () => { loadAll(); spawnAnimals(worldStats.seed); }, terrainProgress, vegStats,
-    lavaFlows, lavaAt, burning: () => state.burning, setShape: (sh) => { state.buildShape = sh; }, blockGroups, character, breakTime,
+    lavaFlows, lavaAt, burning: () => state.burning, setShape: (sh) => { state.buildShape = sh; }, blockGroups, hiddenBlocks, removeBlock, character, breakTime,
     fluids, addSource, fluidAt, pourFluid, takeFluid, poolAmount, updateHydro,
   };
   frame();

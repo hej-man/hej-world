@@ -2,18 +2,20 @@ import * as THREE from 'three';
 import { QUALITY, WORLD } from '../config.js';
 import { hash1, mulberry32, smoothstep } from '../noise.js';
 import { LAYER } from '../terrain/textures.js';
-import { bambooGeometry, barkMaterial, boulderGeometry, cactusGeometry, deadBushGeometry, flowerGeometries, foliageMaterials, frondGeometry, gourdGeometry, iceSpikeGeometry,
+import { bambooGeometry, barkMaterial, boulderGeometry, cactusGeometry, deadBushGeometry, flowerGeometries, foliageMaterials, frondGeometry, gourdGeometry,
   leafClump, mushroomGeometries, petalsGeometry, pineTier, puffTexture, triplanarMaterial } from './plant-looks.js';
 import { addObstacle, addTarget, terrainFns, whenLoaded, world } from './world.js';
 import { groundAt } from './query.js';
 import { lavaAt, volcanoRadius } from './volcano.js';
 import { litMaterial } from '../render/scene.js';
 import { BIOMES, BIOME_IDS } from '../terrain/biomes.js';
+import { sealBlocks } from './blocks.js';
+import { buildIceSpike } from './ice-spikes.js';
 
 export let clouds = null;
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
-export const vegStats = { trees: 0, bushes: 0, rocks: 0, plants: 0 };
+export const vegStats = { trees: 0, bushes: 0, rocks: 0, plants: 0, spikes: 0, spikeBlocks: 0 };
 
 // Tree kinds. `wood` names the logs and planks they give (see inventory/items.js), `fruit` what
 // sometimes drops when you chop one down. The shapes are built in treeParts below.
@@ -40,7 +42,6 @@ export const PLANT_KINDS = {
   pumpkins:   { name: 'Pumpkin', drops: [['pumpkin', 1, 1]] },
   melons:     { name: 'Melon', drops: [['melon_slice', 3, 5]] },
   bamboo:     { name: 'Bamboo', drops: [['bamboo', 2, 4]] },
-  ice_spikes: { name: 'Ice spike', drops: [['packed_ice', 3, 6]], tool: 'pickaxe' },
   petals:     { name: 'Pink petals', drops: [['pink_petals', 1, 2]] },
 };
 export const FLOWERS = [
@@ -51,7 +52,7 @@ export const FLOWERS = [
 // Vegetation is placed per square tile, once the terrain under the tile has been generated.
 // Each tile has its own random sequence, so a tile looks the same whenever it's loaded.
 export function placeVegetation(seed) {
-  vegStats.trees = vegStats.bushes = vegStats.rocks = vegStats.plants = 0;
+  vegStats.trees = vegStats.bushes = vegStats.rocks = vegStats.plants = vegStats.spikes = vegStats.spikeBlocks = 0;
   const low = QUALITY === 'low';
   const [stemGeo, bloomGeo] = flowerGeometries(), [mStemGeo, capGeo] = mushroomGeometries();
   // Shapes: a detailed version for close up and a cheap one for the distance (same instances).
@@ -65,7 +66,7 @@ export function placeVegetation(seed) {
     bush: leafClump(0.95, 0.75, 0.95, low ? 10 : 18, 0.9, 4),
     rock: boulderGeometry(2), ore: new THREE.DodecahedronGeometry(0.2, 0),
     cactus: cactusGeometry(), dead_bush: deadBushGeometry(), stem: stemGeo, bloom: bloomGeo, mstem: mStemGeo, cap: capGeo,
-    fern: pineTier(0.55, 0.45, low ? 6 : 9, 9), gourd: gourdGeometry(), bamboo: bambooGeometry(), spike: iceSpikeGeometry(), petals: petalsGeometry(),
+    fern: pineTier(0.55, 0.45, low ? 6 : 9, 9), gourd: gourdGeometry(), bamboo: bambooGeometry(), petals: petalsGeometry(),
   };
   const far = {
     trunk: new THREE.CylinderGeometry(0.13, 0.27, 1, 5, 1, true).translate(0, 0.5, 0),
@@ -75,7 +76,6 @@ export function placeVegetation(seed) {
     frond: frondGeometry(5),
     bush: leafClump(0.95, 0.75, 0.95, 5, 1.1, 4),
     rock: boulderGeometry(1),
-    spike: new THREE.ConeGeometry(1, 1, 5).translate(0, 0.5, 0),
   };
   const plain = (params) => litMaterial(new THREE.MeshStandardMaterial({ roughness: 0.8, ...params }));
   const mats = {
@@ -85,7 +85,7 @@ export function placeVegetation(seed) {
     ore: litMaterial(new THREE.MeshStandardMaterial({ color: 0xe0782e, roughness: 0.35, metalness: 0.45, emissive: 0x3a1204, flatShading: true })),
     cactus: plain({ roughness: 0.6 }), dead_bush: plain({ roughness: 0.9 }), stem: plain({ color: 0x4f8a34 }), bloom: plain({ roughness: 0.6 }),
     mstem: plain({ color: 0xe8e0d0 }), cap: plain({ roughness: 0.6 }), fern: foliageMaterials(true), gourd: plain({ roughness: 0.55 }),
-    bamboo: plain({ roughness: 0.45 }), spike: plain({ color: 0xcfe8ff, roughness: 0.08, metalness: 0.1 }), petals: plain({ side: THREE.DoubleSide }),
+    bamboo: plain({ roughness: 0.45 }), petals: plain({ side: THREE.DoubleSide }),
   };
   const farMats = { pine: foliageMaterials(true, true), crown: foliageMaterials(false, true), birch: foliageMaterials(false, true), bush: foliageMaterials(false, true) };
 
@@ -117,7 +117,7 @@ function pick(weights, r) {
 function placeVegTile(seed, ti, tj, kit) {
   const rand = mulberry32((seed * 13 + 5) ^ (ti * 7919 + tj * 104729));
   const T = terrainFns, L = T.ledge, W = WORLD.waterLevel;
-  const trees = [], plants = [], rocks = [];
+  const trees = [], plants = [], rocks = [], spikes = [];
   const step = WORLD.treeSpacing;
   const tx0 = ti * VEG_TILE, tz0 = tj * VEG_TILE, tx1 = tx0 + VEG_TILE - 0.01, tz1 = tz0 + VEG_TILE - 0.01;
   const end = WORLD.size - step;
@@ -149,6 +149,7 @@ function placeVegTile(seed, ti, tj, kit) {
       if (wantRock) { if (y > wl + 0.5 && ny > 0.6) rocks.push({ x, y, z, s: 0.6 + rand() * 1.4, rot: rand() * 6.28, iron: rand() < 0.14 }); continue; }
       if (ny < 0.72 || y < wl + (wl > W ? 1.0 : 1.8) || y > 76 || vi > 0.35) continue;
       if (vi > 0.2 && lavaAt(x, y, z, 1.5)) continue;
+      if (plant === 'ice_spikes') { spikes.push({ x, y, z, rot: rand() * 6.28, tint: rand() }); continue; }
       if (plant) { plants.push({ kind: plant, x, y, z, s: 0.5 + rand() * 0.6, rot: rand() * 6.28, tint: rand() }); continue; }
       // pines take over up high
       let kind = pick(biome.trees.mix, rand());
@@ -158,6 +159,13 @@ function placeVegTile(seed, ti, tj, kit) {
   }
   vegStats.trees += trees.length; vegStats.plants += plants.length; vegStats.rocks += rocks.length;
   vegStats.bushes += plants.filter((p) => p.kind === 'bush').length;
+  // ice spikes are made of blocks (see ice-spikes.js)
+  if (spikes.length) {
+    const tag = `veg${ti}_${tj}`;
+    for (const p of spikes) vegStats.spikeBlocks += buildIceSpike(p, T.surfaceHeight, tag);
+    vegStats.spikes += spikes.length;
+    sealBlocks(tag, (ti + 0.5) * VEG_TILE, (tj + 0.5) * VEG_TILE);
+  }
   if (trees.length || plants.length || rocks.length) buildVegTile({ trees, plants, rocks, i: ti, j: tj }, kit);
 }
 
@@ -260,7 +268,6 @@ function plantParts(p, add) {
       one('gourd', 1 + s * 0.4, 1 + s * 0.3, 1 + s * 0.4, p.kind === 'pumpkins' ? _c.set(0xe08a24) : _c.set(0x5a9a3a));
       return [p.y + 0.35, 0.55];
     case 'bamboo': { const h = 3 + p.tint * 4; one('bamboo', 1.4, h, 1.4, _c.setHSL(0.24, 0.5, 0.42 + p.tint * 0.1)); return [p.y + 1, 0.6]; }
-    case 'ice_spikes': { const h = 6 + p.tint * 14, r = 1 + p.tint * 1.2; one('spike', r, h, r, _c.set(0xffffff), -0.5); return [p.y + 2, r * 1.1]; }
     case 'petals': one('petals', 1, 1, 1, _c.setHSL(0.93, 0.6, 0.8 + p.tint * 0.08)); return [p.y + 0.1, 0.8];
   }
   return [p.y, 0.5];
@@ -292,7 +299,7 @@ function buildVegTile({ trees, plants, rocks, i: ti, j: tj }, { near: nearGeo, f
     if (p.flower) tg.flower = p.flower[0];
     if (p.kind === 'mushrooms') tg.red = p.red;
     // the big ones are in the way
-    if (p.kind === 'cactus' || p.kind === 'ice_spikes' || p.kind === 'bamboo') { tg.obstacle = { type: 'cyl', x: p.x, z: p.z, y0: p.y - 0.5, y1: p.y + 20, r: p.kind === 'ice_spikes' ? r * 0.7 : 0.3 }; addObstacle(tg.obstacle); }
+    if (p.kind === 'cactus' || p.kind === 'bamboo') { tg.obstacle = { type: 'cyl', x: p.x, z: p.z, y0: p.y - 0.5, y1: p.y + 20, r: 0.3 }; addObstacle(tg.obstacle); }
     targets.push(tg);
   }
   const rockPos = nearGeo.rock.attributes.position, rm = new THREE.Matrix4(), v = new THREE.Vector3();

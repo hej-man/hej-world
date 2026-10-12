@@ -62,14 +62,15 @@ R.craft = await log('craft', async () => {
   }
   G.selectSlot(0);
   let t = null;
-  for (let a = 0; a < 12 && G.blocks.size === 0; a++) {
+  const built = () => [...G.blocks.values()].filter((b) => !b.group.split('|')[2]); // not the world's own (ice spikes)
+  for (let a = 0; a < 12 && built().length === 0; a++) {
     G.setView(false);
     G.setLook((a / 12) * 6.283, -0.9);
     await waitGame(0.1);
     t = G.target();
     if (t && t.kind === 'terrain') G.useItem(t);
   }
-  const placed = [...G.blocks.values()].map((b) => b.type);
+  const placed = built().map((b) => b.type);
   G.craft(find('wood_pickaxe'), false);
   return { planks, sticks: count('stick'), pickBefore, pickWithout, placed, target: t?.kind, pickaxe: count('wood_pickaxe') };
 });
@@ -125,7 +126,7 @@ R.build = await log('build', async () => {
     G.useItem(G.target());
     await waitGame(0.15);
   }
-  return { blocks: [...G.blocks.values()].map((b) => b.type), stoneLeft: count('stone') };
+  return { blocks: [...G.blocks.values()].filter((b) => !b.group.split('|')[2]).map((b) => b.type), stoneLeft: count('stone') };
 });
 await page.evaluate(() => window.__game.setView(true));
 await page.waitForTimeout(300);

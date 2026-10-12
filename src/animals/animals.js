@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { ConvexGeometry } from 'three/addons/geometries/ConvexGeometry.js';
 import { state } from '../state.js';
 import { WORLD } from '../config.js';
 import { mulberry32 } from '../noise.js';
@@ -45,25 +46,51 @@ const population = {};
 let animalRand = Math.random, animalRespawnTimer = 0;
 // All animals share two materials (normal, and red for the moment one is hit) plus an unlit one
 // for glowing eyes, and every animal of the same look shares its geometry: one mesh for the body,
-// one for the head and one per leg. (Hundreds of separate boxes and materials made spawning slow
-// and every frame heavier.)
+// one for the head, one for the tail and one per leg. (Hundreds of separate boxes and materials made
+// spawning slow and every frame heavier.)
 const animalMat = litMaterial(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85 }));
 const hurtMat = litMaterial(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, emissive: 0x991010 }));
 const glowMat = new THREE.MeshBasicMaterial({ vertexColors: true });
 const bakedGeos = new Map();   // look -> merged geometries, in build order
 const _boxGeo = new THREE.BoxGeometry(1, 1, 1).toNonIndexed();
-const _m4 = new THREE.Matrix4(), _col = new THREE.Color(), _v = new THREE.Vector3();
-// Merges the boxes in `parts` (placeholder objects under one parent) into one geometry with colours.
+const _m4 = new THREE.Matrix4(), _col = new THREE.Color(), _v = new THREE.Vector3(), _n = new THREE.Vector3();
+
+// The shape of one part: a plain box for small bits, and for bigger ones a box with its edges
+// bevelled off (`bevel` metres) and its top face narrowed by `taper` (1 = straight sides), so legs
+// thin toward the hoof, snouts narrow and bodies look rounded instead of cut from cardboard.
+const partGeos = new Map();
+function partGeo(w, h, d, taper, bevel) {
+  if (taper === 1 && bevel === 0) return _boxGeo;
+  const key = [w, h, d, taper, bevel].map((v) => v.toFixed(3)).join();
+  let geo = partGeos.get(key);
+  if (geo) return geo;
+  const pts = [];
+  for (const sy of [-1, 1]) {
+    const t = sy > 0 ? taper : 1, hx = (w / 2) * t, hz = (d / 2) * t, y = (h / 2) * sy, b = Math.min(bevel, hx * 0.45, hz * 0.45, h * 0.3);
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+      pts.push(new THREE.Vector3(sx * hx, y - sy * b, sz * (hz - b)), new THREE.Vector3(sx * (hx - b), y - sy * b, sz * hz), new THREE.Vector3(sx * (hx - b), y, sz * (hz - b)));
+    }
+  }
+  geo = new ConvexGeometry(pts);
+  geo.scale(1 / w, 1 / h, 1 / d); // stored as a unit part: mergeBoxes scales every part by its size
+  partGeos.set(key, geo);
+  return geo;
+}
+
+// Merges the parts in `parts` (placeholder objects under one parent) into one geometry with colours.
+// Faces turned downward are shaded a little darker, which reads as soft shadow under bellies and chins.
 function mergeBoxes(parts) {
-  const pos = [], nrm = [], col = [], P = _boxGeo.attributes.position, N = _boxGeo.attributes.normal, nm = new THREE.Matrix3();
+  const pos = [], nrm = [], col = [], nm = new THREE.Matrix3();
   for (const o of parts) {
+    const u = o.userData, geo = partGeo(u.w, u.h, u.d, u.taper, u.bevel), P = geo.attributes.position, N = geo.attributes.normal;
     o.updateMatrix();
-    _m4.copy(o.matrix).scale(_v.set(o.userData.w, o.userData.h, o.userData.d));
+    _m4.copy(o.matrix).scale(_v.set(u.w, u.h, u.d));
     nm.getNormalMatrix(_m4);
-    _col.setHex(o.userData.color);
     for (let i = 0; i < P.count; i++) {
       _v.fromBufferAttribute(P, i).applyMatrix4(_m4); pos.push(_v.x, _v.y, _v.z);
-      _v.fromBufferAttribute(N, i).applyMatrix3(nm).normalize(); nrm.push(_v.x, _v.y, _v.z);
+      _n.fromBufferAttribute(N, i).applyMatrix3(nm).normalize(); nrm.push(_n.x, _n.y, _n.z);
+      _col.setHex(u.color);
+      if (!u.glow) _col.multiplyScalar(0.8 + 0.2 * Math.min(1, _n.y + 1));
       col.push(_col.r, _col.g, _col.b);
     }
   }
@@ -74,11 +101,11 @@ function mergeBoxes(parts) {
   g.computeBoundingSphere();
   return g;
 }
-// Swaps the placeholder boxes under the body, head and each leg for merged meshes (geometry shared
-// between animals that look the same).
-function bakeAnimal(kind, g, head, legs) {
-  const roots = [g, head, ...legs], groups = [];
-  let look = kind;
+// Swaps the placeholder parts under the body, head, tail and each leg for merged meshes (geometry
+// shared between animals that look the same: same kind, colours and `variant`, the pattern).
+function bakeAnimal(kind, variant, roots) {
+  const groups = [];
+  let look = `${kind}|${variant}`;
   for (const r of roots) {
     const parts = r.children.filter((c) => c.userData.box);
     for (const glow of [false, true]) {
@@ -101,242 +128,382 @@ function bakeAnimal(kind, g, head, legs) {
   return meshes;
 }
 
-// Low-poly animals built from boxes. Local forward is -Z, feet at y = 0.
+// Low-poly animals built from bevelled boxes. Local forward is -Z, feet at y = 0.
 function buildAnimal(kind, rand) {
-  const g = new THREE.Group(), legs = [];
-  // a colour (glowing ones are unlit), and a placeholder box that bakeAnimal merges away
+  const g = new THREE.Group(), legs = [], head = new THREE.Group(), tail = new THREE.Group();
+  g.add(head, tail);
+  let variant = 0;
+  // a colour (glowing ones are unlit), and a placeholder part that bakeAnimal merges away.
+  // o: { rx, ry, rz } turns it, taper narrows its top, bevel rounds its edges (default: by size).
   const M = (c) => ({ color: c, glow: false, emissive: { set() { this.glow = true; } } });
-  const box = (parent, w, h, d, m, x, y, z, rx = 0) => {
-    const b = new THREE.Object3D(); b.position.set(x, y, z); b.rotation.x = rx;
-    b.userData = { box: true, w, h, d, color: m.color, get glow() { return m.glow; } };
+  const box = (parent, w, h, d, m, x, y, z, rx = 0, o = {}) => {
+    const b = new THREE.Object3D(); b.position.set(x, y, z); b.rotation.set(rx, o.ry || 0, o.rz || 0);
+    const small = Math.min(w, h, d);
+    b.userData = { box: true, w, h, d, taper: o.taper ?? 1, bevel: o.bevel ?? (small > 0.09 ? small * 0.22 : 0), color: m.color, get glow() { return m.glow; } };
     parent.add(b); return b;
   };
-  const leg = (m, w, len, x, y, z) => { const p = new THREE.Group(); p.position.set(x, y, z); box(p, w, len, w, m, 0, -len / 2, 0); g.add(p); legs.push(p); };
-  const head = new THREE.Group();
-  g.add(head);
+  // a leg hanging from a hip or shoulder at (x, top, z): tapering down to a hoof or paw of `foot` colour
+  const leg = (m, foot, w, len, x, top, z, o = {}) => {
+    const p = new THREE.Group(); p.position.set(x, top, z);
+    const fh = Math.min(0.12, len * 0.16);
+    box(p, w, len - fh, w * (o.deep || 1), m, 0, -(len - fh) / 2, 0, 0, { taper: 1 / (o.taper || 0.72) });
+    box(p, w * (o.footW || 0.82), fh, w * (o.footD || 1), foot, 0, -len + fh / 2, o.toe || 0);
+    g.add(p); legs.push(p);
+    return p;
+  };
+  // eyes: dark with a small bright glint (or glowing, for hunters' eyes in the dark)
+  const eyes = (parent, x, y, z, s, m = M(0x1a1410), glint = true) => {
+    for (const sx of [-1, 1]) {
+      box(parent, 0.03, s, s, m, sx * x, y, z);
+      if (glint) box(parent, 0.032, s * 0.35, s * 0.35, M(0xffffff), sx * (x + 0.002), y + s * 0.2, z - s * 0.2);
+    }
+  };
+  const pair = (fn) => { fn(-1); fn(1); };
   switch (kind) {
     case 'cow': {
-      const white = M(0xf2eee6), black = M(0x2b2826), pink = M(0xe8a3a0), horn = M(0xe0d4b4);
-      for (const [x, z] of [[-0.27, -0.5], [0.27, -0.5], [-0.27, 0.5], [0.27, 0.5]]) leg(white, 0.2, 0.62, x, 0.62, z);
-      box(g, 0.8, 0.7, 1.45, white, 0, 0.95, 0);
-      box(g, 0.82, 0.4, 0.45, black, 0, 1.08, 0.25); box(g, 0.82, 0.3, 0.3, black, 0, 0.9, -0.4);
-      head.position.set(0, 1.2, -0.72);
-      box(head, 0.48, 0.48, 0.5, white, 0, 0, -0.22); box(head, 0.5, 0.26, 0.2, black, 0, 0.12, -0.3);
-      box(head, 0.4, 0.22, 0.14, pink, 0, -0.12, -0.5);
-      box(head, 0.08, 0.16, 0.08, horn, -0.21, 0.3, -0.18); box(head, 0.08, 0.16, 0.08, horn, 0.21, 0.3, -0.18);
+      const white = M(0xf2eee6), black = M(rand() < 0.25 ? 0x6a3e26 : 0x2b2826), pink = M(0xe8a3a0), horn = M(0xe6dcc0), hoof = M(0x3a3430), tip = M(0x4a4440);
+      variant = Math.floor(rand() * 3);
+      for (const [x, z] of [[-0.25, -0.5], [0.25, -0.5], [-0.25, 0.52], [0.25, 0.52]]) leg(white, hoof, 0.2, 0.66, x, 0.72, z);
+      box(g, 0.8, 0.72, 1.5, white, 0, 1.0, 0.02);
+      box(g, 0.74, 0.34, 0.5, white, 0, 1.24, 0.48); // hips
+      box(g, 0.72, 0.4, 0.46, white, 0, 1.2, -0.5); // shoulders
+      box(g, 0.36, 0.2, 0.3, pink, 0, 0.6, 0.4); // udder
+      // patches, three patterns
+      const spots = [[[0.41, 1.08, 0.2, 0.06, 0.4, 0.5], [-0.41, 0.98, -0.25, 0.06, 0.36, 0.42], [0, 1.37, 0.42, 0.5, 0.06, 0.4]],
+        [[0.41, 1.02, -0.3, 0.06, 0.46, 0.48], [-0.41, 1.1, 0.35, 0.06, 0.32, 0.5], [0, 1.37, -0.1, 0.44, 0.06, 0.34]],
+        [[0.41, 1.1, 0.4, 0.06, 0.34, 0.36], [0.41, 0.95, -0.35, 0.06, 0.3, 0.3], [-0.41, 1.05, 0.0, 0.06, 0.5, 0.6]]][variant];
+      for (const [x, y, z, w, h, d] of spots) box(g, w, h, d, black, x, y, z);
+      head.position.set(0, 1.25, -0.74);
+      box(head, 0.2, 0.36, 0.36, white, 0, -0.06, 0.02, 0.3); // neck
+      box(head, 0.46, 0.46, 0.46, white, 0, 0, -0.26);
+      box(head, 0.4, 0.3, 0.26, pink, 0, -0.12, -0.54, 0, { taper: 0.85 }); // muzzle
+      pair((s) => box(head, 0.06, 0.06, 0.03, M(0x6a3a3a), s * 0.09, -0.1, -0.675));
+      box(head, 0.48, 0.2, 0.3, black, 0, 0.16, -0.3); // face patch
+      eyes(head, 0.235, 0.06, -0.38, 0.07);
+      pair((s) => { box(head, 0.2, 0.08, 0.12, white, s * 0.32, 0.1, -0.16, 0, { rz: -s * 0.3 }); box(head, 0.12, 0.07, 0.07, horn, s * 0.24, 0.26, -0.18, 0, { rz: s * 0.6 }); box(head, 0.06, 0.12, 0.06, horn, s * 0.3, 0.34, -0.18, 0, { rz: -s * 0.3 }); });
+      tail.position.set(0, 1.3, 0.76);
+      box(tail, 0.06, 0.62, 0.06, white, 0, -0.3, 0.04, 0.1); box(tail, 0.1, 0.16, 0.1, tip, 0, -0.64, 0.07);
       break;
     }
     case 'pig': {
-      const pink = M(0xeba4a0), dark = M(0xd0807e);
-      for (const [x, z] of [[-0.2, -0.36], [0.2, -0.36], [-0.2, 0.36], [0.2, 0.36]]) leg(pink, 0.17, 0.34, x, 0.34, z);
-      box(g, 0.62, 0.52, 1.0, pink, 0, 0.6, 0);
-      head.position.set(0, 0.72, -0.48);
-      box(head, 0.46, 0.42, 0.38, pink, 0, 0, -0.14); box(head, 0.24, 0.17, 0.1, dark, 0, -0.06, -0.36);
-      box(head, 0.1, 0.1, 0.06, dark, -0.16, 0.24, -0.12); box(head, 0.1, 0.1, 0.06, dark, 0.16, 0.24, -0.12);
-      box(g, 0.06, 0.06, 0.14, dark, 0, 0.75, 0.55, -0.6);
+      const pink = M(0xf0aaa4), dark = M(0xd8847e), snout = M(0xe89590), hoof = M(0x8a5a56);
+      for (const [x, z] of [[-0.19, -0.34], [0.19, -0.34], [-0.19, 0.36], [0.19, 0.36]]) leg(pink, hoof, 0.16, 0.34, x, 0.38, z);
+      box(g, 0.64, 0.56, 1.02, pink, 0, 0.62, 0, 0, { bevel: 0.16 });
+      box(g, 0.56, 0.18, 0.8, pink, 0, 0.9, 0.04, 0, { bevel: 0.07 }); // round back
+      head.position.set(0, 0.7, -0.5);
+      box(head, 0.48, 0.44, 0.38, pink, 0, 0.02, -0.12, 0, { bevel: 0.1 });
+      box(head, 0.28, 0.2, 0.12, snout, 0, -0.04, -0.36, 0, { bevel: 0.04 });
+      pair((s) => box(head, 0.05, 0.07, 0.02, M(0x7a4440), s * 0.06, -0.04, -0.425));
+      eyes(head, 0.13, 0.1, -0.31, 0.055);
+      pair((s) => box(head, 0.16, 0.04, 0.18, dark, s * 0.17, 0.25, -0.2, -0.5, { rz: s * 0.4 })); // floppy ears
+      tail.position.set(0, 0.78, 0.52);
+      box(tail, 0.05, 0.05, 0.1, dark, 0, 0, 0.04); box(tail, 0.05, 0.1, 0.05, dark, 0, 0.05, 0.1); box(tail, 0.05, 0.05, 0.08, dark, 0, 0.1, 0.06);
       break;
     }
     case 'sheep': {
-      const wool = M(0xf0ede4), skin = M(0x3d3532);
-      for (const [x, z] of [[-0.2, -0.34], [0.2, -0.34], [-0.2, 0.34], [0.2, 0.34]]) leg(skin, 0.13, 0.45, x, 0.45, z);
-      box(g, 0.74, 0.66, 1.0, wool, 0, 0.85, 0);
-      box(g, 0.66, 0.2, 0.86, wool, 0, 1.2, 0);
-      head.position.set(0, 1.0, -0.52);
-      box(head, 0.3, 0.34, 0.4, skin, 0, 0, -0.14); box(head, 0.36, 0.14, 0.26, wool, 0, 0.2, -0.06);
-      box(head, 0.14, 0.06, 0.08, skin, -0.2, 0.06, -0.06); box(head, 0.14, 0.06, 0.08, skin, 0.2, 0.06, -0.06);
+      const wool = M(rand() < 0.12 ? 0x4a403a : 0xf0ede4), skin = M(0x3d3532), hoof = M(0x1e1a18);
+      for (const [x, z] of [[-0.2, -0.32], [0.2, -0.32], [-0.2, 0.34], [0.2, 0.34]]) leg(skin, hoof, 0.11, 0.5, x, 0.56, z);
+      // a fleece made of overlapping puffs
+      box(g, 0.78, 0.66, 1.02, wool, 0, 0.86, 0, 0, { bevel: 0.2 });
+      for (const [x, y, z, s] of [[0, 1.16, -0.25, 0.46], [0, 1.18, 0.2, 0.5], [-0.3, 0.92, -0.3, 0.36], [0.3, 0.92, -0.3, 0.36], [-0.3, 0.95, 0.3, 0.38], [0.3, 0.95, 0.3, 0.38], [0, 0.92, 0.5, 0.42], [0, 0.95, -0.5, 0.4]]) box(g, s, s * 0.8, s, wool, x, y, z, 0, { bevel: s * 0.3 });
+      head.position.set(0, 1.05, -0.56);
+      box(head, 0.28, 0.32, 0.38, skin, 0, -0.02, -0.14, 0.15, { taper: 0.8 });
+      box(head, 0.38, 0.2, 0.28, wool, 0, 0.18, -0.06, 0, { bevel: 0.08 }); // woolly cap
+      eyes(head, 0.142, 0.03, -0.2, 0.05, M(0x0e0c0a));
+      pair((s) => box(head, 0.16, 0.06, 0.1, skin, s * 0.21, 0.07, -0.08, 0, { rz: s * 0.35 }));
+      tail.position.set(0, 0.95, 0.52);
+      box(tail, 0.16, 0.22, 0.12, wool, 0, -0.08, 0.02, 0.2);
       break;
     }
     case 'chicken': {
-      const white = M(0xf7f5ee), yellow = M(0xe8b030), red = M(0xd8332a);
-      leg(yellow, 0.05, 0.26, -0.08, 0.26, 0); leg(yellow, 0.05, 0.26, 0.08, 0.26, 0);
-      box(g, 0.32, 0.32, 0.44, white, 0, 0.42, 0);
-      box(g, 0.2, 0.22, 0.1, white, 0, 0.56, 0.22, 0.4);
-      box(g, 0.06, 0.2, 0.3, white, -0.18, 0.44, 0); box(g, 0.06, 0.2, 0.3, white, 0.18, 0.44, 0);
+      const white = M(rand() < 0.3 ? 0xb06a34 : 0xf7f5ee), yellow = M(0xe8a830), red = M(0xd8332a);
+      for (const x of [-0.08, 0.08]) {
+        const p = leg(yellow, yellow, 0.04, 0.26, x, 0.3, 0.02, { taper: 1 });
+        for (const ry of [-0.5, 0, 0.5]) box(p, 0.025, 0.02, 0.1, yellow, Math.sin(ry) * 0.04, -0.26, -0.05, 0, { ry }); // toes
+      }
+      box(g, 0.34, 0.32, 0.46, white, 0, 0.44, 0.02, 0, { bevel: 0.1 });
+      box(g, 0.28, 0.16, 0.3, white, 0, 0.34, 0.02, 0, { bevel: 0.06 }); // full chest
+      pair((s) => box(g, 0.05, 0.22, 0.32, white, s * 0.18, 0.46, 0.04, 0.15)); // wings
       head.position.set(0, 0.62, -0.18);
-      box(head, 0.2, 0.24, 0.2, white, 0, 0.04, -0.04); box(head, 0.1, 0.06, 0.12, yellow, 0, 0.02, -0.2);
-      box(head, 0.04, 0.1, 0.12, red, 0, 0.19, -0.04); box(head, 0.04, 0.08, 0.04, red, 0, -0.06, -0.15);
+      box(head, 0.08, 0.16, 0.08, white, 0, -0.06, 0.02); // neck
+      box(head, 0.18, 0.2, 0.18, white, 0, 0.06, -0.04, 0, { bevel: 0.05 });
+      box(head, 0.08, 0.05, 0.12, yellow, 0, 0.04, -0.17, 0, { taper: 0.5 });
+      for (const [y, z] of [[0.18, -0.08], [0.2, -0.02], [0.18, 0.04]]) box(head, 0.035, 0.08, 0.06, red, 0, y, z); // comb
+      box(head, 0.04, 0.08, 0.04, red, 0, -0.03, -0.13); // wattle
+      eyes(head, 0.092, 0.08, -0.08, 0.035);
+      tail.position.set(0, 0.52, 0.22);
+      for (const [rx, y] of [[-0.9, 0.1], [-0.5, 0.14], [-0.2, 0.1]]) box(tail, 0.14, 0.04, 0.2, white, 0, y, 0.06, rx);
       break;
     }
     case 'deer': {
-      const brown = M(0xa86b3c), light = M(0xe8dcc8), antler = M(0xd9c9a3);
-      for (const [x, z] of [[-0.16, -0.45], [0.16, -0.45], [-0.16, 0.45], [0.16, 0.45]]) leg(brown, 0.11, 0.85, x, 0.85, z);
-      box(g, 0.48, 0.52, 1.15, brown, 0, 1.1, 0);
-      box(g, 0.36, 0.1, 0.8, light, 0, 0.84, 0);
-      box(g, 0.14, 0.18, 0.08, light, 0, 1.25, 0.6, -0.4);
+      const brown = M(0xa86b3c), light = M(0xeadfcc), dark = M(0x2b2420), antler = M(0xd9c9a3), hoof = M(0x2a2420);
+      variant = rand() < 0.5 ? 1 : 0; // 1: a stag with antlers
+      for (const [x, z] of [[-0.15, -0.44], [0.15, -0.44], [-0.15, 0.46], [0.15, 0.46]]) leg(brown, hoof, 0.11, 0.92, x, 0.94, z, { taper: 0.6 });
+      box(g, 0.46, 0.5, 1.12, brown, 0, 1.14, 0, 0, { bevel: 0.12 });
+      box(g, 0.34, 0.1, 0.8, light, 0, 0.9, 0); // pale belly
+      box(g, 0.3, 0.3, 0.06, light, 0, 1.22, 0.57); // white rump
       head.position.set(0, 1.3, -0.5);
-      box(head, 0.2, 0.42, 0.22, brown, 0, 0.12, -0.08, -0.45);
-      box(head, 0.24, 0.24, 0.4, brown, 0, 0.36, -0.28); box(head, 0.13, 0.11, 0.1, M(0x2b2420), 0, 0.31, -0.5);
-      box(head, 0.12, 0.08, 0.04, brown, -0.13, 0.48, -0.18); box(head, 0.12, 0.08, 0.04, brown, 0.13, 0.48, -0.18);
-      if (rand() < 0.5) {
-        for (const s of [-1, 1]) {
-          box(head, 0.05, 0.34, 0.05, antler, s * 0.1, 0.62, -0.2);
-          box(head, 0.05, 0.05, 0.2, antler, s * 0.1, 0.68, -0.29);
-          box(head, 0.18, 0.05, 0.05, antler, s * 0.18, 0.78, -0.2);
-        }
-      }
+      box(head, 0.18, 0.56, 0.24, brown, 0, 0.18, -0.06, -0.4, { taper: 0.8 }); // neck
+      box(head, 0.12, 0.3, 0.06, light, 0, 0.1, -0.16, -0.4); // throat
+      box(head, 0.24, 0.24, 0.3, brown, 0, 0.44, -0.26, 0, { bevel: 0.06 });
+      box(head, 0.16, 0.15, 0.22, brown, 0, 0.39, -0.48, 0, { taper: 0.8 }); // muzzle
+      box(head, 0.1, 0.07, 0.04, dark, 0, 0.42, -0.6);
+      eyes(head, 0.122, 0.48, -0.32, 0.05);
+      pair((s) => box(head, 0.2, 0.06, 0.1, brown, s * 0.18, 0.58, -0.18, 0, { rz: -s * 0.5 }));
+      if (variant) pair((s) => {
+        box(head, 0.05, 0.3, 0.05, antler, s * 0.1, 0.72, -0.2, 0, { rz: -s * 0.25 });
+        box(head, 0.04, 0.2, 0.04, antler, s * 0.2, 0.92, -0.16, 0, { rz: -s * 0.6 });
+        box(head, 0.04, 0.16, 0.04, antler, s * 0.13, 0.88, -0.3, -0.6);
+        box(head, 0.04, 0.14, 0.04, antler, s * 0.28, 1.02, -0.12, 0.3, { rz: -s * 0.2 });
+      });
+      tail.position.set(0, 1.32, 0.58);
+      box(tail, 0.12, 0.2, 0.06, brown, 0, -0.06, 0.02, 0.4); box(tail, 0.1, 0.16, 0.03, light, 0, -0.07, 0.06, 0.4);
       break;
     }
     case 'rabbit': {
       const fur = M(rand() < 0.5 ? 0x9a8470 : 0xb8b0a4), white = M(0xf4f1ea), pink = M(0xe0a8a8);
-      for (const [x, z] of [[-0.08, -0.12], [0.08, -0.12], [-0.09, 0.13], [0.09, 0.13]]) leg(fur, 0.08, 0.12, x, 0.12, z);
-      box(g, 0.28, 0.28, 0.42, fur, 0, 0.25, 0);
-      box(g, 0.12, 0.12, 0.1, white, 0, 0.3, 0.24);
-      head.position.set(0, 0.4, -0.2);
-      box(head, 0.2, 0.2, 0.22, fur, 0, 0, -0.05);
-      box(head, 0.06, 0.24, 0.04, fur, -0.05, 0.2, 0.02); box(head, 0.06, 0.24, 0.04, fur, 0.05, 0.2, 0.02);
-      box(head, 0.04, 0.04, 0.02, pink, 0, -0.02, -0.17);
+      variant = fur.color;
+      leg(fur, fur, 0.07, 0.12, -0.07, 0.14, -0.13, { taper: 1 }); leg(fur, fur, 0.07, 0.12, 0.07, 0.14, -0.13, { taper: 1 });
+      leg(fur, fur, 0.09, 0.08, -0.1, 0.1, 0.12, { taper: 1, footD: 2.4, toe: -0.06 }); leg(fur, fur, 0.09, 0.08, 0.1, 0.1, 0.12, { taper: 1, footD: 2.4, toe: -0.06 });
+      box(g, 0.26, 0.24, 0.34, fur, 0, 0.26, -0.02, 0, { bevel: 0.08 });
+      pair((s) => box(g, 0.1, 0.2, 0.22, fur, s * 0.12, 0.22, 0.1, 0, { bevel: 0.06 })); // haunches
+      box(g, 0.16, 0.08, 0.2, white, 0, 0.15, -0.06);
+      head.position.set(0, 0.38, -0.18);
+      box(head, 0.18, 0.17, 0.2, fur, 0, 0.02, -0.06, 0, { bevel: 0.05 });
+      box(head, 0.1, 0.07, 0.04, white, 0, -0.02, -0.16);
+      box(head, 0.035, 0.03, 0.02, pink, 0, 0.01, -0.175);
+      eyes(head, 0.092, 0.05, -0.08, 0.04);
+      pair((s) => { box(head, 0.06, 0.24, 0.035, fur, s * 0.05, 0.2, 0.0, 0.2, { rz: -s * 0.15 }); box(head, 0.03, 0.18, 0.01, pink, s * 0.05, 0.2, -0.02, 0.2, { rz: -s * 0.15 }); });
+      tail.position.set(0, 0.3, 0.17);
+      box(tail, 0.1, 0.1, 0.08, white, 0, 0, 0.02, 0, { bevel: 0.03 });
       break;
     }
     case 'wolf': {
-      const grey = M(0x6f6d6a), light = M(0xb8b4ad), dark = M(0x3a3836), eye = M(0xf2c230);
+      const grey = M(rand() < 0.2 ? 0x4a4644 : 0x77736e), light = M(0xc4c0b8), dark = M(0x2a2826), eye = M(0xf2c230);
+      variant = grey.color;
       eye.emissive.set(0x6a4a00);
-      for (const [x, z] of [[-0.14, -0.38], [0.14, -0.38], [-0.14, 0.38], [0.14, 0.38]]) leg(grey, 0.13, 0.5, x, 0.5, z);
-      box(g, 0.42, 0.45, 1.0, grey, 0, 0.75, 0);
-      box(g, 0.46, 0.5, 0.36, grey, 0, 0.8, -0.32);
-      box(g, 0.3, 0.12, 0.7, light, 0, 0.53, 0);
-      box(g, 0.12, 0.12, 0.48, grey, 0, 0.8, 0.66, -0.55);
-      head.position.set(0, 0.92, -0.55);
-      box(head, 0.34, 0.32, 0.34, grey, 0, 0, -0.1); box(head, 0.18, 0.16, 0.26, light, 0, -0.06, -0.36);
-      box(head, 0.08, 0.06, 0.06, dark, 0, -0.02, -0.5);
-      box(head, 0.08, 0.14, 0.06, dark, -0.1, 0.22, -0.02); box(head, 0.08, 0.14, 0.06, dark, 0.1, 0.22, -0.02);
-      box(head, 0.06, 0.04, 0.02, eye, -0.09, 0.05, -0.27); box(head, 0.06, 0.04, 0.02, eye, 0.09, 0.05, -0.27);
+      for (const [x, z] of [[-0.14, -0.38], [0.14, -0.38], [-0.13, 0.4], [0.13, 0.4]]) leg(grey, dark, 0.12, 0.56, x, 0.6, z, { taper: 0.7 });
+      box(g, 0.4, 0.42, 1.0, grey, 0, 0.78, 0.02, 0, { bevel: 0.1 });
+      box(g, 0.48, 0.54, 0.4, grey, 0, 0.84, -0.32, 0, { bevel: 0.12 }); // deep chest and ruff
+      box(g, 0.3, 0.2, 0.3, light, 0, 0.64, -0.42); // pale throat
+      box(g, 0.28, 0.08, 0.6, light, 0, 0.56, 0.06);
+      head.position.set(0, 0.98, -0.56);
+      box(head, 0.34, 0.3, 0.32, grey, 0, 0, -0.1, 0, { bevel: 0.08 });
+      box(head, 0.2, 0.16, 0.28, grey, 0, -0.04, -0.36, 0, { taper: 0.75 }); // long snout
+      box(head, 0.18, 0.06, 0.24, light, 0, -0.11, -0.36);
+      box(head, 0.08, 0.06, 0.05, dark, 0, -0.01, -0.5);
+      pair((s) => box(head, 0.1, 0.16, 0.06, grey, s * 0.1, 0.22, -0.04, 0, { taper: 0.3, rz: -s * 0.15 }));
+      eyes(head, 0.1, 0.05, -0.27, 0.05, eye, false);
+      tail.position.set(0, 0.88, 0.5);
+      box(tail, 0.13, 0.13, 0.5, grey, 0, -0.12, 0.2, 0.6, { taper: 1.3 }); box(tail, 0.1, 0.1, 0.12, light, 0, -0.29, 0.43, 0.6);
       break;
     }
-    case 'bear': {
-      const fur = M(rand() < 0.3 ? 0x3b2c22 : 0x5c4130), muzzle = M(0x9a7a5c), dark = M(0x1c1612), eye = M(0x120c08);
-      for (const [x, z] of [[-0.32, -0.55], [0.32, -0.55], [-0.32, 0.55], [0.32, 0.55]]) leg(fur, 0.28, 0.62, x, 0.62, z);
-      box(g, 0.96, 0.86, 1.65, fur, 0, 1.05, 0);
-      box(g, 0.9, 0.3, 0.6, fur, 0, 1.52, -0.38); // shoulder hump
-      head.position.set(0, 1.3, -0.88);
-      box(head, 0.6, 0.54, 0.52, fur, 0, 0, -0.14); box(head, 0.32, 0.26, 0.3, muzzle, 0, -0.1, -0.5);
-      box(head, 0.12, 0.08, 0.06, dark, 0, -0.02, -0.66);
-      box(head, 0.14, 0.14, 0.08, fur, -0.22, 0.32, -0.04); box(head, 0.14, 0.14, 0.08, fur, 0.22, 0.32, -0.04);
-      box(head, 0.06, 0.06, 0.02, eye, -0.14, 0.08, -0.41); box(head, 0.06, 0.06, 0.02, eye, 0.14, 0.08, -0.41);
+    case 'bear':
+    case 'polar_bear': {
+      const polar = kind === 'polar_bear';
+      const fur = M(polar ? 0xf2efe6 : rand() < 0.3 ? 0x3b2c22 : 0x5c4130), muzzle = M(polar ? 0xe4ded2 : 0x9a7a5c), dark = M(0x1c1612), claw = M(polar ? 0x3a3632 : 0xd8ccb4);
+      variant = fur.color;
+      for (const [x, z] of [[-0.3, -0.55], [0.3, -0.55], [-0.3, 0.56], [0.3, 0.56]]) {
+        const p = leg(fur, fur, 0.3, 0.68, x, 0.74, z, { taper: 0.9, footD: 1.3, toe: -0.04 });
+        for (const cx of [-0.08, 0, 0.08]) box(p, 0.04, 0.04, 0.06, claw, cx, -0.66, -0.22);
+      }
+      box(g, 0.96, 0.88, 1.66, fur, 0, 1.08, 0, 0, { bevel: 0.22 });
+      if (!polar) box(g, 0.82, 0.3, 0.56, fur, 0, 1.52, -0.38, 0, { bevel: 0.12 }); // shoulder hump
+      head.position.set(0, 1.28, -0.88);
+      if (polar) box(head, 0.48, 0.48, 0.4, fur, 0, 0, 0.06, 0, { bevel: 0.12 }); // longer neck
+      box(head, 0.56, 0.5, 0.48, fur, 0, 0, -0.16, 0, { bevel: 0.14 });
+      box(head, 0.32, 0.26, 0.3, muzzle, 0, -0.1, -0.5, 0, { taper: 0.85, bevel: 0.07 });
+      box(head, 0.14, 0.09, 0.06, dark, 0, -0.01, -0.66);
+      pair((s) => box(head, 0.14, 0.14, 0.08, fur, s * 0.22, 0.28, -0.08, 0, { bevel: 0.04 }));
+      eyes(head, 0.15, 0.08, -0.41, 0.06, dark);
+      tail.position.set(0, 1.2, 0.84);
+      box(tail, 0.14, 0.14, 0.1, fur, 0, 0, 0, 0, { bevel: 0.04 });
       break;
     }
     case 'boar': {
-      const hide = M(0x4e3d33), bristle = M(0x2c221d), snout = M(0x8a6a5c), tusk = M(0xefe6d2);
-      for (const [x, z] of [[-0.2, -0.4], [0.2, -0.4], [-0.2, 0.4], [0.2, 0.4]]) leg(hide, 0.15, 0.38, x, 0.38, z);
-      box(g, 0.6, 0.62, 1.15, hide, 0, 0.7, 0);
-      box(g, 0.14, 0.18, 0.9, bristle, 0, 1.06, -0.05);
-      head.position.set(0, 0.78, -0.58);
-      box(head, 0.44, 0.44, 0.42, hide, 0, 0, -0.14); box(head, 0.26, 0.2, 0.14, snout, 0, -0.08, -0.4);
-      box(head, 0.05, 0.14, 0.05, tusk, -0.15, -0.04, -0.42); box(head, 0.05, 0.14, 0.05, tusk, 0.15, -0.04, -0.42);
-      box(head, 0.1, 0.12, 0.06, bristle, -0.16, 0.26, -0.06); box(head, 0.1, 0.12, 0.06, bristle, 0.16, 0.26, -0.06);
+      const hide = M(0x4e3d33), bristle = M(0x2c221d), snout = M(0x8a6a5c), tusk = M(0xefe6d2), hoof = M(0x1e1814);
+      for (const [x, z] of [[-0.19, -0.4], [0.19, -0.4], [-0.19, 0.42], [0.19, 0.42]]) leg(hide, hoof, 0.14, 0.4, x, 0.44, z);
+      box(g, 0.58, 0.6, 1.12, hide, 0, 0.72, 0.04, 0, { bevel: 0.14 });
+      box(g, 0.64, 0.66, 0.4, hide, 0, 0.78, -0.34, 0, { bevel: 0.14 }); // heavy shoulders
+      for (let i = 0; i < 6; i++) box(g, 0.08, 0.16 - i * 0.015, 0.14, bristle, 0, 1.1 - i * 0.03, -0.45 + i * 0.16, -0.3); // ridge of bristles
+      head.position.set(0, 0.8, -0.6);
+      box(head, 0.44, 0.44, 0.44, hide, 0, 0, -0.14, 0, { bevel: 0.1 });
+      box(head, 0.3, 0.26, 0.24, hide, 0, -0.08, -0.42, 0, { taper: 0.75 });
+      box(head, 0.24, 0.18, 0.06, snout, 0, -0.1, -0.56);
+      pair((s) => box(head, 0.05, 0.06, 0.02, M(0x3a2420), s * 0.05, -0.1, -0.595));
+      pair((s) => { box(head, 0.05, 0.06, 0.12, tusk, s * 0.15, -0.16, -0.48); box(head, 0.045, 0.14, 0.05, tusk, s * 0.16, -0.08, -0.55, 0, { rz: s * 0.25 }); });
+      eyes(head, 0.222, 0.08, -0.3, 0.05, M(0x120a06));
+      pair((s) => box(head, 0.1, 0.14, 0.06, bristle, s * 0.15, 0.27, -0.06, 0, { taper: 0.4, rz: -s * 0.2 }));
+      tail.position.set(0, 0.92, 0.6);
+      box(tail, 0.04, 0.28, 0.04, hide, 0, -0.14, 0.02, 0.15); box(tail, 0.08, 0.1, 0.06, bristle, 0, -0.3, 0.05);
       break;
     }
     case 'camel': {
-      const tan = M(0xc8a06a), dark = M(0x8a6a44);
-      for (const [x, z] of [[-0.25, -0.55], [0.25, -0.55], [-0.25, 0.55], [0.25, 0.55]]) leg(tan, 0.16, 1.05, x, 1.05, z);
-      box(g, 0.7, 0.66, 1.55, tan, 0, 1.35, 0);
-      box(g, 0.5, 0.42, 0.55, tan, 0, 1.85, 0.05); box(g, 0.4, 0.2, 0.4, dark, 0, 2.08, 0.05); // the hump
-      box(g, 0.08, 0.36, 0.08, dark, 0, 1.25, 0.82, -0.3);
-      head.position.set(0, 1.55, -0.75);
-      box(head, 0.26, 0.7, 0.26, tan, 0, 0.32, -0.08, -0.35); // long neck
-      box(head, 0.3, 0.28, 0.5, tan, 0, 0.7, -0.38); box(head, 0.2, 0.14, 0.14, dark, 0, 0.62, -0.62);
-      box(head, 0.08, 0.1, 0.06, dark, -0.12, 0.88, -0.24); box(head, 0.08, 0.1, 0.06, dark, 0.12, 0.88, -0.24);
+      const tan = M(0xc8a06a), dark = M(0x8a6a44), light = M(0xdcc094), hoof = M(0x5a4430);
+      for (const [x, z] of [[-0.24, -0.55], [0.24, -0.55], [-0.24, 0.56], [0.24, 0.56]]) {
+        const p = leg(tan, hoof, 0.16, 1.08, x, 1.12, z, { taper: 0.7, footW: 1.2, footD: 1.4 });
+        box(p, 0.15, 0.12, 0.15, light, 0, -0.56, 0); // knobbly knee
+      }
+      box(g, 0.68, 0.64, 1.5, tan, 0, 1.38, 0, 0, { bevel: 0.16 });
+      box(g, 0.56, 0.46, 0.66, tan, 0, 1.84, 0.05, 0, { taper: 0.7, bevel: 0.16 }); // the hump
+      box(g, 0.3, 0.1, 0.34, tan, 0, 2.1, 0.05, 0, { bevel: 0.05 });
+      head.position.set(0, 1.55, -0.72);
+      box(head, 0.3, 0.3, 0.5, tan, 0, -0.02, -0.2, 0.35, { bevel: 0.08 }); // neck: down and forward...
+      box(head, 0.24, 0.66, 0.26, tan, 0, 0.22, -0.5, -0.2, { taper: 0.8, bevel: 0.06 }); // ...then up
+      box(head, 0.26, 0.26, 0.42, tan, 0, 0.6, -0.66, 0, { bevel: 0.07 });
+      box(head, 0.22, 0.16, 0.18, light, 0, 0.52, -0.9, 0, { bevel: 0.05 }); // droopy lips
+      eyes(head, 0.132, 0.68, -0.64, 0.05);
+      pair((s) => box(head, 0.06, 0.1, 0.05, dark, s * 0.11, 0.77, -0.54, 0, { taper: 0.5 }));
+      tail.position.set(0, 1.55, 0.76);
+      box(tail, 0.06, 0.48, 0.06, tan, 0, -0.24, 0.04, 0.12); box(tail, 0.1, 0.14, 0.08, dark, 0, -0.5, 0.07);
       break;
     }
     case 'zebra': {
-      const white = M(0xf0eee8), black = M(0x1e1c1c);
-      for (const [x, z] of [[-0.19, -0.5], [0.19, -0.5], [-0.19, 0.5], [0.19, 0.5]]) leg(white, 0.13, 0.8, x, 0.8, z);
-      box(g, 0.56, 0.6, 1.3, white, 0, 1.1, 0);
-      for (let i = 0; i < 5; i++) box(g, 0.58, 0.62, 0.08, black, 0, 1.1, -0.5 + i * 0.25); // stripes
-      box(g, 0.08, 0.5, 0.08, black, 0, 1.05, 0.7, -0.3);
-      head.position.set(0, 1.35, -0.6);
-      box(head, 0.24, 0.5, 0.26, white, 0, 0.15, -0.08, -0.5);
-      box(head, 0.06, 0.5, 0.3, black, 0, 0.32, 0.02, -0.5); // mane
-      box(head, 0.26, 0.26, 0.5, white, 0, 0.38, -0.36); box(head, 0.2, 0.18, 0.14, black, 0, 0.32, -0.62);
-      box(head, 0.06, 0.16, 0.06, white, -0.09, 0.56, -0.2); box(head, 0.06, 0.16, 0.06, white, 0.09, 0.56, -0.2);
+      const white = M(0xf0eee8), black = M(0x1e1c1c), hoof = M(0x2a2622);
+      for (const [x, z] of [[-0.18, -0.5], [0.18, -0.5], [-0.18, 0.5], [0.18, 0.5]]) {
+        const p = leg(white, hoof, 0.13, 0.86, x, 0.9, z, { taper: 0.65 });
+        for (let i = 0; i < 3; i++) { const y = 0.16 + i * 0.18, w = 0.2 - 0.07 * (y / 0.74) + 0.008; box(p, w, 0.05, w, black, 0, -y, 0, 0, { bevel: 0 }); } // stripes round the legs
+      }
+      box(g, 0.56, 0.6, 1.3, white, 0, 1.14, 0, 0, { bevel: 0.06 });
+      // stripes: painted down each flank and across the back, thinner toward the rump
+      for (let i = 0; i < 6; i++) {
+        const z = -0.5 + i * 0.2, w = 0.08 - i * 0.006, tilt = 0.1 * (i - 2.5);
+        pair((s) => box(g, 0.02, 0.46, w, black, s * 0.281, 1.13, z, tilt, { bevel: 0 }));
+        box(g, 0.46, 0.02, w, black, 0, 1.441, z, 0, { bevel: 0 });
+      }
+      head.position.set(0, 1.38, -0.6);
+      box(head, 0.22, 0.56, 0.28, white, 0, 0.18, -0.1, -0.5, { taper: 0.8 }); // neck
+      for (let i = 0; i < 3; i++) box(head, 0.23, 0.05, 0.3, black, 0, 0.04 + i * 0.13, -0.04 - i * 0.07, -0.5);
+      box(head, 0.06, 0.5, 0.12, black, 0, 0.32, 0.06, -0.5); // upright mane
+      box(head, 0.24, 0.26, 0.42, white, 0, 0.44, -0.4, 0.15, { bevel: 0.06 });
+      box(head, 0.2, 0.18, 0.16, black, 0, 0.36, -0.64, 0.15, { bevel: 0.05 }); // dark muzzle
+      eyes(head, 0.122, 0.5, -0.36, 0.05);
+      pair((s) => box(head, 0.07, 0.18, 0.06, white, s * 0.09, 0.66, -0.26, 0, { taper: 0.4, rz: -s * 0.15 }));
+      tail.position.set(0, 1.3, 0.66);
+      box(tail, 0.05, 0.5, 0.05, white, 0, -0.25, 0.04, 0.12); box(tail, 0.1, 0.18, 0.08, black, 0, -0.56, 0.08);
       break;
     }
     case 'goat': {
-      const coat = M(rand() < 0.5 ? 0xe8e2d4 : 0x8a7a68), horn = M(0x6a6058), beard = M(0xd8d0c0);
-      for (const [x, z] of [[-0.14, -0.3], [0.14, -0.3], [-0.14, 0.3], [0.14, 0.3]]) leg(coat, 0.11, 0.5, x, 0.5, z);
-      box(g, 0.42, 0.42, 0.8, coat, 0, 0.72, 0);
-      head.position.set(0, 0.95, -0.42);
-      box(head, 0.24, 0.26, 0.34, coat, 0, 0, -0.1); box(head, 0.08, 0.14, 0.06, beard, 0, -0.18, -0.22);
-      box(head, 0.06, 0.24, 0.06, horn, -0.08, 0.2, 0.0, 0.5); box(head, 0.06, 0.24, 0.06, horn, 0.08, 0.2, 0.0, 0.5);
+      const coat = M(rand() < 0.5 ? 0xe8e2d4 : 0x8a7a68), horn = M(0x6a6058), beard = M(0xd8d0c0), hoof = M(0x2a2420);
+      variant = coat.color;
+      for (const [x, z] of [[-0.13, -0.3], [0.13, -0.3], [-0.13, 0.3], [0.13, 0.3]]) leg(coat, hoof, 0.1, 0.54, x, 0.56, z, { taper: 0.65 });
+      box(g, 0.4, 0.42, 0.8, coat, 0, 0.76, 0, 0, { bevel: 0.1 });
+      box(g, 0.42, 0.3, 0.3, coat, 0, 0.82, -0.28, 0, { bevel: 0.08 });
+      head.position.set(0, 0.98, -0.42);
+      box(head, 0.14, 0.3, 0.18, coat, 0, 0.06, 0.0, -0.3); // neck
+      box(head, 0.22, 0.24, 0.3, coat, 0, 0.16, -0.14, 0.2, { bevel: 0.05 });
+      box(head, 0.16, 0.14, 0.14, coat, 0, 0.06, -0.3, 0.2, { taper: 0.8 });
+      box(head, 0.08, 0.16, 0.06, beard, 0, -0.06, -0.28, 0.2);
+      eyes(head, 0.112, 0.2, -0.18, 0.045, M(0x6a5010));
+      pair((s) => box(head, 0.14, 0.05, 0.08, coat, s * 0.16, 0.18, -0.08, 0, { rz: s * 0.3 }));
+      pair((s) => { box(head, 0.06, 0.16, 0.06, horn, s * 0.07, 0.34, -0.06, 0.5); box(head, 0.05, 0.14, 0.05, horn, s * 0.08, 0.42, 0.04, 1.3); box(head, 0.04, 0.1, 0.04, horn, s * 0.08, 0.4, 0.12, 2.2); });
+      tail.position.set(0, 0.92, 0.42);
+      box(tail, 0.08, 0.16, 0.06, coat, 0, 0.04, 0.02, -0.6);
       break;
     }
     case 'fox': {
       const orange = M(0xe0702a), white = M(0xf4efe6), dark = M(0x2a1e18);
-      for (const [x, z] of [[-0.1, -0.22], [0.1, -0.22], [-0.1, 0.22], [0.1, 0.22]]) leg(dark, 0.08, 0.28, x, 0.28, z);
-      box(g, 0.3, 0.28, 0.62, orange, 0, 0.42, 0); box(g, 0.22, 0.08, 0.44, white, 0, 0.3, -0.02);
-      box(g, 0.18, 0.18, 0.5, orange, 0, 0.45, 0.52, -0.3); box(g, 0.14, 0.14, 0.12, white, 0, 0.36, 0.78, -0.3); // bushy tail, white tip
-      head.position.set(0, 0.55, -0.34);
-      box(head, 0.26, 0.22, 0.24, orange, 0, 0, -0.06); box(head, 0.12, 0.1, 0.18, white, 0, -0.05, -0.24);
-      box(head, 0.05, 0.04, 0.04, dark, 0, -0.02, -0.34);
-      box(head, 0.07, 0.12, 0.04, orange, -0.08, 0.16, -0.02); box(head, 0.07, 0.12, 0.04, orange, 0.08, 0.16, -0.02);
+      for (const [x, z] of [[-0.09, -0.22], [0.09, -0.22], [-0.09, 0.22], [0.09, 0.22]]) leg(dark, dark, 0.07, 0.3, x, 0.32, z, { taper: 0.8 });
+      box(g, 0.28, 0.26, 0.62, orange, 0, 0.44, 0, 0, { bevel: 0.07 });
+      box(g, 0.2, 0.16, 0.2, white, 0, 0.4, -0.26); // white chest
+      head.position.set(0, 0.54, -0.34);
+      box(head, 0.26, 0.22, 0.22, orange, 0, 0.02, -0.06, 0, { bevel: 0.06 });
+      pair((s) => box(head, 0.06, 0.08, 0.14, white, s * 0.1, -0.04, -0.1)); // white cheeks
+      box(head, 0.12, 0.1, 0.18, orange, 0, -0.02, -0.24, 0, { taper: 0.6 }); // pointed snout
+      box(head, 0.1, 0.04, 0.16, white, 0, -0.06, -0.24);
+      box(head, 0.05, 0.04, 0.04, dark, 0, 0.01, -0.34);
+      eyes(head, 0.1, 0.06, -0.15, 0.035, M(0x2a1404));
+      pair((s) => { box(head, 0.09, 0.14, 0.04, orange, s * 0.08, 0.18, -0.03, 0, { taper: 0.3 }); box(head, 0.04, 0.05, 0.045, dark, s * 0.08, 0.235, -0.03); });
+      tail.position.set(0, 0.48, 0.3);
+      box(tail, 0.17, 0.17, 0.46, orange, 0, -0.08, 0.2, 0.45, { bevel: 0.06 }); box(tail, 0.14, 0.14, 0.12, white, 0, -0.2, 0.44, 0.45, { bevel: 0.04 }); // bushy tail, white tip
       break;
     }
     case 'parrot': {
-      const body = M([0xd8302a, 0x2a8ad8, 0x3cb83c, 0xe8c030][Math.floor(rand() * 4)]), wing = M(0x2050c0), beak = M(0x2a2a2a), tail = M(0xe8c030);
-      leg(beak, 0.04, 0.12, -0.05, 0.12, 0); leg(beak, 0.04, 0.12, 0.05, 0.12, 0);
-      box(g, 0.2, 0.3, 0.22, body, 0, 0.3, 0);
-      box(g, 0.04, 0.22, 0.16, wing, -0.12, 0.3, 0.02); box(g, 0.04, 0.22, 0.16, wing, 0.12, 0.3, 0.02);
-      box(g, 0.08, 0.06, 0.26, tail, 0, 0.18, 0.18, 0.6);
-      head.position.set(0, 0.48, -0.04);
-      box(head, 0.16, 0.16, 0.16, body, 0, 0.02, -0.02); box(head, 0.06, 0.08, 0.08, beak, 0, -0.02, -0.12);
-      break;
-    }
-    case 'polar_bear': {
-      const fur = M(0xf2efe6), dark = M(0x1c1a18), muzzle = M(0xe0dad0);
-      for (const [x, z] of [[-0.32, -0.55], [0.32, -0.55], [-0.32, 0.55], [0.32, 0.55]]) leg(fur, 0.28, 0.64, x, 0.64, z);
-      box(g, 0.96, 0.84, 1.7, fur, 0, 1.06, 0);
-      head.position.set(0, 1.28, -0.9);
-      box(head, 0.52, 0.48, 0.56, fur, 0, 0, -0.16); box(head, 0.3, 0.24, 0.3, muzzle, 0, -0.1, -0.52);
-      box(head, 0.12, 0.08, 0.06, dark, 0, -0.02, -0.68);
-      box(head, 0.12, 0.12, 0.08, fur, -0.2, 0.28, -0.06); box(head, 0.12, 0.12, 0.08, fur, 0.2, 0.28, -0.06);
-      box(head, 0.06, 0.06, 0.02, dark, -0.13, 0.08, -0.45); box(head, 0.06, 0.06, 0.02, dark, 0.13, 0.08, -0.45);
+      const which = Math.floor(rand() * 4);
+      variant = which;
+      const body = M([0xd8302a, 0x2a8ad8, 0x3cb83c, 0xe8c030][which]), wing = M([0x2050c0, 0xe8c030, 0xd8302a, 0x2a8ad8][which]), beak = M(0x2a2a2a), feathers = M([0xe8c030, 0x2a8ad8, 0x2a8ad8, 0x3cb83c][which]), face = M(0xf4f0e8);
+      for (const x of [-0.05, 0.05]) { const p = leg(beak, beak, 0.035, 0.12, x, 0.14, 0, { taper: 1 }); box(p, 0.03, 0.02, 0.08, beak, 0, -0.12, -0.01); }
+      box(g, 0.18, 0.28, 0.2, body, 0, 0.3, 0.02, 0.2, { bevel: 0.06 });
+      pair((s) => { box(g, 0.04, 0.24, 0.16, body, s * 0.1, 0.32, 0.04, 0.25); box(g, 0.042, 0.12, 0.1, wing, s * 0.101, 0.24, 0.1, 0.25); });
+      head.position.set(0, 0.46, -0.04);
+      box(head, 0.15, 0.15, 0.16, body, 0, 0.03, -0.02, 0, { bevel: 0.04 });
+      pair((s) => box(head, 0.02, 0.07, 0.07, face, s * 0.075, 0.03, -0.06));
+      box(head, 0.06, 0.06, 0.06, beak, 0, 0.03, -0.12); box(head, 0.05, 0.07, 0.04, beak, 0, -0.01, -0.15, 0.3); // hooked beak
+      eyes(head, 0.087, 0.04, -0.06, 0.025);
+      tail.position.set(0, 0.2, 0.1);
+      box(tail, 0.08, 0.03, 0.34, feathers, 0, -0.06, 0.13, 0.9, { taper: 0.6 });
       break;
     }
     case 'jaguar': {
       const coat = M(0xd8a040), spot = M(0x3a2a1a), belly = M(0xf0e2c0), eye = M(0x9ad030);
       eye.emissive.set(0x3a5a00);
-      for (const [x, z] of [[-0.15, -0.4], [0.15, -0.4], [-0.15, 0.4], [0.15, 0.4]]) leg(coat, 0.12, 0.45, x, 0.45, z);
-      box(g, 0.42, 0.4, 1.05, coat, 0, 0.66, 0); box(g, 0.34, 0.08, 0.8, belly, 0, 0.46, 0);
-      for (const [x, y, z] of [[-0.18, 0.75, -0.3], [0.2, 0.8, -0.05], [-0.15, 0.82, 0.2], [0.17, 0.7, 0.36], [0, 0.87, -0.15], [0.05, 0.86, 0.38]]) box(g, 0.1, 0.1, 0.12, spot, x, y, z);
-      box(g, 0.1, 0.1, 0.6, coat, 0, 0.6, 0.78, -0.2);
-      head.position.set(0, 0.8, -0.56);
-      box(head, 0.32, 0.28, 0.32, coat, 0, 0, -0.1); box(head, 0.16, 0.12, 0.12, belly, 0, -0.07, -0.3);
-      box(head, 0.08, 0.08, 0.04, coat, -0.11, 0.17, -0.02); box(head, 0.08, 0.08, 0.04, coat, 0.11, 0.17, -0.02);
-      box(head, 0.06, 0.04, 0.02, eye, -0.08, 0.04, -0.27); box(head, 0.06, 0.04, 0.02, eye, 0.08, 0.04, -0.27);
+      for (const [x, z] of [[-0.14, -0.4], [0.14, -0.4], [-0.14, 0.4], [0.14, 0.4]]) leg(coat, coat, 0.12, 0.48, x, 0.5, z, { taper: 0.75, footW: 1.1, footD: 1.4, toe: -0.03 });
+      box(g, 0.4, 0.38, 1.05, coat, 0, 0.68, 0, 0, { bevel: 0.1 });
+      box(g, 0.44, 0.42, 0.34, coat, 0, 0.72, -0.34, 0, { bevel: 0.1 }); // shoulders
+      box(g, 0.32, 0.06, 0.8, belly, 0, 0.49, 0);
+      // rosettes: dark rings with the coat showing in the middle
+      for (const [y, z] of [[0.74, -0.3], [0.68, -0.02], [0.76, 0.18], [0.64, 0.36], [0.6, -0.2], [0.62, 0.14]]) pair((s) => {
+        const zz = z + s * 0.05;
+        for (const [dy, dz, w, h] of [[0.045, 0, 0.09, 0.025], [-0.045, 0, 0.09, 0.025], [0, 0.045, 0.025, 0.07], [0, -0.045, 0.025, 0.07]]) box(g, 0.012, h, w, spot, s * 0.2, y + dy, zz + dz, 0, { bevel: 0 });
+      });
+      for (const [x, z] of [[-0.08, -0.2], [0.07, 0.08], [-0.05, 0.3], [0.08, -0.42]]) box(g, 0.07, 0.012, 0.07, spot, x, 0.871, z, 0, { bevel: 0 });
+      head.position.set(0, 0.82, -0.58);
+      box(head, 0.32, 0.28, 0.3, coat, 0, 0, -0.1, 0, { bevel: 0.08 });
+      box(head, 0.18, 0.14, 0.12, belly, 0, -0.07, -0.29, 0, { bevel: 0.04 });
+      box(head, 0.07, 0.05, 0.03, M(0x8a4a40), 0, -0.01, -0.355);
+      pair((s) => box(head, 0.09, 0.08, 0.04, coat, s * 0.11, 0.16, -0.04, 0, { bevel: 0.02 }));
+      eyes(head, 0.08, 0.04, -0.255, 0.045, eye, false);
+      tail.position.set(0, 0.78, 0.52);
+      box(tail, 0.09, 0.09, 0.5, coat, 0, -0.12, 0.22, 0.5); box(tail, 0.08, 0.08, 0.32, coat, 0, -0.28, 0.58, -0.2); box(tail, 0.09, 0.09, 0.1, spot, 0, -0.24, 0.72, -0.2);
       break;
     }
     case 'scorpion': {
       const shell = M(0x8a5a2a), dark = M(0x4a2e14), sting = M(0x1a1a1a);
-      for (let i = 0; i < 4; i++) for (const side of [-1, 1]) leg(dark, 0.05, 0.2, side * 0.2, 0.2, -0.12 + i * 0.1);
-      box(g, 0.34, 0.16, 0.5, shell, 0, 0.24, 0);
-      // a tail curling up and over the back
-      box(g, 0.1, 0.1, 0.3, shell, 0, 0.32, 0.36, -0.6); box(g, 0.09, 0.3, 0.09, shell, 0, 0.55, 0.46); box(g, 0.08, 0.08, 0.22, shell, 0, 0.72, 0.36, 0.5);
-      box(g, 0.05, 0.08, 0.05, sting, 0, 0.7, 0.24);
+      for (let i = 0; i < 4; i++) for (const side of [-1, 1]) {
+        const p = new THREE.Group(); p.position.set(side * 0.15, 0.24, -0.12 + i * 0.1); p.rotation.y = side * (i - 1.5) * -0.3;
+        box(p, 0.18, 0.04, 0.04, dark, side * 0.09, 0.03, 0, 0, { rz: side * 0.5 });
+        box(p, 0.04, 0.22, 0.04, dark, side * 0.2, -0.1, 0, 0, { rz: side * 0.3 });
+        g.add(p); legs.push(p);
+      }
+      for (let i = 0; i < 4; i++) box(g, 0.34 - i * 0.03, 0.14, 0.14, i % 2 ? shell : dark, 0, 0.25, -0.12 + i * 0.12, 0, { bevel: 0.03 }); // plated back
       head.position.set(0, 0.24, -0.26);
-      box(head, 0.26, 0.12, 0.14, shell, 0, 0, -0.04);
-      box(head, 0.08, 0.08, 0.22, dark, -0.18, 0, -0.18); box(head, 0.08, 0.08, 0.22, dark, 0.18, 0, -0.18); // claws
+      box(head, 0.24, 0.12, 0.14, shell, 0, 0, -0.04, 0, { bevel: 0.03 });
+      eyes(head, 0.04, 0.07, -0.08, 0.03, M(0x0a0a0a), false);
+      pair((s) => { box(head, 0.06, 0.06, 0.2, dark, s * 0.16, 0, -0.14, 0, { ry: -s * 0.3 }); box(head, 0.12, 0.09, 0.14, shell, s * 0.24, 0, -0.28, 0, { bevel: 0.03 }); box(head, 0.03, 0.04, 0.12, dark, s * 0.2, 0.02, -0.4); box(head, 0.03, 0.04, 0.1, dark, s * 0.28, 0.02, -0.39); });
+      // a tail of segments curling up and over the back
+      tail.position.set(0, 0.28, 0.32);
+      let ty = 0, tz = 0;
+      for (let i = 0; i < 5; i++) {
+        const a = -0.2 - i * 0.55, len = 0.13;
+        box(tail, 0.1 - i * 0.008, 0.1 - i * 0.008, len, shell, 0, ty + Math.sin(-a) * len / 2, tz + Math.cos(a) * len / 2, a, { bevel: 0.02 });
+        ty += Math.sin(-a) * len; tz += Math.cos(a) * len;
+      }
+      box(tail, 0.07, 0.07, 0.09, shell, 0, ty + 0.02, tz - 0.04, 0, { bevel: 0.02 }); box(tail, 0.025, 0.08, 0.025, sting, 0, ty - 0.03, tz - 0.1, 0.8);
       break;
     }
     case 'spider': {
-      const black = M(0x1d1b1e), hair = M(0x3a3236), eye = M(0xff2a1a);
+      const black = M(0x1d1b1e), hair = M(0x3a3236), mark = M(0x7a1a14), eye = M(0xff2a1a), fang = M(0x5a4a40);
       eye.emissive.set(0xc01000);
-      box(g, 0.62, 0.42, 0.7, black, 0, 0.5, 0.32);
-      box(g, 0.46, 0.32, 0.42, hair, 0, 0.45, -0.18);
+      box(g, 0.62, 0.46, 0.72, black, 0, 0.52, 0.34, 0.15, { bevel: 0.16 }); // abdomen
+      box(g, 0.26, 0.04, 0.3, mark, 0, 0.765, 0.32, 0.15, { bevel: 0 }); box(g, 0.1, 0.04, 0.12, mark, 0, 0.75, 0.53, 0.15, { bevel: 0 });
+      box(g, 0.46, 0.3, 0.42, hair, 0, 0.47, -0.16, 0, { bevel: 0.1 });
       // eight legs: each pivots at the body side, splayed out and down
       for (let i = 0; i < 4; i++) for (const side of [-1, 1]) {
         const p = new THREE.Group();
-        p.position.set(side * 0.22, 0.52, -0.3 + i * 0.2);
+        p.position.set(side * 0.2, 0.52, -0.3 + i * 0.16);
         p.rotation.y = side * (i - 1.5) * -0.35; // fanned out from front to back
-        box(p, 0.5, 0.07, 0.07, black, side * 0.25, 0.12, 0).rotation.z = side * 0.45; // up and out from the body
-        box(p, 0.06, 0.7, 0.06, black, side * 0.5, -0.15, 0).rotation.z = side * 0.25;  // down to the ground
+        box(p, 0.5, 0.08, 0.08, hair, side * 0.25, 0.12, 0, 0, { rz: side * 0.45 }); // up and out from the body
+        box(p, 0.06, 0.72, 0.06, black, side * 0.5, -0.15, 0, 0, { rz: side * 0.25, taper: 0.7 }); // down to the ground
         g.add(p); legs.push(p);
       }
       head.position.set(0, 0.48, -0.42);
-      box(head, 0.3, 0.24, 0.2, black, 0, 0, -0.04);
-      for (const [x, y] of [[-0.07, 0.05], [0.07, 0.05], [-0.12, 0.0], [0.12, 0.0]]) box(head, 0.045, 0.045, 0.02, eye, x, y, -0.15);
+      box(head, 0.3, 0.24, 0.2, black, 0, 0, -0.04, 0, { bevel: 0.06 });
+      pair((s) => box(head, 0.05, 0.12, 0.05, fang, s * 0.06, -0.12, -0.12, 0.3));
+      for (const [x, y, sz] of [[-0.06, 0.06, 0.05], [0.06, 0.06, 0.05], [-0.12, 0.02, 0.035], [0.12, 0.02, 0.035], [-0.03, 0.1, 0.03], [0.03, 0.1, 0.03]]) box(head, sz, sz, 0.02, eye, x, y, -0.15);
       break;
     }
   }
-  return { group: g, legs, head, meshes: bakeAnimal(kind, g, head, legs) };
+  return { group: g, legs, head, tail, meshes: bakeAnimal(kind, variant, [g, head, tail, ...legs]) };
 }
 
 export function spawnAnimal(kind, x, y, z, rand) {
@@ -573,6 +740,9 @@ export function updateAnimals(frameDt) {
     a.legs.forEach((l, i) => { l.rotation.x = (i === 0 || i === 3) ? sw : -sw; });
     const headDown = a.mode === 'idle' && sp.graze && Math.sin(a.timer * 0.9) > -0.3 ? -0.7 : 0;
     a.head.rotation.x += (headDown - a.head.rotation.x) * Math.min(1, dt * 4);
+    // tails swish now and then (faster when running)
+    a.tailT = (a.tailT || 0) + dt * (1.5 + Math.min(3, hs));
+    a.tail.rotation.y = Math.sin(a.tailT * 2.2) * (0.15 + 0.2 * Math.max(0, Math.sin(a.tailT * 0.37)));
     const hop = sp.hop && hs > 0.2 ? Math.abs(Math.sin(a.phase)) * 0.25 : 0;
     a.group.position.set(a.x, a.y + hop, a.z);
     a.group.rotation.y = a.facing;

@@ -299,13 +299,6 @@ export function bambooGeometry() {
   }
   return mergeSimple(parts);
 }
-// An ice spike: a tall tapering spire.
-export function iceSpikeGeometry() {
-  const g = new THREE.ConeGeometry(1, 1, 7, 4).translate(0, 0.5, 0), p = g.attributes.position, v = new THREE.Vector3();
-  for (let i = 0; i < p.count; i++) { v.fromBufferAttribute(p, i); const k = 1 + Math.sin(v.y * 9 + Math.atan2(v.z, v.x) * 3) * 0.08; p.setXYZ(i, v.x * k, v.y, v.z * k); }
-  g.computeVertexNormals();
-  return g;
-}
 // Fallen petals: a flat scatter of little pink discs on the ground.
 export function petalsGeometry() {
   const parts = [], rand = mulberry32(31);

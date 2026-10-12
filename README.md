@@ -131,7 +131,9 @@ caves, metalwork, flowing water and more.
 
 - **Biomes.** Plains, forests, birch, dark and autumn forests, cherry groves, taigas, redwood
   forests, snowy taigas and plains, ice spikes, deserts, savannas, mesas and jungles, each with its
-  own ground, trees, plants and animals (the table is in CHANGELOG.md).
+  own ground, trees, plants and animals (the table is in CHANGELOG.md). Ice spikes are built of
+  packed ice blocks with slopes where they narrow and a thin pillar at the tip, and you can mine
+  them one block at a time.
 - **Caves** are huge: open caverns with pillars and long winding tunnels reach down near the
   bedrock under hills, with pockets of granite, marble, tuff and other stones, and coal, copper,
   gold and titanium ore and veins of iron.
@@ -171,7 +173,7 @@ caves, metalwork, flowing water and more.
   that touch even out into one. Scoop a pool back up with the bucket; scooping from the river, a
   lake or a crater lowers it a little. Where water meets lava, the lava turns to obsidian (a lot
   of it) or stone (a little). Caves under land stay dry.
-- **Weather** changes on its own, one step at a time: clear skies cloud over, rain only starts
+- **Weather** changes on its own every few minutes, one step at a time: clear skies cloud over, rain only starts
   once the clouds have gathered, a thunderstorm eases back to rain, and each change builds up over
   a minute or so. It snows instead on high mountains. Rain darkens and wets the ground, leaves
   puddles on flat ground that dry up in the sun, fills the river and the lakes and tops up poured
@@ -263,7 +265,7 @@ game.getSelectedItem(); // stack in the selected hotbar slot, or null
 - **Blocks** sit on a 1 m grid, with one instanced mesh per block type and shape. Each type has a
   drawn texture with a bump map (planks, bricks, log rings and bark, stone, wool, glass). Boxes
   collide as boxes, slopes and prisms as triangles.
-- **Animals** (and the bear, boar and spider) are built from boxes; they wander, graze, steer around trees and blocks, avoid
+- **Animals** (and the bear, boar and spider) are built from bevelled, tapered boxes merged into a few meshes each (body, head, tail, legs), with eyes, hooves or paws and a swishing tail; they wander, graze, steer around trees and blocks, avoid
   water and steep ground, and follow the terrain with downward raycasts.
 - **Water** is a smooth plane with a slow swell; ripples are computed per pixel from a few
   travelling waves and moving noise. It reflects the sky (Fresnel: clear when looking down,

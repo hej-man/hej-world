@@ -30,11 +30,26 @@ export const BLOCKS = {
   // woods, stones, ground, metal and coloured blocks, torches and lanterns (see block-catalog.js)
   ...catalogBlocks(),
 };
-const MAX_BLOCKS = 4096;       // per block type and shape
-export const blockGroups = {};         // "type|shape" -> { meshes: InstancedMesh[], keys: string[] }
+const MAX_BLOCKS = 4096;       // per block type and shape, to start with; a full group doubles
+export const blockGroups = {};         // "type|shape" (or "type|shape|area") -> { meshes, keys, area }
 export const blocks = new Map();       // "x,y,z" -> { type, shape, x, y, z, idx, obstacles }
 export const blockKey = (x, y, z) => `${x},${y},${z}`;
-export function resetBlocks() { blocks.clear(); glowing.clear(); saplings.clear(); for (const k in blockGroups) delete blockGroups[k]; }
+export function resetBlocks() { blocks.clear(); hidden.clear(); for (const k in areas) delete areas[k]; glowing.clear(); saplings.clear(); for (const k in blockGroups) delete blockGroups[k]; }
+// Blocks the world builds but nobody can see yet (inside an ice spike, or under the ground): kept
+// aside and only placed when a neighbour is taken away, so they cost nothing to draw until then.
+export const hidden = new Map();       // "x,y,z" -> [type, x, y, z, shape, tilt, opts]
+export function hideBlock(type, x, y, z, shape = 'block', tilt = 0, opts = {}) {
+  const key = blockKey(x, y, z);
+  if (blocks.has(key) || hidden.has(key)) return false;
+  hidden.set(key, [type, x, y, z, shape, tilt, opts]);
+  return true;
+}
+function revealAround(x, y, z) {
+  for (const [dx, dy, dz] of [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]]) {
+    const k = blockKey(x + dx, y + dy, z + dz), h = hidden.get(k);
+    if (h) { hidden.delete(k); placeBlock(...h); }
+  }
+}
 
 // Merges [geometry, colour] pairs into one vertex-coloured geometry, keeping each part's normals.
 function mergeColored(parts) {
@@ -317,23 +332,60 @@ function blockTemplates(type, shape) {
   return [new THREE.Mesh(shapeGeometry(shape), blockMaterial(type))];
 }
 
-// The instanced meshes for one block type in one shape, made the first time one is placed.
-function blockGroup(type, shape) {
-  const k = `${type}|${shape}`;
+// The instanced meshes for one block type in one shape, made the first time one is placed. Blocks
+// the world builds itself (ice spikes) go in groups of their own per area (`tag`), so a group that's
+// out of view is skipped as a whole.
+function blockGroup(type, shape, tag) {
+  const k = tag ? `${type}|${shape}|${tag}` : `${type}|${shape}`;
   if (blockGroups[k]) return blockGroups[k];
   const def = BLOCKS[type];
   const templates = blockTemplates(type, shape);
   const meshes = templates.map((t) => {
-    const im = new THREE.InstancedMesh(t.geometry, t.material, MAX_BLOCKS);
+    const im = new THREE.InstancedMesh(t.geometry, t.material, tag ? 256 : MAX_BLOCKS);
     im.setColorAt(0, new THREE.Color(1, 1, 1));
     im.count = 0;
     im.castShadow = !def.glass; im.receiveShadow = true;
-    im.frustumCulled = false; // instances are added later, so the bounding sphere would be stale
+    im.frustumCulled = false; // instances are added later, so the bounding sphere would be stale (see sealBlocks)
     litMaterial(im.material);
     world.add(im);
     return im;
   });
-  return (blockGroups[k] = { meshes, keys: [] });
+  return (blockGroups[k] = { meshes, keys: [], key: k, shape, area: tag && areas[tag] });
+}
+// A full group moves into meshes twice the size.
+function growGroup(bt) {
+  bt.meshes = bt.meshes.map((im) => {
+    const big = new THREE.InstancedMesh(im.geometry, im.material, im.instanceMatrix.count * 2);
+    big.setColorAt(0, _bc.setScalar(1));
+    big.instanceMatrix.array.set(im.instanceMatrix.array); big.instanceColor.array.set(im.instanceColor.array);
+    big.count = im.count;
+    big.castShadow = im.castShadow; big.receiveShadow = im.receiveShadow; big.frustumCulled = im.frustumCulled;
+    if (big.frustumCulled) big.computeBoundingSphere();
+    im.parent.add(big); im.removeFromParent(); im.dispose();
+    return big;
+  });
+}
+// Once the world has built the blocks of an area (centred on cx, cz), its groups can be culled when
+// out of view (the player only takes blocks out of them, so the bounds stay big enough), and are
+// hidden in the distance like trees (`area`, see updateCulling in main.js).
+const areas = {};
+// In the distance an area's blocks are drawn as plain sharp shapes: the rounded edges can't be seen
+// from there, and they cost fifteen times the triangles.
+const _farGeos = {};
+export function farBlockGeometry(shape) {
+  if (_farGeos[shape]) return _farGeos[shape];
+  const g = shape === 'slope' || shape === 'prism' ? sharpShape(shape).clone()
+    : shape === 'pillar' ? new THREE.CylinderGeometry(0.3, 0.3, 1, 8).toNonIndexed()
+    : shape === 'block' ? new THREE.BoxGeometry(1, 1, 1).toNonIndexed() : null;
+  return (_farGeos[shape] = g ? boxUVs(g) : shapeGeometry(shape));
+}
+export function sealBlocks(tag, cx, cz) {
+  areas[tag] = { cx, cz };
+  for (const k in blockGroups) {
+    if (!k.endsWith(`|${tag}`)) continue;
+    blockGroups[k].area = areas[tag];
+    for (const im of blockGroups[k].meshes) { im.computeBoundingSphere(); im.frustumCulled = true; }
+  }
 }
 export function initBlocks() {}
 
@@ -374,14 +426,18 @@ export const TILTS = ['upright', 'on its side', 'upside down'];
 const _tilt = new THREE.Matrix4();
 
 const _bm = new THREE.Matrix4(), _bc = new THREE.Color();
-export function placeBlock(type, x, y, z, shape = 'block', tilt = 0) {
+// `turn` (optional) faces it a given way instead of the way you look; `tag` puts it in an area's group.
+export function placeBlock(type, x, y, z, shape = 'block', tilt = 0, { turn: setTurn, tag } = {}) {
   const def = BLOCKS[type];
   if (def.station || def.solid === false || def.model) shape = 'block';
-  const key = blockKey(x, y, z), bt = blockGroup(type, shape);
-  if (blocks.has(key) || bt.keys.length >= MAX_BLOCKS) return false;
+  const key = blockKey(x, y, z);
+  if (blocks.has(key)) return false;
+  hidden.delete(key);
+  const bt = blockGroup(type, shape, tag);
+  if (bt.keys.length >= bt.meshes[0].instanceMatrix.count) growGroup(bt);
   const idx = bt.keys.length;
   // campfires get a random turn; furnaces, slopes, stairs and prisms turn with the way you look
-  const facing = Math.round(state.yaw / (Math.PI / 2)) * (Math.PI / 2);
+  const facing = setTurn ?? Math.round(state.yaw / (Math.PI / 2)) * (Math.PI / 2);
   if (def.station || def.solid === false || def.model) tilt = 0;
   const turn = type === 'campfire' || def.model === 'sapling' ? hash1(x + z * 7) * 6 : def.facing || def.model === 'fence' || shape !== 'block' || tilt ? facing : 0;
   const based = isBased(type); // these models stand on y = 0 instead of being centred
@@ -393,7 +449,7 @@ export function placeBlock(type, x, y, z, shape = 'block', tilt = 0) {
     im.instanceMatrix.needsUpdate = true; im.instanceColor.needsUpdate = true;
   }
   bt.keys.push(key);
-  const b = { type, shape, x, y, z, idx, obstacles: def.solid === false ? [] : blockObstacles(def.model === 'fence' ? 'fence' : shape, x, y, z, _bm) };
+  const b = { type, shape, x, y, z, idx, group: bt.key, obstacles: def.solid === false ? [] : blockObstacles(def.model === 'fence' ? 'fence' : shape, x, y, z, _bm) };
   for (const o of b.obstacles) addObstacle(o);
   blocks.set(key, b);
   if (def.glow) glowing.add(b);
@@ -404,7 +460,7 @@ export function placeBlock(type, x, y, z, shape = 'block', tilt = 0) {
 export function removeBlock(key) {
   const b = blocks.get(key);
   if (!b) return null;
-  const bt = blockGroups[`${b.type}|${b.shape}`], last = bt.keys.length - 1;
+  const bt = blockGroups[b.group], last = bt.keys.length - 1;
   if (b.idx !== last) { // move the last instance into the freed slot
     const lastKey = bt.keys[last];
     for (const im of bt.meshes) {
@@ -419,6 +475,7 @@ export function removeBlock(key) {
   for (const o of b.obstacles) gridRemove(obstacleGrid, o);
   blocks.delete(key);
   glowing.delete(b); saplings.delete(b);
+  if (hidden.size) revealAround(b.x, b.y, b.z);
   return b;
 }
 

@@ -50,6 +50,10 @@ run it. See README.md for features, controls and the code layout table.
 
 - `src/world/shapes.js` builds each buildable shape with rounded edges (shrink, then grow back by
   a sphere); collision uses the sharp shape. `src/world/blocks.js` places blocks on the 1 m grid.
+  Blocks the world builds itself (ice spikes, `src/world/ice-spikes.js`) go in per-area groups
+  (`placeBlock(..., { tag, turn })`, then `sealBlocks`) that are frustum culled, drawn as sharp
+  shapes in the distance and hidden beyond the far trees; blocks nobody can see wait in `hidden`
+  and are placed when a neighbour is removed. Instanced groups double in size when full.
 - `src/world/fluids.js` runs water and lava on the same grid as an amount per cell (`m`, 1 = a
   full block, a little more when squeezed from above). Each step moves amounts down, then evens
   them out sideways, then pushes extra up; fluid is never created or lost except through rain,

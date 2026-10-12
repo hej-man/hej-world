@@ -19,13 +19,21 @@ import { sound, thunder } from './sound.js';
 // dark, and storms flash and rumble. Rain stops where something is over your head (a cave, a roof).
 // ---------------------------------------------------------------------------
 // last: how long it lasts, in seconds (min, max). next: what it can turn into, with weights.
+// (A whole round, clear to rain and back, takes about ten minutes, so you see the weather change
+// within a normal play session; it used to take half an hour and looked stuck.)
 export const WEATHER = {
-  clear:  { name: 'Clear', cloud: 0.1, rain: 0, storm: 0, wind: 0.2, last: [240, 540], next: { cloudy: 1 } },
-  cloudy: { name: 'Cloudy', cloud: 0.6, rain: 0, storm: 0, wind: 0.45, last: [120, 300], next: { clear: 0.55, rain: 0.45 } },
-  rain:   { name: 'Rain', cloud: 0.88, rain: 0.7, storm: 0, wind: 0.6, last: [100, 240], next: { cloudy: 0.65, storm: 0.35 } },
-  storm:  { name: 'Thunderstorm', cloud: 1, rain: 1, storm: 1, wind: 1, last: [60, 150], next: { rain: 1 } },
+  clear:  { name: 'Clear', cloud: 0.12, rain: 0, storm: 0, wind: 0.2, last: [120, 280], next: { cloudy: 1 } },
+  cloudy: { name: 'Cloudy', cloud: 0.68, rain: 0, storm: 0, wind: 0.45, last: [70, 170], next: { clear: 0.4, rain: 0.6 } },
+  rain:   { name: 'Rain', cloud: 0.9, rain: 0.7, storm: 0, wind: 0.6, last: [90, 200], next: { cloudy: 0.7, storm: 0.3 } },
+  storm:  { name: 'Thunderstorm', cloud: 1, rain: 1, storm: 1, wind: 1, last: [50, 120], next: { rain: 1 } },
 };
 const ORDER = ['clear', 'cloudy', 'rain', 'storm'];
+// A new world starts in any weather but a storm, part way through it.
+export function startWeather() {
+  setWeather(['clear', 'clear', 'cloudy', 'rain'][Math.floor(Math.random() * 4)], true);
+  weather.timer *= 0.3 + Math.random() * 0.4;
+  weather.manual = false;
+}
 export const weather = { state: 'clear', timer: 200, cloud: 0.1, rain: 0, storm: 0, wind: 0.2, sun: 1, puddles: 0, snow: 0, covered: 0, coverT: 0, flash: 0, nextBolt: 6, baked: 0.1 };
 const skyClear = { zenith: sky.zenith.clone(), horizon: sky.horizon.clone(), sun: sky.sun.clone(), ground: sky.ground.clone() };
 const skyStorm = { zenith: new THREE.Color(0x4a525c), horizon: new THREE.Color(0x7d858d), sun: new THREE.Color(0x9aa0a8), ground: new THREE.Color(0x2c2e2c) };
@@ -114,9 +122,13 @@ export function updateWeather(dt) {
   // natural changes build up slowly, clouds first and rain once they've gathered (and the rain
   // stops before the clouds clear); a change picked by hand happens within seconds
   const tgt = WEATHER[weather.state], slow = weather.manual ? 0.15 : 1;
-  const rainTo = tgt.rain * smoothstep(0.6, 0.85, weather.cloud), stormTo = tgt.storm * smoothstep(0.4, 0.9, weather.rain);
+  // the sky is never quite still: clouds thicken and thin and showers come and go in waves
+  weather.driftT = (weather.driftT || 0) + dt;
+  const wave = Math.sin(weather.driftT * 0.021) * 0.6 + Math.sin(weather.driftT * 0.053 + 1.3) * 0.4;
+  const cloudTo = Math.min(1, Math.max(0, tgt.cloud + wave * (weather.state === 'storm' ? 0 : 0.12)));
+  const rainTo = tgt.rain * (1 + wave * 0.25 * (weather.state === 'rain' ? 1 : 0)) * smoothstep(0.6, 0.85, weather.cloud), stormTo = tgt.storm * smoothstep(0.4, 0.9, weather.rain);
   const ease = (key, to, secs) => { weather[key] += (to - weather[key]) * (1 - Math.exp(-dt / (secs * slow))); };
-  ease('cloud', tgt.cloud, tgt.cloud > weather.cloud ? 30 : 45);
+  ease('cloud', cloudTo, cloudTo > weather.cloud ? 30 : 45);
   ease('rain', rainTo, rainTo > weather.rain ? 18 : 10);
   ease('storm', stormTo, 15);
   ease('wind', tgt.wind, 25);
