@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { WORLD } from '../config.js';
-import { CHUNK, buildChunk, chunkCount, chunks, chunksIn, colliders, editedMat, terrainField, terrainFns } from './world.js';
+import { CHUNK, buildChunk, chunkCount, chunks, chunksIn, colliders, terrainFns } from './world.js';
+import { cellIndex, cellMat, setCell, slopeDir, solidCell } from '../terrain/voxels.js';
+import { fieldNormal } from '../terrain/material.js';
 import { invalidateGrass } from './grass.js';
 
 export const raycaster = new THREE.Raycaster();
@@ -25,18 +27,23 @@ export function raycastTerrain(origin, dir, near, far) {
 }
 
 // ---------------------------------------------------------------------------
-// Terrain editing: dig (carve a sphere out of the density field) or add ground (fill one in),
-// then rebuild only the chunks that changed.
+// Terrain editing: the ground is 1 m blocks (voxels.js); digging takes out whole cells and the
+// chunks around them are rebuilt.
 // ---------------------------------------------------------------------------
-const gridIndexAt = (x, y, z) => {
-  const { nx, ny, nz } = terrainField, vx = WORLD.voxel;
-  const ix = Math.round(x / vx), iy = Math.round(y / vx), iz = Math.round(z / vx);
-  if (ix < 0 || iy < 0 || iz < 0 || ix >= nx || iy >= ny || iz >= nz) return -1;
-  return ix + nx * (iy + ny * iz);
-};
 export function editedMaterialAt(x, y, z) {
-  if (!editedMat.size) return null;
-  return editedMat.get(gridIndexAt(x, y, z)) || null;
+  if (!cellMat.size) return null;
+  return cellMat.get(cellIndex(Math.floor(x), Math.floor(y), Math.floor(z))) || null;
+}
+// What the untouched ground of a cell is made of (steep ground is bare rock, like it looks).
+const _sn = new THREE.Vector3();
+const natural = (x, y, z) => naturalMaterial(x + 0.5, y + 0.5, z + 0.5, fieldNormal(x + 0.5, y + 0.5, z + 0.5, _sn).y);
+// What a ground cell is made of: what it was given, or what the ground there naturally is.
+export const cellMaterial = (x, y, z) => editedMaterialAt(x + 0.5, y + 0.5, z + 0.5) || natural(x, y, z);
+// The ground cell a ray hit on the terrain: the block behind the face, or the slope it hit.
+export function hitCell(point, normal) {
+  const x = Math.floor(point.x - normal.x * 0.01), y = Math.floor(point.y - normal.y * 0.01), z = Math.floor(point.z - normal.z * 0.01);
+  if (solidCell(x, y, z) || slopeDir(x, y, z) >= 0) return [x, y, z];
+  return [Math.floor(point.x - normal.x * 0.5), Math.floor(point.y - normal.y * 0.5), Math.floor(point.z - normal.z * 0.5)];
 }
 
 // What the natural ground is made of at a point (used for drops and to colour dug ground).
@@ -58,37 +65,41 @@ export function naturalMaterial(x, y, z, ny = 1) {
   return 'dirt';
 }
 
-// Returns how many grid points flipped between ground and air.
-export function editTerrain(center, radius, add, material = 'dirt') {
-  const { field, nx, ny, nz } = terrainField, vx = WORLD.voxel;
-  const lo = (v, n) => Math.max(1, Math.ceil((v - radius - 2) / vx)), hi = (v, n) => Math.min(n - 2, Math.floor((v + radius + 2) / vx));
-  let flipped = 0, minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
-  for (let iz = lo(center.z, nz); iz <= hi(center.z, nz); iz++)
-  for (let iy = Math.max(add ? 1 : 3, lo(center.y, ny)); iy <= hi(center.y, ny); iy++)
-  for (let ix = lo(center.x, nx); ix <= hi(center.x, nx); ix++) {
-    const x = ix * vx, y = iy * vx, z = iz * vx;
-    const d = Math.hypot(x - center.x, y - center.y, z - center.z);
-    const idx = ix + nx * (iy + ny * iz);
-    const before = field[idx];
-    if (add) {
-      if (d > radius) continue;
-      field[idx] = Math.max(before, radius - d);
-      if (before <= 0 && field[idx] > 0) { flipped++; editedMat.set(idx, material); }
-    } else {
-      if (d <= radius) {
-        field[idx] = Math.min(before, d - radius);
-        if (before > 0 && field[idx] <= 0) flipped++;
-      }
-      // remember what the newly exposed ground around the hole is made of
-      if (d <= radius + vx * 1.2 && field[idx] > 0 && !editedMat.has(idx)) editedMat.set(idx, naturalMaterial(x, y, z));
-    }
-    minX = Math.min(minX, ix); maxX = Math.max(maxX, ix); minZ = Math.min(minZ, iz); maxZ = Math.max(maxZ, iz);
-  }
-  if (minX === Infinity) return 0;
-  invalidateGrass(minX * vx, maxX * vx, minZ * vx, maxZ * vx);
-  // a changed grid point affects the faces owned by its neighbours too
-  const i0 = Math.max(0, Math.floor((minX - 1) / CHUNK)), i1 = Math.min(chunkCount - 1, Math.floor((maxX + 1) / CHUNK));
-  const j0 = Math.max(0, Math.floor((minZ - 1) / CHUNK)), j1 = Math.min(chunkCount - 1, Math.floor((maxZ + 1) / CHUNK));
+// Rebuilds the chunks whose blocks or slopes a change to cells x0..x1, z0..z1 can affect.
+function rebuildAround(x0, x1, z0, z1) {
+  const w = WORLD.voxel * CHUNK;
+  invalidateGrass(x0 - 1, x1 + 2, z0 - 1, z1 + 2);
+  const i0 = Math.max(0, Math.floor((x0 - 2) / w)), i1 = Math.min(chunkCount - 1, Math.floor((x1 + 2) / w));
+  const j0 = Math.max(0, Math.floor((z0 - 2) / w)), j1 = Math.min(chunkCount - 1, Math.floor((z1 + 2) / w));
   for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) if (chunks[i + chunkCount * j].stage >= 3) buildChunk(i, j);
-  return flipped;
+}
+// The ground around a cell that was just opened up keeps showing what it's made of.
+function remember(x, y, z) {
+  for (const [dx, dy, dz] of [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]]) {
+    const k = cellIndex(x + dx, y + dy, z + dz);
+    if (!cellMat.has(k) && solidCell(x + dx, y + dy, z + dz)) cellMat.set(k, natural(x + dx, y + dy, z + dz));
+  }
+}
+// Digs out (or fills in, with `material`) one 1 m cell of ground. Returns whether it changed.
+export function editCell(x, y, z, ground = false, material = 'dirt') {
+  if (!ground) { const k = cellIndex(x, y, z); if (!cellMat.has(k)) cellMat.set(k, natural(x, y, z)); }
+  if (!setCell(x, y, z, ground)) return false;
+  if (ground) cellMat.set(cellIndex(x, y, z), material); else remember(x, y, z);
+  rebuildAround(x, x, z, z);
+  return true;
+}
+// Digs out (or fills in) every cell whose centre is within `radius` of a point, in one rebuild.
+// Returns how many cells changed.
+export function editTerrain(center, radius, add, material = 'dirt') {
+  let changed = 0;
+  const r = Math.ceil(radius), cx = Math.floor(center.x), cy = Math.floor(center.y), cz = Math.floor(center.z);
+  for (let z = cz - r; z <= cz + r; z++) for (let y = cy - r; y <= cy + r; y++) for (let x = cx - r; x <= cx + r; x++) {
+    if (Math.hypot(x + 0.5 - center.x, y + 0.5 - center.y, z + 0.5 - center.z) > radius) continue;
+    if (!add) { const k = cellIndex(x, y, z); if (!cellMat.has(k) && solidCell(x, y, z)) cellMat.set(k, natural(x, y, z)); }
+    if (!setCell(x, y, z, add)) continue;
+    changed++;
+    if (add) cellMat.set(cellIndex(x, y, z), material); else remember(x, y, z);
+  }
+  if (changed) rebuildAround(cx - r, cx + r, cz - r, cz + r);
+  return changed;
 }

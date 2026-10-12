@@ -46,28 +46,38 @@ export function buildRenderGeometry(colliderGeo, T) {
   const posAttr = colliderGeo.attributes.position;
   geo.setAttribute('position', posAttr); // shared with the collider; the index is too
   geo.setIndex(colliderGeo.index);
-  const pos = posAttr.array, count = pos.length / 3;
-  const normals = new Float32Array(count * 3), tint = new Float32Array(count * 3);
-  const splat = new Float32Array(count * 4), info = new Float32Array(count * 4), extra = new Float32Array(count * 3);
+  const pos = posAttr.array, count = pos.length / 3, flat = colliderGeo.attributes.normal;
+  // most of it is kept in bytes: the ground has millions of corners
+  const normals = new Int8Array(count * 3), smooth = new Int8Array(count * 3), tint = new Uint8Array(count * 3);
+  const splat = new Uint8Array(count * 4), info = new Int8Array(count * 4), extra = new Float32Array(count * 3);
   // 0–1 values kept as bytes: a quarter of the memory, and caves made the meshes much bigger
   const biome = new Uint8Array(count * 4), rock = new Uint8Array(count * 3);
-  const nrm = new THREE.Vector3();
+  const nrm = new THREE.Vector3(), face = new THREE.Vector3(), columns = new Map();
 
   for (let v = 0; v < count; v++) {
     const x = pos[v * 3], y = pos[v * 3 + 1], z = pos[v * 3 + 2];
-    fieldNormal(x, y, z, nrm);
-    normals[v * 3] = nrm.x; normals[v * 3 + 1] = nrm.y; normals[v * 3 + 2] = nrm.z;
+    // block faces light by their own flat normal; the ground's look (grass or rock) follows the
+    // smooth shape of the land, so a gentle hill of steps stays grassy
+    if (flat) face.fromBufferAttribute(flat, v); else fieldNormal(x, y, z, face);
+    fieldNormal(x - face.x * 0.5, y - face.y * 0.5, z - face.z * 0.5, nrm);
+    normals[v * 3] = face.x * 127; normals[v * 3 + 1] = face.y * 127; normals[v * 3 + 2] = face.z * 127;
+    smooth[v * 3] = nrm.x * 127; smooth[v * 3 + 1] = nrm.y * 127; smooth[v * 3 + 2] = nrm.z * 127;
     const ny = nrm.y;
     const n = T.noise3(x * 0.06, y * 0.06, z * 0.06);
-    const nb = T.noise2(x * 0.03 + 50, z * 0.03 - 20); // low-frequency noise that wobbles biome borders
-    const surface = T.surfaceHeight(x, z);
-    const vi = T.volcanoInfluence(x, z);
-    const lake = T.lakeAt(x, z, T.LAKE_EDGE + 0.15), W0 = lake ? lake.level : WORLD.waterLevel;
-    const W = T.surfaceHeight(x, z) < W0 + 2.5 ? W0 : -1000; // no wet waterline in caves under land
+    // what only depends on where the column is: worked out once per column (corners stack up a lot)
+    const ck = x * 2048 + z;
+    let col = columns.get(ck);
+    if (!col) {
+      const nb = T.noise2(x * 0.03 + 50, z * 0.03 - 20); // low-frequency noise that wobbles biome borders
+      const surface = T.surfaceHeight(x, z), lake = T.lakeAt(x, z, T.LAKE_EDGE + 0.15), W0 = lake ? lake.level : WORLD.waterLevel;
+      col = { nb, surface, vi: T.volcanoInfluence(x, z), lake, W: surface < W0 + 2.5 ? W0 : -1000, weights: null }; // no wet waterline in caves under land
+      columns.set(ck, col);
+    }
+    const { nb, surface, vi, lake, W } = col;
     let g = 0, f = 0, d = 0, s = 0, stone = 0, glow = 0, tr = 1, tg = 1, tb = 1;
     let snow = 0, mesa = 0, sandstone = 0, redsand = 0; // biome looks (see the shader)
     const cave = smoothstep(surface - 3, surface - 8, y);
-    const edited = editedMaterialAt(x - nrm.x * 0.8, y - nrm.y * 0.8, z - nrm.z * 0.8);
+    const edited = editedMaterialAt(x - face.x * 0.5, y - face.y * 0.5, z - face.z * 0.5);
 
     if (edited) {
       // ground the player dug into or added
@@ -99,7 +109,7 @@ export function buildRenderGeometry(colliderGeo, T) {
       d = 0.15 + 0.15 * n;
     } else {
       // the biomes' ground, blended where they meet (biomes.js)
-      const w = T.biomeWeights(x + nb * 12, z - nb * 12);
+      const w = col.weights || (col.weights = T.biomeWeights(x + nb * 12, z - nb * 12));
       for (let i = 0; i < w.length; i++) {
         if (!w[i]) continue;
         const gr = BIOMES[BIOME_IDS[i]].ground, k = w[i], t = gr.tint || [1, 1, 1];
@@ -114,10 +124,14 @@ export function buildRenderGeometry(colliderGeo, T) {
       g *= 1 - tundra * 0.6; d += tundra * 0.6 + smoothstep(0.82, 0.65, ny) * 0.5 * (1 - s) + Math.max(0, n - 0.45) * 0.8 * (g + f);
       tr *= 1 + tundra * 0.1; tb *= 1 - tundra * 0.2;
     }
-    splat[v * 4] = g; splat[v * 4 + 1] = f; splat[v * 4 + 2] = d; splat[v * 4 + 3] = s;
-    if (g + f + d + s < 0.01) splat[v * 4 + 2] = 0.01;
-    info[v * 4] = cave; info[v * 4 + 1] = vi; info[v * 4 + 2] = glow; info[v * 4 + 3] = stone;
-    tint[v * 3] = tr; tint[v * 3 + 1] = tg; tint[v * 3 + 2] = tb;
+    // the sides of a step are earth under the grass, like a cut through the turf
+    if (Math.abs(face.y) < 0.1 && g + f > 0) { d += g + f; g = f = 0; }
+    // layer amounts halved into a byte (only their ratios matter), tints halved too
+    const k = Math.min(1, 2 / Math.max(g, f, d, s, 0.01)) * 127.5;
+    splat[v * 4] = g * k; splat[v * 4 + 1] = f * k; splat[v * 4 + 2] = d * k; splat[v * 4 + 3] = s * k;
+    if (g + f + d + s < 0.01) splat[v * 4 + 2] = 2;
+    info[v * 4] = cave * 127; info[v * 4 + 1] = Math.min(1, vi) * 127; info[v * 4 + 2] = glow * 127; info[v * 4 + 3] = Math.min(1, stone) * 127;
+    tint[v * 3] = Math.min(255, tr * 127.5); tint[v * 3 + 1] = Math.min(255, tg * 127.5); tint[v * 3 + 2] = Math.min(255, tb * 127.5);
     // the kind of stone the rock is here, and any ore in it
     const st = STONE_TINT[vi < 0.3 ? T.stoneAt(x, y, z) : 'stone'] || STONE_TINT.stone;
     rock[v * 3] = st[0] * 127.5; rock[v * 3 + 1] = st[1] * 127.5; rock[v * 3 + 2] = st[2] * 127.5; // halved: tints reach 1.9
@@ -127,10 +141,11 @@ export function buildRenderGeometry(colliderGeo, T) {
     extra[v * 3 + 1] = W;
     biome[v * 4] = snow * 255; biome[v * 4 + 1] = mesa * 255; biome[v * 4 + 2] = sandstone * 255; biome[v * 4 + 3] = redsand * 255;
   }
-  geo.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
-  geo.setAttribute('color', new THREE.BufferAttribute(tint, 3));
-  geo.setAttribute('splat', new THREE.BufferAttribute(splat, 4));
-  geo.setAttribute('tinfo', new THREE.BufferAttribute(info, 4));
+  geo.setAttribute('normal', new THREE.BufferAttribute(normals, 3, true));
+  geo.setAttribute('snormal', new THREE.BufferAttribute(smooth, 3, true));
+  geo.setAttribute('color', new THREE.BufferAttribute(tint, 3, true));
+  geo.setAttribute('splat', new THREE.BufferAttribute(splat, 4, true));
+  geo.setAttribute('tinfo', new THREE.BufferAttribute(info, 4, true));
   geo.setAttribute('extra', new THREE.BufferAttribute(extra, 3));
   geo.setAttribute('biome', new THREE.BufferAttribute(biome, 4, true));
   geo.setAttribute('rock', new THREE.BufferAttribute(rock, 3, true));
@@ -158,6 +173,8 @@ export function makeTerrainMaterial() {
         attribute vec3 extra;
         attribute vec4 biome;
         attribute vec3 rock;
+        attribute vec3 snormal;
+        varying vec3 vSmooth;
         varying vec3 vRock;
         varying vec4 vSplat;
         varying vec4 vInfo;
@@ -171,6 +188,8 @@ export function makeTerrainMaterial() {
         vExtra = extra;
         vBiome = biome;
         vRock = rock * 2.0;
+        vSmooth = snormal;
+        vColor.rgb *= 2.0; // tints are stored halved
         vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
         vWorldNormal = normalize(mat3(modelMatrix) * objectNormal);`);
     shader.fragmentShader = shader.fragmentShader
@@ -186,6 +205,7 @@ export function makeTerrainMaterial() {
         varying vec4 vBiome; // snow cover, mesa terracotta, desert sandstone, red sand
         varying vec3 vWorldPos;
         varying vec3 vWorldNormal;
+        varying vec3 vSmooth; // the land's smooth shape, for rock on steep ground
         vec3 srgb(vec3 c) { return pow(c, vec3(2.2)); }`)
       .replace('#include <color_fragment>', `#include <color_fragment>
         vec3 wN = normalize(vWorldNormal);
@@ -196,7 +216,7 @@ export function makeTerrainMaterial() {
         // layer weights: grass, forest floor, dirt, sand from the vertex; rock by slope; snow by height
         float alpine = smoothstep(58.0, 82.0, vWorldPos.y + (n1 - 0.5) * 10.0);
         float edge = (n2 - 0.5) * 0.1;
-        float steep = 1.0 - smoothstep(0.6 + alpine * 0.12 + edge, 0.78 + alpine * 0.1 + edge, wN.y);
+        float steep = 1.0 - smoothstep(0.6 + alpine * 0.12 + edge, 0.78 + alpine * 0.1 + edge, normalize(vSmooth).y);
         float rockW = clamp(max(max(steep, stone), smoothstep(0.1, 0.45, volc) * 0.85), 0.0, 1.0);
         float snowLine = uSnowLine + (n1 - 0.5) * 10.0;
         float snowW = max(smoothstep(snowLine, snowLine + 6.0, vWorldPos.y), vBiome.x) * smoothstep(0.45, 0.7, wN.y + (n2 - 0.5) * 0.2)

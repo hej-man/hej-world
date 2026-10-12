@@ -179,14 +179,23 @@ export async function installHelpers(page) {
       return false;
     };
     // a flat dry spot near the player
-    window.flatSpot = () => {
+    // `around`: the ground must also be level that far toward +x, where the tests aim (the ground
+    // is blocks, so a flat cell can sit right at the edge of a drop)
+    window.flatSpot = (around = 0) => {
+      const level = (x, z, y) =>
+        [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6].every((d) => {
+          if (d > around) return true;
+          const h = G.groundAt(x + d, z + 0.4);
+          return h && Math.abs(h.point.y - y) < 0.1;
+        });
       const p = G.player.position;
-      for (let r = 0; r < 60; r += 3)
+      for (let r = 0; r < (around ? 150 : 60); r += 3)
         for (let a = 0; a < 16; a++) {
           const x = p.x + Math.cos((a / 16) * 6.283) * r,
             z = p.z + Math.sin((a / 16) * 6.283) * r,
             g = G.groundAt(x, z);
-          if (g && g.face.normal.y > 0.95 && g.point.y > G.terrain().waterAt(x, z) + 1) return { x, y: g.point.y, z };
+          if (g && g.face.normal.y > 0.95 && g.point.y > G.terrain().waterAt(x, z) + 1 && (!around || level(x, z, g.point.y)))
+            return { x, y: g.point.y, z };
         }
       return null;
     };

@@ -3,7 +3,8 @@ import { state } from '../state.js';
 import { PLAYER, WORLD } from '../config.js';
 import { scene } from '../render/scene.js';
 import { CELL, cellKey, gridRemove, obstacleGrid, targetGrid, terrainFns, world } from '../world/world.js';
-import { editTerrain, editedMaterialAt, naturalMaterial, raycastTerrain } from '../world/query.js';
+import { cellMaterial, editCell, editedMaterialAt, hitCell, raycastTerrain } from '../world/query.js';
+import { solidCell } from '../terrain/voxels.js';
 import { EYE_OFFSET, player } from './character.js';
 import { aimRay } from './camera.js';
 import { ITEMS, addItem, inventoryOpen, renderInventory, setInventoryOpen, slots } from '../inventory/inventory.js';
@@ -93,13 +94,14 @@ function waterRay(o, d, t0, t1) {
 }
 
 function terrainMaterialAt(hit) {
-  const p = hit.point, n = hit.face.normal;
-  const edited = editedMaterialAt(p.x - n.x * 0.8, p.y - n.y * 0.8, p.z - n.z * 0.8);
+  const [x, y, z] = hitCell(hit.point, hit.face.normal);
+  const edited = editedMaterialAt(x + 0.5, y + 0.5, z + 0.5);
   if (edited) return edited;
   const ch = hit.object.userData.chunk;
   const g = ch.render.geometry, vi = g.index.getX(hit.faceIndex * 3);
   if (g.attributes.tinfo.getZ(vi) < -0.5) return 'crystal';
-  return naturalMaterial(p.x, p.y, p.z, n.y);
+  // a slope is the ground it stands on
+  return cellMaterial(x, solidCell(x, y, z) ? y : y - 1, z);
 }
 
 // What the natural ground can be made of: [how it breaks, what you get, name]. Anything not listed
@@ -208,18 +210,14 @@ export function doBreak(t) {
   if (t.kind === 'terrain') {
     materialOf(t);
     const mat = t.material;
-    const center = t.point.clone().addScaledVector(t.normal, -0.6);
-    const flipped = editTerrain(center, 1.9, false);
-    if (!flipped) return;
+    const [cx, cy, cz] = hitCell(t.point, t.normal);
+    if (!editCell(cx, cy, cz)) return;
     // water and lava nearby can now flow into the hole, and the sea or a lake right next to it does
-    wakeArea(center.x, center.y, center.z, 3.5);
-    floodFromNature(center.x, center.y, center.z, 2.5);
-    // plants standing on the removed ground come down with it
-    const gx = Math.floor(center.x / CELL), gz = Math.floor(center.z / CELL);
-    for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
-      for (const tg of [...(targetGrid.get(cellKey(gx + i, gz + j)) || [])]) {
-        if (Math.hypot(tg.x - center.x, tg.y - center.y, tg.z - center.z) < 2.6) harvest(tg);
-      }
+    wakeArea(cx + 0.5, cy + 0.5, cz + 0.5, 2);
+    floodFromNature(cx + 0.5, cy + 0.5, cz + 0.5, 1.5);
+    // plants standing on the removed block come down with it
+    for (const tg of [...(targetGrid.get(cellKey(Math.floor(cx / CELL), Math.floor(cz / CELL))) || [])]) {
+      if (Math.floor(tg.x) === cx && Math.floor(tg.z) === cz && tg.y > cy - 0.1 && tg.y < cy + 2.2) harvest(tg);
     }
     const drop = ground(mat)[1], ore = ['iron', 'coal', 'copper', 'gold', 'titanium'].includes(mat);
     give(mat === 'crystal' ? [['crystal', 1 + Math.floor(Math.random() * 2)]] : ore ? [[drop, mat === 'coal' ? 1 + Math.floor(Math.random() * 2) : 1], ['stone', Math.random() < 0.5 ? 1 : 0]] : [[drop, 1]]);
@@ -230,6 +228,9 @@ export function doBreak(t) {
 function placementCell(t) {
   if (!t || (t.kind !== 'terrain' && t.kind !== 'block')) return null;
   if (t.kind === 'block') return [t.cell[0] + t.normal.x, t.cell[1] + t.normal.y, t.cell[2] + t.normal.z];
+  // a block put on a slope takes the slope's place
+  const [x, y, z] = hitCell(t.point, t.normal);
+  if (!solidCell(x, y, z)) return [x, y, z];
   return [Math.floor(t.point.x + t.normal.x * 0.5), Math.floor(t.point.y + t.normal.y * 0.5), Math.floor(t.point.z + t.normal.z * 0.5)];
 }
 

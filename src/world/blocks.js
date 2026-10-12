@@ -5,7 +5,7 @@ import { hash1, mulberry32 } from '../noise.js';
 import { canvasTexture } from './plant-looks.js';
 import { litMaterial, scene } from '../render/scene.js';
 import { PLAYER } from '../config.js';
-import { sampleField } from '../terrain/material.js';
+import { solidCell } from '../terrain/voxels.js';
 import { FOOT_OFFSET, player } from '../player/character.js';
 import { addObstacle, gridRemove, obstacleGrid, world } from './world.js';
 import { boxUVs, mergeGeometries, roundedBox, shapeGeometry, sharpShape } from './shapes.js';
@@ -534,7 +534,7 @@ function growSaplings(time) {
 // Is a cell free for a growing tree: no block, no ground, and not where the player is?
 // (`self`: the sapling's own cell, which only needs to be clear of the player.)
 function cellOpen(x, y, z, self = false) {
-  if (!self && (blocks.has(blockKey(x, y, z)) || sampleField(x + 0.5, y + 0.5, z + 0.5) > 0)) return false;
+  if (!self && (blocks.has(blockKey(x, y, z)) || solidCell(x, y, z))) return false;
   const p = player.position, feet = p.y - FOOT_OFFSET;
   return !(p.x + PLAYER.radius > x && p.x - PLAYER.radius < x + 1 && p.z + PLAYER.radius > z && p.z - PLAYER.radius < z + 1 && feet < y + 1 && p.y + PLAYER.radius > y);
 }

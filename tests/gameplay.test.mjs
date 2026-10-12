@@ -119,14 +119,30 @@ R.build = await log('build', async () => {
   game.slots[1] = game.slots[slot];
   game.slots[slot] = tmp;
   G.selectSlot(1);
-  G.setView(false);
-  G.setLook(G.player.facing - 1.2, -0.7);
+  const f = flatSpot(3.5); // on level ground (not beside a slope, which can put the cell in front inside you)
+  put(f.x, f.y, f.z);
+  await waitGame(0.3);
+  aimAt(f.x + 2, f.y, f.z + 0.4);
   await waitGame(0.1);
+  const aimed = G.target() && {
+    kind: G.target().kind,
+    point: G.target()
+      .point?.toArray()
+      .map((v) => +v.toFixed(2)),
+    normal: G.target()
+      .normal?.toArray()
+      .map((v) => +v.toFixed(2)),
+  };
   for (let i = 0; i < 3; i++) {
     G.useItem(G.target());
     await waitGame(0.15);
   }
-  return { blocks: [...G.blocks.values()].filter((b) => !b.group.split('|')[2]).map((b) => b.type), stoneLeft: count('stone') };
+  return {
+    aimed,
+    feet: G.player.position.toArray().map((v, i) => +(v - (i === 1 ? 1.45 : 0)).toFixed(2)),
+    blocks: [...G.blocks.values()].filter((b) => !b.group.split('|')[2]).map((b) => b.type),
+    stoneLeft: count('stone'),
+  };
 });
 await page.evaluate(() => window.__game.setView(true));
 await page.waitForTimeout(300);

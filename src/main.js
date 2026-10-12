@@ -172,7 +172,7 @@ requestAnimationFrame(() => setTimeout(() => {
     renderer, scene, camera, csm, texInfo, QUALITY,
     startGame, toMainMenu, state: () => gameState, ready: () => !!worldStats && !generating, weather, setWeather, nextWeather, cycleWeather, WEATHER, updateWeather,
     aimWater: () => aimWater, useWater, grassPatches, MAX_HEALTH, updateGrass,
-    loadAll: () => { loadAll(); spawnAnimals(worldStats.seed); }, terrainProgress, vegStats,
+    loadAll: () => { loadAll(); spawnAnimals(worldStats.seed); }, terrainProgress, vegStats, loadArea,
     lavaFlows, lavaAt, burning: () => state.burning, setShape: (sh) => { state.buildShape = sh; }, blockGroups, hiddenBlocks, removeBlock, character, breakTime,
     fluids, addSource, fluidAt, pourFluid, takeFluid, poolAmount, updateHydro,
   };

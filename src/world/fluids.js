@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { WORLD } from '../config.js';
-import { sampleField } from '../terrain/material.js';
+import { solidCell } from '../terrain/voxels.js';
 import { BLOCKS, blockKey, blocks, placeBlock } from './blocks.js';
 import { terrainFns, world } from './world.js';
 import { raycastTerrain } from './query.js';
@@ -42,7 +42,7 @@ export function cellSolid(x, y, z) {
   if (x < 1 || z < 1 || y < 1 || x > WORLD.size - 2 || z > WORLD.size - 2 || y > WORLD.height - 2) return true;
   const b = blocks.get(blockKey(x, y, z));
   if (b) return BLOCKS[b.type].solid !== false;
-  return sampleField(x + 0.5, y + 0.5, z + 0.5) > 0;
+  return solidCell(x, y, z);
 }
 
 // Marks a cell and its six neighbours to be looked at on the next update.

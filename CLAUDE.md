@@ -32,8 +32,14 @@ run it. See README.md for features, controls and the code layout table.
 ## Terrain and chunks (`src/world/world.js`)
 
 - One global density field (`terrainField`, Float32Array of 513 × 65 × 513 points, 2 m apart)
-  for the whole 1024 m map; ground is where the value is > 0. Surface Nets meshes it per chunk
-  (16 × 16 cells = 32 m).
+  for the whole 1024 m map; ground is where the value is > 0. The ground you see is 1 m blocks
+  read from it (`src/terrain/voxels.js`): a cell is ground where the interpolated field is > 0 at
+  its centre, unless `edits` says the player dug or filled it. An empty cell on ground with higher
+  ground beside it holds a slope (`slopeDir`); dug cells never do. `blockMesh` (`mesh.js`) meshes
+  32 × 32 m chunks with greedy face merging; `fillSolid` is the fast column-at-a-time version of
+  `solidCell` and must give the same answer.
+- Anything that asks "is this ground?" uses `solidCell`/`solidAt`, never `sampleField > 0`
+  directly: the two differ near the surface.
 - Chunks are generated lazily in three stages: density filled → floating rock removed (needs the
   3 × 3 neighbours filled) → meshed (needs the 3 × 3 neighbours cleaned). `loadArea(x, z, r)`
   does it synchronously; `streamChunks(x, z, ms)` runs every frame, nearest the camera first.
@@ -43,8 +49,11 @@ run it. See README.md for features, controls and the code layout table.
   there is real; `groundAt` returns null and `sampleField` returns air where it isn't yet.
 - Vegetation tiles (96 m) each have their own seeded random sequence, so a tile is the same no
   matter when it loads. Keep per-area randomness seeded per area for the same reason.
-- `editTerrain` changes the field and rebuilds only meshed chunks; unmeshed ones pick up the
-  edit when they're built.
+- `editCell`/`editTerrain` (`query.js`) change cells, not the field, and rebuild only meshed
+  chunks; unmeshed ones pick up the edit when they're built. `hitCell` turns a ray hit into the
+  cell it hit (the slope itself, when it hit one).
+- Tests: the ground steps, so a flat cell can sit on the edge of a drop. Tests that aim a few
+  metres away use `flatSpot(d)`, which also needs the ground level for `d` metres toward +x.
 
 ## Blocks and fluids
 

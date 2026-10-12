@@ -235,12 +235,15 @@ game.getSelectedItem(); // stack in the selected hotbar slot, or null
   If you outrun the generation, the ground around you is made immediately (a short pause).
   The density field for the whole map is kept in memory (about 70 MB), so a much bigger map
   would need it stored per chunk instead.
-- **Meshing** uses Surface Nets in 32 × 32 m chunks. Vertex normals come from the gradient of
-  the density field, so the ground is smoothly rounded and chunk borders don't show. Each
-  vertex also stores how much grass, forest floor, dirt and sand covers it (from height, biome
-  and noise). The collider and the render mesh share one indexed geometry with a BVH for
-  physics. Digging or adding ground edits the density field and rebuilds only the chunks it
-  touches (a few milliseconds).
+- **Ground blocks**: the ground is built of 1 m blocks read from the density field (a cell is
+  ground where the field is positive at its centre), with a slope in any empty cell that has
+  ground below and higher ground on one side, so hills can be walked up. Chunks are 32 × 32 m and
+  meshed with greedy face merging. The flat block faces are used for lighting, while a smooth
+  normal from the field decides where steep ground shows as bare rock; the sides of grassy blocks
+  show dirt. Each vertex also stores how much grass, forest floor, dirt and sand covers it (from
+  height, biome and noise). The collider and the render mesh share one indexed geometry with a
+  BVH for physics. Digging takes out exactly the block you hit and placing dirt or stone adds a
+  block; only the chunks it touches are rebuilt.
 - **Texturing**: seven photo texture layers (colour, normal, roughness and ambient occlusion at
   1024 × 1024) are packed into two texture arrays, so the terrain shader needs only two texture
   samplers. The shader blends rock onto steep slopes and snow onto high ground, breaks up the

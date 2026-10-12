@@ -3,10 +3,11 @@ import { worldStats } from '../main.js';
 import { QUALITY, WORLD } from '../config.js';
 import { mulberry32, smoothstep } from '../noise.js';
 import { LAYER, TEX_LAYERS, texUniforms } from '../terrain/textures.js';
-import { fieldNormal, sampleField, terrainUniforms } from '../terrain/material.js';
+import { fieldNormal, terrainUniforms } from '../terrain/material.js';
 import { canvasTexture } from './plant-looks.js';
 import { litMaterial } from '../render/scene.js';
-import { editedMat, isLoaded, terrainFns } from './world.js';
+import { isLoaded, terrainFns } from './world.js';
+import { cellMat, slopeDir, solidCell } from '../terrain/voxels.js';
 import { editedMaterialAt } from './query.js';
 
 // ---------------------------------------------------------------------------
@@ -89,13 +90,16 @@ function grassMaterial() {
   return mat;
 }
 
-// Ground height under (x, z) from the density field (where it crosses zero), or null.
+// Ground height under (x, z): the top of the block there, or partway up a slope; null under an
+// overhang or where it's been dug away.
 function fieldSurfaceY(x, z) {
-  const h = terrainFns.surfaceHeight(x, z);
-  let hi = h + 3, lo = h - 3;
-  if (sampleField(x, hi, z) > 0 || sampleField(x, lo, z) < 0) return null; // overhang, or dug away
-  for (let k = 0; k < 9; k++) { const mid = (hi + lo) * 0.5; if (sampleField(x, mid, z) > 0) lo = mid; else hi = mid; }
-  return (hi + lo) * 0.5;
+  const h = terrainFns.surfaceHeight(x, z), cx = Math.floor(x), cz = Math.floor(z);
+  let y = Math.floor(h + 3);
+  if (solidCell(cx, y, cz)) return null;
+  while (y > h - 3 && !solidCell(cx, y - 1, cz)) y--;
+  if (y <= h - 3) return null;
+  const d = slopeDir(cx, y, cz);
+  return d < 0 ? y : y + [x - cx, 1 - (x - cx), z - cz, 1 - (z - cz)][d];
 }
 
 // How much grass grows here (0..1), following the same rules as the ground texture.
@@ -106,7 +110,7 @@ function grassAmount(x, y, z) {
   if (T.volcanoInfluence(x, z) > 0.02) return 0;
   fieldNormal(x, y, z, _gn);
   if (_gn.y < 0.8) return 0;
-  if (editedMat.size && editedMaterialAt(x, y - 0.8, z)) return 0; // dug or built ground stays bare
+  if (cellMat.size && editedMaterialAt(x, y - 0.5, z)) return 0; // dug or built ground stays bare
   const nb = T.noise2(x * 0.03 + 50, z * 0.03 - 20);
   // the same jittered point the ground texture uses, so grass stops where the grassy ground does
   const amount = T.blend(x + nb * 12, z - nb * 12, (b) => b.grass.amount);

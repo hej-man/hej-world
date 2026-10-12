@@ -29,7 +29,7 @@ R.slopeFall = await log('slopeFall', async () => {
       const x = p0.x + Math.cos((a / 24) * 6.283) * r,
         z = p0.z + Math.sin((a / 24) * 6.283) * r,
         g = G.groundAt(x, z);
-      if (g && g.face.normal.y > 0.35 && g.face.normal.y < 0.6 && g.point.y > T.waterAt(x, z) + 2) spot = g.point.clone();
+      if (g && g.face.normal.y > 0.6 && g.face.normal.y < 0.8 && g.point.y > T.waterAt(x, z) + 2) spot = g.point.clone();
     }
   if (!spot) return 'no slope';
   heal();
@@ -162,16 +162,32 @@ R.metal = await log('metal', async () => {
     fy = Math.floor(G.groundAt(fx + 0.5, fz + 0.5).point.y);
   G.placeBlock('smelter', fx, fy, fz);
   G.placeBlock('anvil', fx, fy, fz + 2);
-  for (const [id, n] of [['crucible', 1], ['iron_ore', 3], ['log', 2], ['ingot_mould', 1], ['smith_hammer', 1]]) game.addItem(id, n);
-  G.craft(R.find((r) => r.out === 'molten_iron' && r.in.iron_ore), false);
+  for (const [id, n] of [
+    ['crucible', 1],
+    ['iron_ore', 3],
+    ['log', 2],
+    ['ingot_mould', 1],
+    ['smith_hammer', 1],
+  ])
+    game.addItem(id, n);
+  G.craft(
+    R.find((r) => r.out === 'molten_iron' && r.in.iron_ore),
+    false,
+  );
   const straightAway = count('molten_iron');
   await waitGame(9);
   const molten = count('molten_iron');
-  G.craft(R.find((r) => r.out === 'iron_ingot' && r.in.molten_iron), false);
+  G.craft(
+    R.find((r) => r.out === 'iron_ingot' && r.in.molten_iron),
+    false,
+  );
   const ingots = count('iron_ingot'),
     mould = count('ingot_mould'),
     crucible = count('crucible');
-  G.craft(R.find((r) => r.out === 'iron_plate' && r.in.iron_ingot), false);
+  G.craft(
+    R.find((r) => r.out === 'iron_plate' && r.in.iron_ingot),
+    false,
+  );
   return { straightAway, molten, ingots, mould, crucible, plates: count('iron_plate'), hammer: count('smith_hammer') };
 });
 
@@ -224,7 +240,7 @@ R.dryCaves = await log('dryCaves', () => {
 // 5b. dirt is placed as a block in the chosen shape, and a player buried in the ground is lifted out
 R.dirt = await log('dirt', async () => {
   const G = window.__game,
-    f = flatSpot();
+    f = flatSpot(3.5);
   put(f.x, f.y, f.z);
   await waitGame(0.3);
   game.addItem('dirt', 4);
@@ -236,6 +252,12 @@ R.dirt = await log('dirt', async () => {
   G.setShape('slope');
   aimAt(f.x + 2.5, f.y, f.z + 0.3);
   await waitGame(0.2);
+  const aimed = G.target() && {
+    kind: G.target().kind,
+    point: G.target()
+      .point?.toArray()
+      .map((v) => +v.toFixed(2)),
+  };
   const before = G.blocks.size;
   G.useItem(G.target());
   const placed = [...G.blocks.values()].filter((b) => b.type === 'dirt').map((b) => b.shape);
@@ -244,16 +266,22 @@ R.dirt = await log('dirt', async () => {
   put(f.x, f.y - 3, f.z);
   await waitGame(0.5);
   const feet = G.player.position.y - 1.45;
-  return { added: G.blocks.size - before, placed, feetAboveGround: +(feet - f.y).toFixed(2) };
+  return {
+    aimed,
+    f: [f.x, f.y, f.z].map((v) => +v.toFixed(2)),
+    added: G.blocks.size - before,
+    placed,
+    feetAboveGround: +(feet - f.y).toFixed(2),
+  };
 });
 
 // 5c. liquids: poured water spreads and drains, lava flows slower and hardens where water meets it,
 // and creative spawners make animals
 R.liquids = await log('liquids', async () => {
   const G = window.__game,
-    f = flatSpot();
+    f = flatSpot(6);
   put(f.x, f.y, f.z);
-  const x = Math.floor(f.x) + 6,
+  const x = Math.floor(f.x) + 2,
     z = Math.floor(f.z),
     y = Math.floor(G.groundAt(x + 0.5, z + 0.5).point.y) + 1;
   G.addSource('water', x, y, z);
@@ -262,7 +290,9 @@ R.liquids = await log('liquids', async () => {
   G.addSource('lava', x + 3, y + 1, z);
   await waitGame(3);
   const lava = [...G.fluids.values()].filter((c) => c.type === 'lava').length;
-  const stone = [...G.blocks.values()].filter((b) => (b.type === 'stone' || b.type === 'obsidian') && Math.abs(b.x - x) < 8 && Math.abs(b.z - z) < 8).length;
+  const stone = [...G.blocks.values()].filter(
+    (b) => (b.type === 'stone' || b.type === 'obsidian') && Math.abs(b.x - x) < 8 && Math.abs(b.z - z) < 8,
+  ).length;
   return { water, lava, stone };
 });
 // 5d. scooping: a bucket picks poured water back up; a bucket from the river lowers it a little, rain raises it
@@ -288,8 +318,7 @@ R.scoop = await log('scoop', async () => {
   return { before: +before.toFixed(2), got: +got.toFixed(2), wet: +wet.toFixed(2), dry: +dry.toFixed(2) };
 });
 R.spawn = await log('spawn', async () => {
-  const G = window.__game,
-    before = G.animals.length;
+  const G = window.__game;
   G.setCreative(true);
   game.addItem('spawn_cow', 1);
   const slot = game.slots.findIndex((s) => s && s.id === 'spawn_cow'),
@@ -297,12 +326,24 @@ R.spawn = await log('spawn', async () => {
   game.slots[1] = game.slots[slot];
   game.slots[slot] = tmp;
   G.selectSlot(1);
+  const f = flatSpot(3.5);
+  put(f.x, f.y, f.z);
+  await waitGame(0.3);
   const p = G.player.position;
   aimAt(p.x + 3, p.y - 1.45, p.z + 0.5);
   await waitGame(0.2);
+  const aimed = G.target() && {
+    kind: G.target().kind,
+    point: G.target()
+      .point?.toArray()
+      .map((v) => +v.toFixed(2)),
+  };
   G.useItem(G.target());
   G.setCreative(false);
-  return { added: G.animals.length - before, last: G.animals[G.animals.length - 1]?.kind };
+  // count only what appeared where we aimed (moving here can bring new animals into the world)
+  const t = aimed?.point,
+    near = t ? G.animals.filter((a) => a.kind === 'cow' && Math.hypot(a.x - t[0], a.z - t[2]) < 1).length : 0;
+  return { aimed, added: near, last: G.animals[G.animals.length - 1]?.kind };
 });
 
 // 6. a bear attacks
@@ -391,7 +432,11 @@ check('furnace makes smooth stone and glass', R.iron?.smooth > 0 && R.iron.glass
 check('dirt places as a shaped block', R.dirt?.added === 1 && R.dirt.placed.includes('slope'), R.dirt);
 check('no water under hills', R.dryCaves?.hill?.water < -100 && R.dryCaves.sea?.water > 0, R.dryCaves);
 check('a smelter melts ore over time', R.metal?.straightAway === 0 && R.metal.molten === 1, R.metal);
-check('casting gives ingots, keeps the mould, returns the crucible', R.metal?.ingots >= 3 && R.metal.mould === 1 && R.metal.crucible === 1, R.metal);
+check(
+  'casting gives ingots, keeps the mould, returns the crucible',
+  R.metal?.ingots >= 3 && R.metal.mould === 1 && R.metal.crucible === 1,
+  R.metal,
+);
 check('forging a plate keeps the hammer', R.metal?.plates === 1 && R.metal.hammer === 1, R.metal);
 check('a bucket scoops poured water back up', R.scoop?.got > 0.9, R.scoop);
 check('rain fills the river and sun dries it', R.scoop?.wet > 0.3 && R.scoop.dry < 0, R.scoop);

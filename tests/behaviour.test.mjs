@@ -116,6 +116,8 @@ R.swim = await log('swim', async () => {
   C.head.getWorldPosition(head);
   const treadHead = +(head.y - level).toFixed(2),
     treadLean = +C.root.rotation.x.toFixed(2);
+  // swim along the river, not into its bank (the banks are steps of ground blocks now)
+  G.setLook(Math.atan2(-1, -(T.riverZ(x + 1) - z)), 0);
   G.keys.KeyW = true;
   let lo = 9,
     hi = -9,
@@ -131,7 +133,10 @@ R.swim = await log('swim', async () => {
   }
   const crawlLean = +C.root.rotation.x.toFixed(2);
   G.keys.KeyW = false;
-  // Shift dives
+  // Shift dives, back where it's deep
+  G.player.position.set(x, level + 0.2, z);
+  G.player.velocity.set(0, 0, 0);
+  await waitGame(0.5);
   G.keys.ShiftLeft = true;
   await waitGame(1.5);
   G.keys.ShiftLeft = false;

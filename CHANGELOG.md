@@ -1,5 +1,18 @@
 # Changelog
 
+## Round 11: the ground is blocks
+
+- The ground is now made of 1 m blocks, the same size and shapes as the ones you place, with
+  slopes on hillsides so you can still walk up hills without jumping. Grass and forest floor
+  cover the tops, and the sides of a grassy step show dirt. Trees stay as they were.
+- Digging takes out exactly the one block you hit, instead of a 2 m ball of ground, so a hole is
+  only as big as what you dug. Dug-out cells never fill back with a slope.
+- Placing a block on a slope replaces the slope.
+- Building a chunk is faster and lighter than the first try at blocks: faces are merged, vertices
+  shared and the per-vertex data packed into bytes.
+- Tests: `flatSpot(d)` finds ground that is also level `d` metres toward where the test aims, since
+  a flat block can now sit right at the edge of a drop; the swim test swims along the river.
+
 ## Round 10: animal models, livelier weather and block ice spikes
 
 - Ice spikes are now built from separate blocks: packed ice (with a little clear ice) stacked into

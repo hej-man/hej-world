@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { WORLD } from '../config.js';
 import { createDensityField, createTerrainFunctions, fillDensity, removeFloaters } from '../terrain/generate.js';
-import { surfaceNets } from '../terrain/mesh.js';
+import { blockMesh } from '../terrain/mesh.js';
+import { fillSolid, resetVoxels, slopeDir } from '../terrain/voxels.js';
 import { buildRenderGeometry, makeTerrainMaterial, terrainUniforms } from '../terrain/material.js';
 import { forgetMaterial, prepareLighting, scene } from '../render/scene.js';
 import { makeWater } from './water.js';
@@ -28,7 +29,6 @@ export let chunks = [], chunkCount = 0;
 let meshedCount = 0, triangles = 0;
 let pending = [];                              // { i0, i1, j0, j1, fn }: run fn once those chunks are meshed
 export const colliders = [];                   // all chunk collider meshes, for raycasting
-export const editedMat = new Map();            // grid index -> 'dirt' | 'sand' | 'stone' for ground the player dug or added
 export let terrainFns = null;
 export const volcanoFx = [];     // { v, lava, light, smoke[] }
 export let waterGroup = null;    // the sea and lake surfaces (water.js)
@@ -63,7 +63,7 @@ function disposeWorld() {
   });
   for (const c of chunks) c.collider?.geometry.disposeBoundsTree();
   for (const c of chunks) c.collider?.geometry.dispose();
-  chunks = []; colliders.length = 0; editedMat.clear();
+  chunks = []; colliders.length = 0; resetVoxels();
   pending = []; meshedCount = 0; triangles = 0;
   world.clear();
   obstacleGrid.clear(); targetGrid.clear();
@@ -78,20 +78,20 @@ export const chunkWidth = () => CHUNK * WORLD.voxel;
 
 // (Re)builds the collider + render mesh of one chunk from the current density field.
 export function buildChunk(i, j) {
-  const { field, nx, ny, nz } = terrainField;
   const ch = chunks[i + chunkCount * j];
   if (ch.render) { world.remove(ch.render); ch.render.geometry.dispose(); ch.render = null; }
   if (ch.collider) {
     ch.collider.geometry.disposeBoundsTree(); ch.collider.geometry.dispose();
     colliders.splice(colliders.indexOf(ch.collider), 1); ch.collider = null;
   }
-  const geo = surfaceNets(field, nx, ny, nz, WORLD.voxel, i * CHUNK, (i + 1) * CHUNK, j * CHUNK, (j + 1) * CHUNK);
+  const w = chunkWidth(), geo = blockMesh(i * w, (i + 1) * w, j * w, (j + 1) * w, fillSolid, slopeDir);
   if (!geo.index.count) { geo.dispose(); return 0; }
   geo.computeBoundsTree();
   ch.collider = new THREE.Mesh(geo);
   ch.collider.userData.chunk = ch;
   colliders.push(ch.collider);
   ch.render = new THREE.Mesh(buildRenderGeometry(geo, terrainFns), terrainMaterial);
+  geo.deleteAttribute('normal'); // the collider only needs positions
   ch.render.castShadow = true;
   ch.render.receiveShadow = true;
   world.add(ch.render);

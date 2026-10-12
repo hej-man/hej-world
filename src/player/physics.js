@@ -4,7 +4,7 @@ import { PLAYER, SLOPE_Y, WORLD } from '../config.js';
 import { lantern } from '../render/scene.js';
 import { CELL, cellKey, chunksIn, obstacleGrid, terrainFns } from '../world/world.js';
 import { craterLavaAt, lavaDepth } from '../world/volcano.js';
-import { sampleField } from '../terrain/material.js';
+import { solidAt } from '../terrain/voxels.js';
 import { fluidAt } from '../world/fluids.js';
 import { FOOT_OFFSET, player, respawn } from './character.js';
 import { animateCharacter } from './animation.js';
@@ -200,9 +200,9 @@ function stepPhysics(dt, inputDir, speed) {
 // up inside solid ground (the ground was changed right where you stand), lift you to open air.
 function unbury() {
   const { x, z } = player.position, mid = player.position.y - PLAYER.segment * 0.5;
-  if (sampleField(x, mid, z) <= 0.3) return;
+  if (!solidAt(x, mid, z)) return;
   for (let dy = 0.5; dy <= 12; dy += 0.5) {
-    if (sampleField(x, mid + dy, z) <= 0 && sampleField(x, player.position.y + dy + 0.4, z) <= 0 && sampleField(x, mid + dy - PLAYER.segment * 0.5 - 0.3, z) <= 0) {
+    if (!solidAt(x, mid + dy, z) && !solidAt(x, player.position.y + dy + 0.4, z) && !solidAt(x, mid + dy - PLAYER.segment * 0.5 - 0.3, z)) {
       player.position.y += dy; player.velocity.set(0, 0, 0);
       return;
     }
