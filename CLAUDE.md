@@ -50,12 +50,24 @@ run it. See README.md for features, controls and the code layout table.
 
 - `src/world/shapes.js` builds each buildable shape with rounded edges (shrink, then grow back by
   a sphere); collision uses the sharp shape. `src/world/blocks.js` places blocks on the 1 m grid.
-- `src/world/fluids.js` runs water and lava on the same grid: levels 1–8, sources at 8, falls then
-  spreads, drains when unfed. Wake nearby cells (`wake`/`wakeArea`) after anything changes the
-  grid (placing, breaking, digging), or the fluid won't notice.
+- `src/world/fluids.js` runs water and lava on the same grid as an amount per cell (`m`, 1 = a
+  full block, a little more when squeezed from above). Each step moves amounts down, then evens
+  them out sideways, then pushes extra up; fluid is never created or lost except through rain,
+  sun, steam, hardening and running into natural water. Cells with `nat` are the river or a lake
+  reaching into a hole and stay full while the natural level covers them. Wake nearby cells
+  (`wake`/`wakeArea`) after anything changes the grid (placing, breaking, digging), or the fluid
+  won't notice. `takeFluid`/`poolAmount` are for buckets.
+- `src/world/hydro.js` moves the natural levels: `terrainFns.live.sea` (river and sea), each lake's
+  `offset`, each volcano's `lavaY`. Use `waterAt` for anything at play time and `baseWaterAt` for
+  generation (vegetation, grass, which stone is where), or the world would change as it rains.
 - Block families (woods, stones, colours…) are data in `src/world/block-catalog.js`; textures are
   drawn from each block's `tex` description by `block-textures.js`. Their items and recipes are in
   `src/inventory/catalog-items.js`. Recipe ingredients starting with `#` are item groups (tags).
+- Metalwork items and recipes are in `src/inventory/metalwork.js`. A recipe can take several
+  stations (`at: [...]`, all within reach), keep tools or moulds (`keep`), give extra things back
+  (`also`) and take time (`time`): timed recipes are jobs queued on the nearest station
+  (`startJob`/`updateJobs`/`collectStation` in `items.js`). Item pictures come from `draw` specs
+  drawn by `icons.js`.
 - Glowing blocks share four point lights, moved to the nearest ones each frame: adding or removing
   lights recompiles every shader, so the count must stay fixed.
 - `terrainFns.waterAt` returns a very low value where the ground is well above the water, so

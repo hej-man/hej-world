@@ -1,5 +1,76 @@
 # Changelog
 
+## Round 9: metalwork, living water, puddles and titanium
+
+### Fixes
+
+- **Poured water you couldn't pick back up.** In third person the bucket's reach was measured
+  from the camera behind you, so a puddle at your feet was out of reach. Reach is now measured
+  from the player in both views, and a bucket scoops up whatever is left of a pool (a bottle takes
+  a quarter of a bucket).
+- **Lava only burned at its surface.** Sinking into a crater's lava lake or a deep flow stopped
+  burning once your feet were a few metres under. Now any lava between the ground it lies on and
+  its surface burns, and faster the deeper you are: 24 health a second up to the knees, 36 up to
+  the chest and 48 with your head under. Poured lava counts at your feet, chest and head too.
+  Tunnels and caves under lava are still safe.
+
+### Water and lava
+
+- Poured fluid now keeps its amount instead of copying itself from a source. A bucket spreads out
+  into a thin sheet over flat ground (down to a sixteenth of a block for water, a quarter for
+  lava), fills holes, and runs downhill.
+- Two pools that touch flow into each other until they're level and become one pool.
+- Water that reaches the river or a lake joins it and raises it a little.
+- Scooping from a pool takes from it; scooping from the river, a lake or a crater lowers it a
+  little each time (craters slowly refill from below).
+- Water meeting a lot of lava turns it to obsidian, a little lava to stone, and some water boils
+  off as steam.
+- Animals walk through ankle-deep water and only avoid deeper water and lava.
+
+### Weather
+
+- Rain fills the river and the lakes and sunshine dries them, so they rise over their banks after
+  a storm and shrink to narrow streams in a dry spell. Under grey skies they drift back to normal.
+- Rain leaves puddles on flat open ground that shine and ripple, and dry up again in the sun.
+- Poured water out in the open fills up in the rain and slowly dries in the sun.
+
+### Metalwork
+
+- **Smelter, bellows and anvil**, each with its own model. The smelter melts ore in a clay
+  crucible over a few seconds while you do other things; finished metal is handed over if you're
+  close, otherwise it waits in the smelter until you right-click it. Up to four jobs queue per
+  smelter, shown in a list on screen.
+- **Casting**: molten metal goes into clay moulds (kept) for ingots, plates or rods, and the
+  crucible comes back.
+- **Forging**: at an anvil with a smelter close by, the smith's hammer turns ingots into plates and
+  rods, and those into tools, armour, nails, chain and gears.
+- **New metals**: steel (iron and coal), rose gold (copper and gold) and titanium (needs bellows),
+  with their own tools and armour. Titanium tools are the fastest and its armour the strongest.
+- **Metal blocks**: steel, titanium and rose gold blocks, iron bars, steel grate, treadplate,
+  titanium plating, rose gold tiles, copper panels, chain, riveted iron and gear blocks.
+
+### Ores
+
+- **Iron veins.** Iron ore now runs through the rock in long winding veins instead of scattered
+  specks, with a halo of rusty granite around them.
+- **Titanium ore**: rare, deep, pale lilac flecks. It needs an iron pickaxe or better and drops raw
+  titanium.
+
+### Looks
+
+- **Item pictures** are drawn properly: tools of every metal, ingots, plates, rods, raw ore,
+  crucibles, moulds, armour, coal, gems, buckets and more, instead of coloured squares and letters.
+- **Woods** each have their own planks (narrow birch boards, vertical spruce, herringbone maple,
+  chevron cherry, parquet jungle wood, slatted palm and more), their own bark and their own leaf
+  shapes.
+- **Stones** each have their own brick and polished patterns (large granite blocks, small diorite
+  bricks, basket-weave andesite, deepslate tiles, irregular tuff and blackstone, long limestone).
+
+### Tests
+
+- New checks for melting, casting and forging, scooping poured water back up, and rain and sun
+  moving the river.
+
 ## Round 8: biomes, woods, caves and 270 new items
 
 ### Fixes

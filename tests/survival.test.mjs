@@ -64,6 +64,25 @@ R.lava = await log('lava', async () => {
   await waitGame(2.5);
   return { flows: fl.length, inside, damageWhileBurning: after, burningLeft: +G.burning().toFixed(1) };
 });
+// 2b. sinking right into a crater's lava lake burns too, and faster than at the surface
+R.lavaDeep = await log('lavaDeep', async () => {
+  const G = window.__game,
+    v = G.terrain().volcanoes[0],
+    feet = Math.max(G.terrain().surfaceHeight(v.x + 1, v.z) + 0.2, v.lavaY - 2.5);
+  heal();
+  put(v.x + 1, feet, v.z);
+  G.player.velocity.set(0, 0, 0);
+  await waitGame(0.1);
+  const depth = +G.player.lavaDepth.toFixed(2),
+    inLava = G.player.inLava;
+  await waitGame(1);
+  const hpLost = Math.round(G.MAX_HEALTH - G.stats.health);
+  const f = flatSpot();
+  put(f.x, f.y, f.z);
+  await waitGame(4);
+  heal();
+  return { depth, inLava, hpLost };
+});
 await page.evaluate(() => {
   const G = window.__game,
     pt = G.lavaFlows[0].pts[2];
@@ -132,6 +151,29 @@ await page.evaluate(() => {
 });
 await page.waitForTimeout(400);
 await shot('furnace');
+
+// 4b. metalwork: melt iron ore at a smelter (it takes time), cast ingots in a mould, forge a plate
+R.metal = await log('metal', async () => {
+  const G = window.__game,
+    R = G.RECIPES,
+    p = G.player.position;
+  const fx = Math.floor(p.x) - 2,
+    fz = Math.floor(p.z),
+    fy = Math.floor(G.groundAt(fx + 0.5, fz + 0.5).point.y);
+  G.placeBlock('smelter', fx, fy, fz);
+  G.placeBlock('anvil', fx, fy, fz + 2);
+  for (const [id, n] of [['crucible', 1], ['iron_ore', 3], ['log', 2], ['ingot_mould', 1], ['smith_hammer', 1]]) game.addItem(id, n);
+  G.craft(R.find((r) => r.out === 'molten_iron' && r.in.iron_ore), false);
+  const straightAway = count('molten_iron');
+  await waitGame(9);
+  const molten = count('molten_iron');
+  G.craft(R.find((r) => r.out === 'iron_ingot' && r.in.molten_iron), false);
+  const ingots = count('iron_ingot'),
+    mould = count('ingot_mould'),
+    crucible = count('crucible');
+  G.craft(R.find((r) => r.out === 'iron_plate' && r.in.iron_ingot), false);
+  return { straightAway, molten, ingots, mould, crucible, plates: count('iron_plate'), hammer: count('smith_hammer') };
+});
 
 // 5. shapes: build one of each, then walk up a slope
 R.shapes = await log('shapes', async () => {
@@ -220,8 +262,30 @@ R.liquids = await log('liquids', async () => {
   G.addSource('lava', x + 3, y + 1, z);
   await waitGame(3);
   const lava = [...G.fluids.values()].filter((c) => c.type === 'lava').length;
-  const stone = [...G.blocks.values()].filter((b) => b.type === 'stone' && Math.abs(b.x - x) < 8 && Math.abs(b.z - z) < 8).length;
+  const stone = [...G.blocks.values()].filter((b) => (b.type === 'stone' || b.type === 'obsidian') && Math.abs(b.x - x) < 8 && Math.abs(b.z - z) < 8).length;
   return { water, lava, stone };
+});
+// 5d. scooping: a bucket picks poured water back up; a bucket from the river lowers it a little, rain raises it
+R.scoop = await log('scoop', async () => {
+  const G = window.__game,
+    f = flatSpot();
+  put(f.x, f.y, f.z);
+  const x = Math.floor(f.x) + 3,
+    z = Math.floor(f.z),
+    y = Math.floor(G.groundAt(x + 0.5, z + 0.5).point.y) + 1;
+  G.pourFluid('water', x, y, z, 3);
+  await waitGame(1);
+  const pool = [...G.fluids.values()].filter((c) => c.type === 'water' && Math.abs(c.x - x) < 6 && Math.abs(c.z - z) < 6);
+  const before = pool.reduce((t, c) => t + c.m, 0);
+  const got = G.takeFluid(pool[0], 1);
+  const T = G.terrain();
+  T.live.sea = 0;
+  G.updateHydro(60, 1, 0);
+  const wet = T.live.sea;
+  G.updateHydro(300, 0, 1);
+  const dry = T.live.sea;
+  T.live.sea = 0;
+  return { before: +before.toFixed(2), got: +got.toFixed(2), wet: +wet.toFixed(2), dry: +dry.toFixed(2) };
 });
 R.spawn = await log('spawn', async () => {
   const G = window.__game,
@@ -317,6 +381,7 @@ R.menu = await log('menu', async () => {
 
 check('starting kit has food and water', R.start?.kit?.length >= 4, R.start);
 check('falling onto a slope hurts', R.slopeFall?.drop8 > 0 && R.slopeFall.drop30 > R.slopeFall.drop8, R.slopeFall);
+check('sinking into lava burns, faster deeper down', R.lavaDeep?.inLava && R.lavaDeep.depth > 1 && R.lavaDeep.hpLost > 30, R.lavaDeep);
 check('lava flows burn', R.lava?.flows > 0 && R.lava.inside?.burning > 0 && R.lava.damageWhileBurning > 0, R.lava);
 check('drinking restores thirst', R.drink?.thirst > 50, R.drink);
 check('smelting iron and an iron pickaxe', R.iron?.ingots > 0 && R.iron.ironPick === 1, R.iron);
@@ -325,8 +390,13 @@ check('every shape has rounded edges', R.shapes?.tris && Object.values(R.shapes.
 check('furnace makes smooth stone and glass', R.iron?.smooth > 0 && R.iron.glass > 0, R.iron);
 check('dirt places as a shaped block', R.dirt?.added === 1 && R.dirt.placed.includes('slope'), R.dirt);
 check('no water under hills', R.dryCaves?.hill?.water < -100 && R.dryCaves.sea?.water > 0, R.dryCaves);
+check('a smelter melts ore over time', R.metal?.straightAway === 0 && R.metal.molten === 1, R.metal);
+check('casting gives ingots, keeps the mould, returns the crucible', R.metal?.ingots >= 3 && R.metal.mould === 1 && R.metal.crucible === 1, R.metal);
+check('forging a plate keeps the hammer', R.metal?.plates === 1 && R.metal.hammer === 1, R.metal);
+check('a bucket scoops poured water back up', R.scoop?.got > 0.9, R.scoop);
+check('rain fills the river and sun dries it', R.scoop?.wet > 0.3 && R.scoop.dry < 0, R.scoop);
 check('poured water spreads', R.liquids?.water > 5, R.liquids);
-check('water hardens lava into stone', R.liquids?.stone > 0, R.liquids);
+check('water hardens lava into stone or obsidian', R.liquids?.stone > 0, R.liquids);
 check('creative spawner makes an animal', R.spawn?.added === 1 && R.spawn.last === 'cow', R.spawn);
 check('a buried player is lifted out', R.dirt?.feetAboveGround > -0.5, R.dirt);
 check('bears chase and bite', R.bear?.hpLost > 0, R.bear);

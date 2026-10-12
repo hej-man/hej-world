@@ -1,4 +1,4 @@
-// Behaviour: animal AI (steering round walls, giving up, keeping out of poured water), swimming
+// Behaviour: animal AI (steering round walls, giving up, keeping out of poured lava), swimming
 // (floating, the crawl and treading water) and natural weather changes.
 import { installHelpers, openGame } from './harness.mjs';
 
@@ -66,7 +66,7 @@ R.tower = await log('tower', async () => {
   return res;
 });
 
-// 3. a cow walking toward poured water stops at its edge
+// 3. a cow walking toward poured lava stops at its edge (a thin film of water it would just walk through)
 R.water = await log('water', async () => {
   const G = window.__game,
     s = flatSpot(),
@@ -75,14 +75,14 @@ R.water = await log('water', async () => {
   put(x + 0.5, s.y, z - 10);
   for (let up = 0; up < 3; up++) {
     const g = G.groundAt(x + 0.5, z + 12.5);
-    if (G.addSource('water', x, Math.floor(g.point.y + 0.3) + up, z + 12)) break;
+    if (G.addSource('lava', x, Math.floor(g.point.y + 0.3) + up, z + 12)) break;
   }
   await waitGame(3);
   const c = G.spawnAnimal('cow', x + 0.5, z + 0.5);
   let entered = false;
   for (let i = 0; i < 24; i++) {
     c.mode = 'walk';
-    c.angle = Math.PI; // walk toward +z, at the water
+    c.angle = Math.PI; // walk toward +z, at the lava
     c.timer = 5;
     await waitGame(0.5);
     if (G.fluidAt(c.x, c.y + 0.2, c.z)) entered = true;
@@ -263,7 +263,7 @@ R.overLava = await log('overLava', async () => {
 
 check('a wolf goes around a wall to bite', R.wall?.bitten, R.wall);
 check('a wolf gives up on a player it cannot reach', R.tower?.chased && !R.tower.hurt && R.tower.calm > 0, R.tower);
-check('a cow stays out of poured water', R.water && !R.water.entered && R.water.cells > 0, R.water);
+check('a cow stays out of poured lava', R.water && !R.water.entered && R.water.cells > 0, R.water);
 check(
   'you float with your head out of the water',
   R.swim && R.swim.floatDepth > 1.25 && R.swim.floatDepth < 1.7 && R.swim.treadHead > -0.05,

@@ -77,13 +77,14 @@ right to craft it once, shift-click to craft as many as you can.
 ## Survival
 
 What's new in each round is in [CHANGELOG.md](CHANGELOG.md): biomes, ten woods, 200 new blocks,
-caves and more.
+caves, metalwork, flowing water and more.
 
 - **Breaking.** Hold the left mouse button on something within reach (5.5 m). Trees give logs,
   sticks and sometimes apples; bushes give berries and a stick; boulders give stone. The ground
   can be dug: dirt and sand by hand (faster with a shovel), stone and cave crystal only with a
-  pickaxe. Iron ore (orange nuggets with metal flecks in dark rock in cliffs and caves, and rusty
-  boulders studded with orange nuggets) needs a stone pickaxe or better. Axes chop wood faster;
+  pickaxe. Iron ore runs through the rock in long winding veins, with a band of rusty granite
+  around them, and studs rusty boulders; it needs a stone pickaxe or better. Titanium ore (pale
+  lilac flecks, rare and deep) needs an iron pickaxe or better. Axes chop wood faster;
   iron tools are the fastest. Placed blocks break back into their item.
 - **Building.** Right-click with a block (dirt, sand, log, planks, stone, stone bricks, smooth
   stone, glass, wool, workbench, campfire, furnace) to place it on the face you aim at; a white
@@ -133,7 +134,7 @@ caves and more.
   own ground, trees, plants and animals (the table is in CHANGELOG.md).
 - **Caves** are huge: open caverns with pillars and long winding tunnels reach down near the
   bedrock under hills, with pockets of granite, marble, tuff and other stones, and coal, copper,
-  iron and gold ore.
+  gold and titanium ore and veins of iron.
 - **Animals.** Cows, pigs, sheep and chickens graze in meadows; deer and rabbits live in forests
   and fields. Deer and rabbits run when you get close, others run once hit. Predators attack:
   wolves hunt in packs of two to four, bears roam the forests and hit very hard, boars charge if
@@ -151,18 +152,31 @@ caves and more.
   green. Purify murky water at a water filter (4 planks, 3 sand, 1 glass at a workbench), boil it
   at a campfire (with a stick) or a furnace (three at a time with a log). Falls of more
   than about 5 m hurt, also when you land on a slope. Lava burns: standing in it costs 24 health
-  a second, and you keep burning for a few seconds after you step out unless you jump into water.
+  a second (up to 48 when you sink right in), and you keep burning for a few seconds after you step out unless you jump into water.
   Mana refills over time and powers the crystal wand's bolts. When you die you respawn at the
   cave and keep your inventory.
+- **Metalwork.** A smelter (clay bricks, a furnace and iron at a workbench) melts ore in a clay
+  crucible: it takes a few seconds, works while you do other things and hands you the molten metal
+  when it's done (or keeps it for you if you've walked off; right-click it to collect). Pour the
+  molten metal into a clay mould at the smelter for ingots, plates or rods, and get the crucible
+  back. At an anvil next to a smelter, a smith's hammer forges ingots into plates and rods, and
+  those into tools, armour, nails, chain, gears and metal blocks. Steel (iron and coal) and rose
+  gold (copper and gold) are alloys melted together in the crucible. Titanium only melts with
+  bellows next to the smelter, and makes the best tools and armour. The crafting page shows which
+  stations a recipe needs, what it keeps and how long it takes.
 - **Water and lava flow.** Right-click water (or poured water) with a bucket to fill it, or a
-  lava flow or crater; right-click with a full bucket to pour it. Poured fluid falls and spreads
-  cell by cell (lava slower and not as far) and drains away when its source is gone. Dig a hole
-  next to the sea or a lake and the water runs in. Where water meets lava, the lava turns to
-  stone. Caves under land stay dry.
+  lava flow or crater; right-click with a full bucket to pour it. Poured fluid keeps its amount:
+  a bucket spreads out into a thin sheet over flat ground, fills a hole, and runs downhill into
+  the river or a lake (raising it a little). Lava is thicker and doesn't spread as far. Two pools
+  that touch even out into one. Scoop a pool back up with the bucket; scooping from the river, a
+  lake or a crater lowers it a little. Where water meets lava, the lava turns to obsidian (a lot
+  of it) or stone (a little). Caves under land stay dry.
 - **Weather** changes on its own, one step at a time: clear skies cloud over, rain only starts
   once the clouds have gathered, a thunderstorm eases back to rain, and each change builds up over
-  a minute or so. It snows instead on high mountains. Rain darkens and wets the ground. In
-  creative mode K steps through the weather by hand.
+  a minute or so. It snows instead on high mountains. Rain darkens and wets the ground, leaves
+  puddles on flat ground that dry up in the sun, fills the river and the lakes and tops up poured
+  water left in the open; a long dry spell shrinks the river between dry banks and slowly dries
+  pools. In creative mode K steps through the weather by hand.
 - **Swimming.** In deep water you float with your head out; Space swims up and Shift dives. You
   swim a front crawl when moving and tread water when still.
 - **Creative mode** (G): fly, no damage or hunger, instant breaking without tools, placing
@@ -306,10 +320,10 @@ Tests are plain scripts in `tests/` that drive the game through `window.__game` 
 | `src/state.js`                | Shared game state that several modules change (view, mode, selected slot…)                             |
 | `src/noise.js`                | Noise, random numbers and small maths helpers                                                          |
 | `src/terrain/`                | Terrain shape and caves (`generate`), biomes, meshing (`mesh`), textures, terrain shader (`material`)  |
-| `src/world/`                  | Chunks and streaming (`world`), raycasts and digging (`query`), water, volcanoes, trees, grass, blocks (`blocks`, the catalogue in `block-catalog`, textures in `block-textures`) |
+| `src/world/`                  | Chunks and streaming (`world`), raycasts and digging (`query`), water, poured fluids (`fluids`), rising and falling rivers (`hydro`), volcanoes, trees, grass, blocks (`blocks`, the catalogue in `block-catalog`, textures in `block-textures`) |
 | `src/render/scene.js`         | Renderer, camera, sky, lights, shadows, fog                                                            |
 | `src/player/`                 | Character model, physics, animation, camera, health/hunger/thirst, breaking and placing                |
-| `src/inventory/`              | Inventory UI, item and recipe definitions (`items`, `catalog-items`), drawn icons                      |
+| `src/inventory/`              | Inventory UI, item and recipe definitions (`items`, `catalog-items`, `metalwork`), drawn icons (`icons`) |
 | `src/animals/`                | Animals and predators                                                                                  |
 | `src/effects/`                | Underwater, weather, sound                                                                             |
 | `src/ui/`                     | HUD, keyboard and mouse input, menus                                                                   |
