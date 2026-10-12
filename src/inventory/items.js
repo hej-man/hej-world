@@ -1,32 +1,27 @@
 import { state } from '../state.js';
 import { FOOT_OFFSET, player } from '../player/character.js';
-import { ITEMS, addItem, countItem, fillSlotEl, registerItem, removeItem, renderInventory, showTooltip, slots, tooltipEl } from './inventory.js';
+import { ITEMS, addItem, countItem, fillSlotEl, inventoryOpen, registerItem, removeItem, renderInventory, showTooltip, slots, tooltipEl } from './inventory.js';
 import { BLOCKS, blocks } from '../world/blocks.js';
 import { SPECIES } from '../animals/animals.js';
 import { BOLT_COST } from '../player/survival.js';
 import { toast } from '../ui/hud.js';
 import { TAGS, defineCatalogItems } from './catalog-items.js';
+import { defineMetalwork } from './metalwork.js';
 
 // ---------------------------------------------------------------------------
 // Items and recipes
 // ---------------------------------------------------------------------------
-const SWATCH = {
-  stick: 'linear-gradient(45deg, transparent 40%, #9a6a3a 40%, #9a6a3a 60%, transparent 60%)',
-  leather: 'linear-gradient(160deg, #a8703c, #6e4421)',
-  iron_ore: 'radial-gradient(circle at 30% 35%, #ff9a4a 0 4px, transparent 5px), radial-gradient(circle at 68% 60%, #e8772e 0 4px, transparent 5px), radial-gradient(circle at 45% 75%, #ffb070 0 3px, transparent 4px), radial-gradient(circle at 72% 25%, #d86a28 0 3px, transparent 4px), radial-gradient(circle at 35% 30%, #8a8680, #55524e)',
-  iron_ingot: 'linear-gradient(160deg, #f1f2f4 0%, #b9bcc2 45%, #8b8f96 100%)',
-};
 export function defineItems() {
   // look: an emoji, or a CSS background for a swatch; blocks are drawn as little cubes instead
   const reg = (id, name, look, extra = {}) =>
     registerItem({ id, name, ...(look == null ? {} : look.length > 3 ? { color: look } : { icon: look }), ...extra });
-  reg('stick', 'Stick', SWATCH.stick, { flat: true });
+  reg('stick', 'Stick', null, { draw: 'stick' });
   for (const id of ['stone', 'dirt', 'sand', 'stone_bricks', 'smooth_stone', 'glass']) reg(id, BLOCKS[id].name, null, { place: id, block: true });
-  reg('crystal', 'Crystal', '💎');
+  reg('crystal', 'Crystal', null, { draw: 'gem:crystal' });
   reg('workbench', 'Workbench', '🛠️', { place: 'workbench' });
   reg('furnace', 'Furnace', '🧱', { place: 'furnace' });
-  reg('iron_ore', 'Iron ore', SWATCH.iron_ore);
-  reg('iron_ingot', 'Iron ingot', SWATCH.iron_ingot);
+  reg('iron_ore', 'Iron ore', null, { draw: 'ore:iron' });
+  reg('iron_ingot', 'Iron ingot', null, { draw: 'ingot:iron' });
   reg('campfire', 'Campfire', '🔥', { place: 'campfire' });
   reg('apple', 'Apple', '🍎', { food: 15, drink: 6 });
   reg('berries', 'Berries', '🫐', { food: 8, drink: 4 });
@@ -39,12 +34,12 @@ export function defineItems() {
   reg('purifier', 'Water filter', '⚗️', { place: 'purifier' });
   reg('silk', 'Spider silk', '🕸️');
   reg('feather', 'Feather', '🪶');
-  reg('leather', 'Leather', SWATCH.leather);
+  reg('leather', 'Leather', null, { draw: 'leather' });
   for (const [mat, Mat, tier, badge] of [['wood', 'Wooden', 1, '#c08a4c'], ['stone', 'Stone', 2, '#9a9893'], ['iron', 'Iron', 3, '#e4e6ea']]) {
-    reg(`${mat}_pickaxe`, `${Mat} pickaxe`, '⛏️', { tool: 'pickaxe', tier, badge, maxStack: 1, damage: 2 + tier });
-    reg(`${mat}_axe`, `${Mat} axe`, '🪓', { tool: 'axe', tier, badge, maxStack: 1, damage: 3 + tier });
-    reg(`${mat}_shovel`, `${Mat} shovel`, '🪏', { tool: 'shovel', tier, badge, maxStack: 1, damage: 2 + tier });
-    reg(`${mat}_sword`, `${Mat} sword`, '🗡️', { tool: 'sword', tier, badge, maxStack: 1, damage: 4 + tier * 2 });
+    reg(`${mat}_pickaxe`, `${Mat} pickaxe`, null, { draw: `tool:pickaxe:${mat}`, tool: 'pickaxe', tier, badge, maxStack: 1, damage: 2 + tier });
+    reg(`${mat}_axe`, `${Mat} axe`, null, { draw: `tool:axe:${mat}`, tool: 'axe', tier, badge, maxStack: 1, damage: 3 + tier });
+    reg(`${mat}_shovel`, `${Mat} shovel`, null, { draw: `tool:shovel:${mat}`, tool: 'shovel', tier, badge, maxStack: 1, damage: 2 + tier });
+    reg(`${mat}_sword`, `${Mat} sword`, null, { draw: `tool:sword:${mat}`, tool: 'sword', tier, badge, maxStack: 1, damage: 4 + tier * 2 });
   }
   reg('bucket', 'Bucket', '🪣', { bucket: true, maxStack: 1 });
   reg('water_bucket', 'Water bucket', '🌊', { fluid: 'water', maxStack: 1 });
@@ -56,19 +51,29 @@ export function defineItems() {
   reg('crystal_wand', 'Crystal wand', '🪄', { wand: true, maxStack: 1 });
   reg('mana_tonic', 'Mana tonic', '🧪', { mana: 50 });
   reg('bandage', 'Bandage', '🩹', { heal: 30 });
-  reg('leather_armour', 'Leather armour', '🦺', { armour: 0.35, maxStack: 1 });
-  reg('iron_armour', 'Iron armour', '🛡️', { armour: 0.6, maxStack: 1 });
+  reg('leather_armour', 'Leather armour', null, { draw: 'armour:leather', armour: 0.35, maxStack: 1 });
+  reg('iron_armour', 'Iron armour', null, { draw: 'armour:iron', armour: 0.6, maxStack: 1 });
   defineCatalogItems(reg, RECIPES);
+  defineMetalwork(reg, RECIPES);
 }
 
 export function itemHint(def) {
+  if (def.hint) return def.hint;
+  if (def.id === 'crucible') return 'Melt metal in it at a smelter';
+  if (def.id.endsWith('_mould')) return 'Cast molten metal in it at a smelter (it is kept)';
+  if (def.id === 'smith_hammer') return 'Forge metal at an anvil next to a smelter (it is kept)';
+  if (def.id === 'tongs') return 'Needed at the anvil for chain (it is kept)';
+  if (def.id === 'smelter') return 'Right click to place. Melts ore into molten metal, slowly; titanium needs bellows next to it';
+  if (def.id === 'anvil') return 'Right click to place. Forge plates, rods, tools and armour on it, next to a smelter';
+  if (def.id === 'bellows') return 'Right click to place next to a smelter: hot enough to melt titanium';
+  if (def.id === 'raw_titanium') return 'Melt it at a smelter with bellows';
   if (def.place) return BLOCKS[def.place]?.station ? 'Right click to place' : 'Right click to place · B changes the shape (block, slab, slope, stairs, prism, pillar)';
   if (def.food) return `Right click to eat (+${def.food} hunger${def.drink ? `, +${def.drink} thirst` : ''})`;
   if (def.dirty) return `Unpurified: drinking it makes you sick. Purify it at a water filter, or boil it at a campfire or furnace`;
   if (def.drink) return `Right click to drink (+${def.drink} thirst)`;
   if (def.id === 'purifier') return 'Place it, then turn murky water into clean water next to it';
   if (def.id === 'bottle') return 'Right click on water to fill it';
-  if (def.id === 'iron_ore') return 'Smelt it at a furnace';
+  if (def.id === 'iron_ore') return 'Smelt it at a furnace, or melt it at a smelter';
   if (def.bucket) return 'Right click on water or lava (or poured fluid) to scoop it up';
   if (def.fluid) return `Right click to pour the ${def.fluid}; it flows like a liquid`;
   if (def.spawn) return `Right click on the ground to spawn a ${SPECIES[def.spawn].name.toLowerCase()}`;
@@ -128,14 +133,16 @@ function roomFor(id) {
   return slots.reduce((n, s) => n + (!s ? max : s.id === id ? max - s.count : 0), 0);
 }
 
-function stationsNear() {
-  const near = new Set();
-  const fx = player.position.x, fy = player.position.y - FOOT_OFFSET, fz = player.position.z;
+// Stations within reach (4.5 m): which kinds, and the blocks themselves.
+const nearStations = () => {
+  const fx = player.position.x, fy = player.position.y - FOOT_OFFSET, fz = player.position.z, out = [];
   for (const b of blocks.values()) {
-    if (BLOCKS[b.type].station && Math.hypot(b.x + 0.5 - fx, b.y + 0.5 - fy, b.z + 0.5 - fz) < 4.5) near.add(b.type);
+    if (BLOCKS[b.type].station && Math.hypot(b.x + 0.5 - fx, b.y + 0.5 - fy, b.z + 0.5 - fz) < 4.5) out.push(b);
   }
-  return near;
-}
+  return out;
+};
+function stationsNear() { return new Set(nearStations().map((b) => b.type)); }
+const atList = (r) => (!r.at ? [] : Array.isArray(r.at) ? r.at : [r.at]);
 
 // Ingredients: an item id, or a group of items such as '#planks' (any item tagged 'planks').
 const tagged = (key) => Object.keys(ITEMS).filter((id) => ITEMS[id].tags?.includes(key.slice(1)));
@@ -150,8 +157,11 @@ function take(key, n) {
     if (!n) break;
   }
 }
+// `at`: the station (or stations) you need to be near; `keep`: items you need but don't use up
+// (moulds, the smith's hammer); `time`: seconds the station works on it (see jobs below).
 function canCraft(r, near) {
-  if (r.at && !near.has(r.at)) return false;
+  if (atList(r).some((a) => !near.has(a))) return false;
+  if ((r.keep || []).some((id) => !countItem(id))) return false;
   return Object.entries(r.in).every(([id, n]) => have(id) >= n);
 }
 
@@ -160,14 +170,79 @@ export function craft(r, all) {
   let made = 0;
   do {
     if (!canCraft(r, near)) break;
+    if (r.time) { if (!startJob(r)) break; made++; continue; }
     if (roomFor(r.out) < (r.n || 1)) { toast('Inventory full'); break; }
     for (const [id, n] of Object.entries(r.in)) take(id, n);
     addItem(r.out, r.n || 1);
     for (const [id, n] of Object.entries(r.also || {})) addItem(id, n);
     made++;
   } while (all && made < 100);
-  if (made) toast(`Crafted ${made * (r.n || 1)} ${ITEMS[r.out].name}`);
+  if (made && !r.time) toast(`Crafted ${made * (r.n || 1)} ${ITEMS[r.out].name}`);
   renderInventory();
+}
+
+// Jobs: things a station works on over time (melting at a smelter). The ingredients are taken when
+// the job starts; each station works through up to four, one after another, and hands over what it
+// made when it's done if you're close (otherwise it keeps it until you come and right click it).
+const JOB_QUEUE = 4;
+export const workingStations = new Set();   // station blocks with jobs or finished things waiting
+function startJob(r) {
+  const fx = player.position.x, fz = player.position.z, kind = atList(r)[0];
+  const b = nearStations().filter((s) => s.type === kind).sort((a, c) => Math.hypot(a.x - fx, a.z - fz) - Math.hypot(c.x - fx, c.z - fz))[0];
+  if (!b) return false;
+  b.jobs ||= []; b.ready ||= [];
+  if (b.jobs.length >= JOB_QUEUE) { toast(`The ${BLOCKS[kind].name.toLowerCase()} is busy (${JOB_QUEUE} things queued)`); return false; }
+  for (const [id, n] of Object.entries(r.in)) take(id, n);
+  b.jobs.push({ r, left: r.time });
+  workingStations.add(b);
+  toast(`${BLOCKS[kind].name}: ${ITEMS[r.out].name.toLowerCase()} in ${b.jobs.reduce((t, j) => t + j.left, 0).toFixed(0)} s`);
+  return true;
+}
+// Gives what a station has finished, as far as it fits. Returns how many things were handed over.
+export function collectStation(b) {
+  let n = 0;
+  while (b.ready?.length) {
+    const r = b.ready[0];
+    if (roomFor(r.out) < (r.n || 1)) { toast('Inventory full'); break; }
+    b.ready.shift();
+    addItem(r.out, r.n || 1);
+    for (const [id, k] of Object.entries(r.also || {})) addItem(id, k);
+    toast(`+${r.n || 1} ${ITEMS[r.out].name}`);
+    n++;
+  }
+  if (!b.jobs?.length && !b.ready?.length) workingStations.delete(b);
+  renderInventory();
+  return n;
+}
+let jobsShownT = 0;
+export function updateJobs(dt) {
+  if (!workingStations.size) return;
+  const fx = player.position.x, fz = player.position.z;
+  for (const b of [...workingStations]) {
+    if (!blocks.has(`${b.x},${b.y},${b.z}`)) { workingStations.delete(b); continue; } // broken: the work is lost
+    const j = b.jobs[0];
+    if (j && (j.left -= dt) <= 0) {
+      b.jobs.shift();
+      b.ready.push(j.r);
+      if (Math.hypot(b.x + 0.5 - fx, b.z + 0.5 - fz) < 8) collectStation(b);
+      else toast(`${ITEMS[j.r.out].name} is ready at the ${BLOCKS[b.type].name.toLowerCase()}`);
+    }
+    if (!b.jobs.length && !b.ready.length) workingStations.delete(b);
+  }
+  if (inventoryOpen && (jobsShownT -= dt) <= 0) { jobsShownT = 0.5; showJobs(); }
+}
+// The crafting page's line about what nearby stations are working on.
+function showJobs() {
+  const el = document.getElementById('jobs');
+  if (!el) return;
+  const near = nearStations().filter((b) => b.jobs?.length || b.ready?.length);
+  el.style.display = near.length ? '' : 'none';
+  el.innerHTML = near.map((b) => {
+    const j = b.jobs[0], more = b.jobs.length - 1;
+    const now = j ? `${ITEMS[j.r.out].name} ${Math.round((1 - j.left / j.r.time) * 100)}%${more > 0 ? `, ${more} more queued` : ''}` : '';
+    const wait = b.ready.length ? `${b.ready.length} ready: right click it to take` : '';
+    return `<div><b>${BLOCKS[b.type].name}:</b> ${[now, wait].filter(Boolean).join(' · ')}</div>`;
+  }).join('');
 }
 
 // Kinds of item, for the filters in the crafting and item lists and for sorting the backpack.
@@ -214,10 +289,13 @@ export function renderCrafting() {
     fillSlotEl(iconEl, { id: r.out, count: r.n || 1 });
     iconEl.className = 'slot';
     const parts = Object.entries(r.in).map(([id, n]) => `<span class="${have(id) < n ? 'miss' : ''}">${n} ${ingredientName(id)}</span>`);
-    if (r.at) parts.push(`<span class="${near.has(r.at) ? '' : 'miss'}">at a ${BLOCKS[r.at].name.toLowerCase()}</span>`);
+    for (const a of atList(r)) parts.push(`<span class="${near.has(a) ? '' : 'miss'}">at ${/^[aeiou]/i.test(BLOCKS[a].name) ? 'an' : 'a'} ${BLOCKS[a].name.toLowerCase()}</span>`);
+    for (const id of r.keep || []) parts.push(`<span class="${countItem(id) ? '' : 'miss'}">${ITEMS[id].name.toLowerCase()} (kept)</span>`);
+    if (r.time) parts.push(`<span>${r.time} s</span>`);
     rows += `<div class="recipe${ok ? ' ok' : ''}" data-r="${i}">${iconEl.outerHTML}<div><b>${ITEMS[r.out].name}${r.n > 1 ? ' ×' + r.n : ''}</b><small>${parts.join(' · ')}</small></div></div>`;
   });
   recipesEl.innerHTML = rows || '<div class="none-note">No recipes match.</div>';
+  showJobs();
   document.getElementById('craft-count').textContent = ready ? String(ready) : '';
 }
 // Creative: every item, filtered. The slots are built once and shown or hidden.

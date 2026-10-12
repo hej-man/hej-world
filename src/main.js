@@ -5,8 +5,9 @@ import { lerp } from './noise.js';
 import { texInfo } from './terrain/textures.js';
 import { terrainUniforms } from './terrain/material.js';
 import { VEG_FAR, VEG_NEAR, VIEW_DIST, camera, csm, prepareLighting, renderer, scene, skyDome } from './render/scene.js';
-import { chunkWidth, chunks, generateWorld, isLoaded, loadAll, loadArea, streamChunks, targetGrid, terrainFns, terrainProgress } from './world/world.js';
-import { waterUniforms } from './world/water.js';
+import { chunkWidth, chunks, generateWorld, isLoaded, loadAll, loadArea, streamChunks, targetGrid, terrainFns, terrainProgress, waterGroup } from './world/world.js';
+import { updateWaterLevels, waterUniforms } from './world/water.js';
+import { updateHydro } from './world/hydro.js';
 import { editTerrain, groundAt } from './world/query.js';
 import { lavaAt, lavaFlows, updateVolcanoes } from './world/volcano.js';
 import { VEG_TILE, clouds, vegStats, vegTiles } from './world/vegetation.js';
@@ -15,9 +16,9 @@ import { FOOT_OFFSET, character, findSpawn, player, respawn } from './player/cha
 import { contact, updatePlayer } from './player/physics.js';
 import { viewModel } from './player/animation.js';
 import { ITEMS, addItem, countItem, getSelectedItem, inventoryOpen, registerItem, removeItem, selectSlot, setInventoryOpen, slots } from './inventory/inventory.js';
-import { RECIPES, craft, defineItems } from './inventory/items.js';
+import { RECIPES, craft, defineItems, updateJobs } from './inventory/items.js';
 import { blockGroups, blocks, placeBlock, updateBlocks } from './world/blocks.js';
-import { addSource, fluidAt, fluids, updateFluids } from './world/fluids.js';
+import { addSource, fluidAt, fluids, poolAmount, pourFluid, takeFluid, updateFluids, weatherOnFluids } from './world/fluids.js';
 import { MAX_HEALTH, damagePlayer, renderStats, setCreative, stats, updateStats } from './player/survival.js';
 import { animals, spawnAnimal, spawnAnimals, updateAnimals } from './animals/animals.js';
 import { aimWater, breakTime, doBreak, mouse, pickTarget, updateBolts, updateInteraction, useItem, useWater } from './player/interaction.js';
@@ -114,11 +115,15 @@ function frame() {
   updateBolts(dt);
   updateUnderwater();
   updateWeather(dt);
+  updateHydro(dt, weather.rain, weather.sun);
+  weatherOnFluids(dt, weather.rain, weather.sun);
+  updateWaterLevels(waterGroup);
   viewModel.update(dt);
   updateGrass(camera.position.x, camera.position.z, gameState === 'playing' ? 2 : 1);
   updateBlocks(state.gameTime, dt, camera.position);
   updateVolcanoes(dt, state.gameTime);
   updateFluids(dt, state.gameTime);
+  updateJobs(dt);
   terrainUniforms.uTime.value = state.gameTime;
   waterUniforms.uTime.value = state.gameTime;
   crosshair.style.display = (state.locked || state.testMode) && !inventoryOpen && state.view !== 'front' ? 'block' : 'none';
@@ -162,7 +167,7 @@ requestAnimationFrame(() => setTimeout(() => {
     aimWater: () => aimWater, useWater, grassPatches, MAX_HEALTH, updateGrass,
     loadAll: () => { loadAll(); spawnAnimals(worldStats.seed); }, terrainProgress, vegStats,
     lavaFlows, lavaAt, burning: () => state.burning, setShape: (sh) => { state.buildShape = sh; }, blockGroups, character, breakTime,
-    fluids, addSource, fluidAt,
+    fluids, addSource, fluidAt, pourFluid, takeFluid, poolAmount, updateHydro,
   };
   frame();
 }, 30));

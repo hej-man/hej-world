@@ -11,10 +11,12 @@ import { BLOCKS, blockKey, blocks, placeBlock, removeBlock, voxelRay } from '../
 import { PLANT_KINDS, TREE_KINDS } from '../world/vegetation.js';
 import { BOLT_COST, MAX_HEALTH, drankDirtyWater, stats } from './survival.js';
 import { animals, hurtAnimal, spawnAnimal } from '../animals/animals.js';
-import { addSource, fluidRay, floodFromNature, removeFluid, sourceOf, wakeArea } from '../world/fluids.js';
-import { craterLavaAt, lavaAt } from '../world/volcano.js';
+import { fluidRay, floodFromNature, poolAmount, pourFluid, removeFluid, takeFluid, wakeArea } from '../world/fluids.js';
+import { craterLavaAt, craterOf, lavaAt } from '../world/volcano.js';
+import { takeCraterLava, takeFromNature } from '../world/hydro.js';
 import { cameraUnderwater } from '../effects/underwater.js';
 import { toast } from '../ui/hud.js';
+import { collectStation } from '../inventory/items.js';
 import { gameState } from '../ui/menu.js';
 
 // ---------------------------------------------------------------------------
@@ -42,12 +44,17 @@ function raySphere(o, d, cx, cy, cz, r) {
   return -b - sq >= 0 ? -b - sq : -b + sq >= 0 ? 0 : null;
 }
 
-// What's under the crosshair, within reach of the player: terrain, a block, a tree/bush/boulder, or an animal.
-export function pickTarget() {
+// The aim ray (into _aimO, _aimD) and the stretch of it within reach: in third person it starts
+// level with the player rather than at the camera behind them. Returns t0 (t0 + reach is the end).
+function aimRange() {
   aimRay(_aimO, _aimD);
   _eye.set(player.position.x, player.position.y + EYE_OFFSET, player.position.z);
-  const t0 = Math.max(0, _tv.subVectors(_eye, _aimO).dot(_aimD)); // start level with the player (third person)
-  const t1 = t0 + PLAYER.reach;
+  return Math.max(0, _tv.subVectors(_eye, _aimO).dot(_aimD));
+}
+
+// What's under the crosshair, within reach of the player: terrain, a block, a tree/bush/boulder, or an animal.
+export function pickTarget() {
+  const t0 = aimRange(), t1 = t0 + PLAYER.reach;
   let best = null;
   const th = raycastTerrain(_aimO, _aimD, t0, t1);
   if (th) best = { kind: 'terrain', t: th.distance, point: th.point.clone(), normal: th.face.normal.clone(), hit: th };
@@ -72,8 +79,8 @@ export function pickTarget() {
 // Where the aim ray first meets a water surface (sea or a lake) from above, or null.
 function waterRay(o, d, t0, t1) {
   if (d.y > -1e-3) return null;
-  const T = terrainFns, levels = [WORLD.waterLevel];
-  for (const lk of T.lakes) if (Math.abs(lk.x - o.x) < lk.R * 2 + t1 && Math.abs(lk.z - o.z) < lk.R * 2 + t1) levels.push(lk.level);
+  const T = terrainFns, levels = [WORLD.waterLevel + T.live.sea];
+  for (const lk of T.lakes) if (Math.abs(lk.x - o.x) < lk.R * 2 + t1 && Math.abs(lk.z - o.z) < lk.R * 2 + t1) levels.push(lk.level + lk.offset);
   let best = null;
   for (const L of levels) {
     const t = (L - o.y) / d.y;
@@ -102,6 +109,7 @@ const GROUND = {
   iron: ['iron', 'iron_ore', 'Iron ore'], coal: ['stone', 'coal', 'Coal ore'], copper: ['stone', 'raw_copper', 'Copper ore'], gold: ['iron', 'raw_gold', 'Gold ore'],
   red_sand: ['sand', 'red_sand', 'Red sand'], gravel: ['sand', 'gravel', 'Gravel'], clay: ['dirt', 'clay', 'Clay'], snow: ['sand', 'snow_block', 'Snow'],
   podzol: ['dirt', 'podzol', 'Podzol'], mud: ['dirt', 'mud', 'Mud'], ice: ['ice', 'ice', 'Ice'],
+  titanium: ['iron', 'raw_titanium', 'Titanium ore'],
 };
 const ground = (m) => GROUND[m] || ['stone', m, BLOCKS[m]?.name || m];
 
@@ -133,7 +141,7 @@ function targetName(t) {
 // need the same as their blocks.
 function needTier(t) {
   if (t.kind === 'block') return BLOCKS[t.type].tier || 0;
-  if (t.kind === 'terrain') { materialOf(t); return BLOCKS[t.material]?.tier || 0; }
+  if (t.kind === 'terrain') { materialOf(t); return t.material === 'titanium' ? 3 : BLOCKS[t.material]?.tier || 0; }
   return 0;
 }
 
@@ -213,7 +221,7 @@ export function doBreak(t) {
         if (Math.hypot(tg.x - center.x, tg.y - center.y, tg.z - center.z) < 2.6) harvest(tg);
       }
     }
-    const drop = ground(mat)[1], ore = ['iron', 'coal', 'copper', 'gold'].includes(mat);
+    const drop = ground(mat)[1], ore = ['iron', 'coal', 'copper', 'gold', 'titanium'].includes(mat);
     give(mat === 'crystal' ? [['crystal', 1 + Math.floor(Math.random() * 2)]] : ore ? [[drop, mat === 'coal' ? 1 + Math.floor(Math.random() * 2) : 1], ['stone', Math.random() < 0.5 ? 1 : 0]] : [[drop, 1]]);
   }
 }
@@ -252,6 +260,7 @@ function consumeSelected() {
 export function useWater() {
   const s = slots[state.selectedSlot];
   if (s?.id === 'bottle') {
+    if (aimWater) takeFromNature(aimWater.point.x, aimWater.point.z, 0.25);
     consumeSelected();
     give([['murky_water', 1]]);
     state.useCd = 0.4;
@@ -268,28 +277,55 @@ export function useWater() {
 export function useItem(t) {
   const s = slots[state.selectedSlot], def = s && ITEMS[s.id];
   // water in front of whatever you're aiming at: drink or fill a bottle, unless you're building
-  // an empty bottle fills from poured water too
-  if (s?.id === 'bottle' && !aimWater) { const f = fluidRay(_aimO, _aimD, PLAYER.reach); if (f?.type === 'water' && (!t || f.t < t.t)) { useWater(); return; } }
+  // an empty bottle fills from poured water too (a quarter of a bucket)
+  if (s?.id === 'bottle' && !aimWater) {
+    const t0 = aimRange(), f = fluidRay(_aimO, _aimD, t0, t0 + PLAYER.reach);
+    if (f?.type === 'water' && (!t || f.t < t.t + 0.3)) {
+      if (!f.nat && poolAmount(f.cell) < 0.15) { toast('Too little water here to fill the bottle'); return; }
+      if (f.nat) takeFromNature(f.x + 0.5, f.z + 0.5, 0.25); else takeFluid(f.cell, 0.25);
+      useWater(); return;
+    }
+  }
   if (aimWater && !(def && (def.place || def.bucket || def.fluid || def.spawn || def.food || def.drink || def.heal || def.mana || def.armour || def.wand))) { useWater(); return; }
-  if (t?.kind === 'block' && BLOCKS[t.type].station && !(def && def.place)) { setInventoryOpen(true); return; }
+  if (t?.kind === 'block' && BLOCKS[t.type].station && !(def && def.place)) {
+    // take anything the station finished, then open the crafting page
+    const b = blocks.get(t.key);
+    if (b?.ready?.length && collectStation(b)) { state.useCd = 0.4; return; }
+    setInventoryOpen(true); return;
+  }
   if (!def) return;
   if (def.place) {
     const cell = placementCell(t);
     if (!cell || !cellFree(cell)) return;
-    if (placeBlock(def.place, ...cell, state.buildShape, state.buildTilt)) { consumeSelected(); removeFluid(...cell); wakeArea(cell[0], cell[1], cell[2], 1); }
+    if (placeBlock(def.place, ...cell, state.buildShape, state.buildTilt)) {
+      consumeSelected();
+      // a block put into a pool pushes its water up out of the way
+      const gone = removeFluid(...cell);
+      if (gone) pourFluid(gone.type, cell[0], cell[1] + 1, cell[2], gone.m);
+      wakeArea(cell[0], cell[1], cell[2], 1);
+    }
   } else if (def.bucket) {
-    // scoop up poured fluid, the sea or a lake, or lava from a flow or crater
-    const f = fluidRay(_aimO, _aimD, PLAYER.reach);
+    // scoop up poured fluid (a bucketful out of its pool), the river or a lake (which go down a
+    // little), or lava from a crater (which sinks, then fills back up) or a flow
+    const t0 = aimRange(), f = fluidRay(_aimO, _aimD, t0, t0 + PLAYER.reach);
     let got = null;
-    if (f && (!t || f.t < t.t)) { got = f.type; const src = sourceOf(f); if (src) removeFluid(src.x, src.y, src.z); }
-    else if (aimWater) got = 'water';
-    else if (t?.kind === 'terrain' && (lavaAt(t.point.x, t.point.y - 0.2, t.point.z, 0.3) || t.point.y < craterLavaAt(t.point.x, t.point.z) + 1)) got = 'lava';
+    if (f && (!t || f.t < t.t + 0.3)) {
+      if (f.nat) takeFromNature(f.x + 0.5, f.z + 0.5);
+      else if (poolAmount(f.cell) < 0.6) { toast(`Too little ${f.type} here to fill the bucket`); return; }
+      else takeFluid(f.cell, 1);
+      got = f.type;
+    } else if (aimWater) { got = 'water'; takeFromNature(aimWater.point.x, aimWater.point.z); }
+    else if (t?.kind === 'terrain' && (lavaAt(t.point.x, t.point.y - 0.2, t.point.z, 0.3) || t.point.y < craterLavaAt(t.point.x, t.point.z) + 1)) {
+      got = 'lava';
+      const v = craterOf(t.point.x, t.point.z);
+      if (v && t.point.y < v.lavaY + 1) takeCraterLava(v);
+    }
     if (!got) { toast('Aim at water or lava to fill the bucket'); return; }
     consumeSelected(); addItem(`${got}_bucket`, 1); renderInventory();
     toast(`Filled the bucket with ${got}`); state.useCd = 0.4;
   } else if (def.fluid) {
     const cell = placementCell(t);
-    if (!cell || blocks.has(blockKey(...cell)) || !addSource(def.fluid, ...cell)) return;
+    if (!cell || blocks.has(blockKey(...cell)) || !pourFluid(def.fluid, ...cell)) return;
     consumeSelected(); if (!state.creative) addItem('bucket', 1); renderInventory();
     state.useCd = 0.4;
   } else if (def.spawn) {
@@ -390,9 +426,7 @@ export function updateInteraction(dt) {
   // water between you and what you're aiming at (only from above the surface)
   aimWater = null;
   if (active && !cameraUnderwater) {
-    aimRay(_aimO, _aimD);
-    _eye.set(player.position.x, player.position.y + EYE_OFFSET, player.position.z);
-    const t0 = Math.max(0, _tv.subVectors(_eye, _aimO).dot(_aimD));
+    const t0 = aimRange();
     aimWater = waterRay(_aimO, _aimD, t0, t ? Math.min(t.t, t0 + PLAYER.reach) : t0 + PLAYER.reach);
   }
   const held = slots[state.selectedSlot], def = held && ITEMS[held.id];

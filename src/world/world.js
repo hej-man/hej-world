@@ -31,6 +31,7 @@ export const colliders = [];                   // all chunk collider meshes, for
 export const editedMat = new Map();            // grid index -> 'dirt' | 'sand' | 'stone' for ground the player dug or added
 export let terrainFns = null;
 export const volcanoFx = [];     // { v, lava, light, smoke[] }
+export let waterGroup = null;    // the sea and lake surfaces (water.js)
 
 // Obstacles (tree trunks, boulders) in a spatial hash for fast collision
 export const CELL = 8;
@@ -229,7 +230,8 @@ export function generateWorld(seed) {
   terrainUniforms.uVolc.value.forEach((u) => u.set(-1e4, -1e4, 1, 0));
   terrainFns.volcanoes.slice(0, 4).forEach((v, i) => terrainUniforms.uVolc.value[i].set(v.x, v.z, v.crater, v.lavaY));
 
-  world.add(makeWater());
+  waterGroup = makeWater();
+  world.add(waterGroup);
   // these wait for the terrain under them (lava flows first: plants avoid them)
   addVolcanoEffects();
   const counts = placeVegetation(seed);

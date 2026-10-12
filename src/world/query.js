@@ -47,7 +47,7 @@ export function naturalMaterial(x, y, z, ny = 1) {
   const surf = T.surfaceHeight(x, z), b = T.biomeAt(x, z);
   const rock = () => T.oreKind(x, y, z)?.[0] || (b === 'mesa' && y > surf - 14 ? 'terracotta' : b === 'desert' && y > surf - 14 ? 'sandstone' : T.stoneAt(x, y, z));
   if (y < surf - 3.5 || y > 72 || ny < 0.5) return rock();
-  if (y < T.waterAt(x, z) + 1.8) return T.lakeAt(x, z) && y < T.waterAt(x, z) ? 'clay' : 'sand';
+  if (y < T.baseWaterAt(x, z) + 1.8) return T.lakeAt(x, z) && y < T.baseWaterAt(x, z) ? 'clay' : 'sand';
   switch (b) {
     case 'desert': return y > surf - 2.5 ? 'sand' : 'sandstone';
     case 'mesa': return y > surf - 1.5 ? 'red_sand' : 'terracotta';

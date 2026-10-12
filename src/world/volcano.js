@@ -38,7 +38,7 @@ function lakeRadii(v) {
   for (let k = 0; k < LAKE_SIDES; k++) {
     const a = (k / LAKE_SIDES) * Math.PI * 2;
     let r = 0;
-    while (r < v.crater * 1.2 && T.surfaceHeight(v.x + Math.cos(a) * r, v.z + Math.sin(a) * r) < v.lavaY) r += 0.25;
+    while (r < v.crater * 1.2 && T.surfaceHeight(v.x + Math.cos(a) * r, v.z + Math.sin(a) * r) < v.lavaTop) r += 0.25;
     rs.push(r);
   }
   return (v.lakeR = rs);
@@ -203,14 +203,16 @@ function buildFlowMesh(pts, mat, haloMat, rand) {
   world.add(mesh, glow, emberPoints(pts, rand));
 }
 
-// Height of the lava lake in a crater at (x, z), or -Infinity.
-export function craterLavaAt(x, z) {
+// The volcano whose crater lake is at (x, z), or null.
+export function craterOf(x, z) {
   for (const v of terrainFns.volcanoes) {
     const dx = x - v.x, dz = z - v.z, d = Math.hypot(dx, dz);
-    if (d < v.crater * 1.3 && d < lakeRadiusToward(v, dx, dz) + 0.6) return v.lavaY;
+    if (d < v.crater * 1.3 && d < lakeRadiusToward(v, dx, dz) + 0.6) return v;
   }
-  return -Infinity;
+  return null;
 }
+// Height of the lava lake in a crater at (x, z), or -Infinity.
+export const craterLavaAt = (x, z) => craterOf(x, z)?.lavaY ?? -Infinity;
 // Is a point (feet height y) in lava: the crater lake or a flow? `margin` widens the flows (metres).
 export function lavaAt(x, y, z, margin = 0) {
   if (y < craterLavaAt(x, z) + 0.4) return true;
@@ -227,12 +229,15 @@ export function lavaAt(x, y, z, margin = 0) {
   return false;
 }
 
-// Are your feet actually touching lava (for burning the player)? Unlike lavaAt, which has some
-// room around it for keeping trees and animals away, this only counts feet at or below the lava's
-// surface: standing on a bridge or a ledge above it, or in a tunnel under a flow, is safe.
-export function lavaTouching(x, feet, z) {
+// How deep in lava are feet at this height (metres of lava above them), or -1 if they aren't in it.
+// Unlike lavaAt, which has some room around it for keeping trees and animals away, this only counts
+// feet at or below the lava's surface and above the ground the lava lies on: standing on a bridge or
+// a ledge above it, or in a tunnel or cave under it, is safe, but sinking right in is not.
+export function lavaDepth(x, feet, z) {
+  const bed = terrainFns.surfaceHeight(x, z) - 1; // a little below: the bed under a flow is rough
+  if (feet < bed) return -1;
   const crater = craterLavaAt(x, z);
-  if (feet < crater + 0.1 && feet > crater - 3) return true;
+  if (feet < crater + 0.1) return crater - feet;
   for (const fl of lavaFlows) {
     if (x < fl.minX || x > fl.maxX || z < fl.minZ || z > fl.maxZ) continue;
     const p = fl.pts;
@@ -240,11 +245,12 @@ export function lavaTouching(x, feet, z) {
       const a = p[k - 1], b = p[k], ex = b.x - a.x, ez = b.z - a.z;
       const t = Math.max(0, Math.min(1, ((x - a.x) * ex + (z - a.z) * ez) / (ex * ex + ez * ez || 1)));
       const d = Math.hypot(x - (a.x + ex * t), z - (a.z + ez * t)), surface = lerp(a.y, b.y, t);
-      if (d < a.w * 0.85 && feet < surface + 0.1 && feet > surface - 1.5) return true;
+      if (d < a.w * 0.85 && feet < surface + 0.1) return surface - feet;
     }
   }
-  return false;
+  return -1;
 }
+export const lavaTouching = (x, feet, z) => lavaDepth(x, feet, z) >= -0.1;
 
 export function updateVolcanoes(dt, time) {
   lavaUniforms.uTime.value = time;
@@ -252,6 +258,9 @@ export function updateVolcanoes(dt, time) {
     const pulse = 0.5 + 0.5 * Math.sin(time * 1.7);
     fx.lavaMat.color.setRGB(2.2, 0.7 + pulse * 0.25, 0.15); // brighter than white: it glows
     fx.light.intensity = 220 + pulse * 80;
+    // the lava lake sinks when lava is scooped out, and fills back up (world/hydro.js)
+    fx.lava.position.y = fx.v.lavaY;
+    fx.light.position.y = fx.v.lavaY + 6;
     for (const s of fx.smoke) {
       const u = s.userData;
       u.t = (u.t + dt * 0.05) % 1;

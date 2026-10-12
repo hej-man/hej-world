@@ -82,12 +82,12 @@ export function defineCatalogItems(reg, RECIPES) {
   R('glass', { red_sand: 3, '#fuel': 1 }, { n: 3, at: 'furnace' });
 
   // --- Ores, metals and metal blocks
-  reg('coal', 'Coal', null, { color: 'radial-gradient(circle at 35% 30%, #4a4a4e, #141416)', tags: ['fuel'] });
-  reg('raw_copper', 'Raw copper', null, { color: 'radial-gradient(circle at 30% 35%, #e09060 0 4px, transparent 5px), radial-gradient(circle at 65% 62%, #3fa88a 0 3px, transparent 4px), radial-gradient(circle at 35% 30%, #c0703e, #7a4424)' });
-  reg('raw_gold', 'Raw gold', null, { color: 'radial-gradient(circle at 30% 35%, #fff2a0 0 4px, transparent 5px), radial-gradient(circle at 35% 30%, #e8c040, #9a7414)' });
-  reg('copper_ingot', 'Copper ingot', null, { color: 'linear-gradient(160deg, #f6b48a 0%, #d27a48 45%, #8e4a26 100%)' });
-  reg('gold_ingot', 'Gold ingot', null, { color: 'linear-gradient(160deg, #fff4b0 0%, #f0c63a 45%, #a67c12 100%)' });
-  reg('brick', 'Brick', null, { color: 'linear-gradient(160deg, #c46a4a, #8a3a24)' });
+  reg('coal', 'Coal', null, { draw: 'coal', tags: ['fuel'] });
+  reg('raw_copper', 'Raw copper', null, { draw: 'raw:copper' });
+  reg('raw_gold', 'Raw gold', null, { draw: 'raw:gold' });
+  reg('copper_ingot', 'Copper ingot', null, { draw: 'ingot:copper' });
+  reg('gold_ingot', 'Gold ingot', null, { draw: 'ingot:gold' });
+  reg('brick', 'Brick', null, { draw: 'brick' });
   R('copper_ingot', { raw_copper: 2, '#fuel': 1 }, { n: 2, at: 'furnace' });
   R('gold_ingot', { raw_gold: 2, '#fuel': 1 }, { n: 2, at: 'furnace' });
   R('brick', { clay: 1, '#fuel': 1 }, { n: 4, at: 'furnace' });
@@ -103,17 +103,17 @@ export function defineCatalogItems(reg, RECIPES) {
   //     fast but doesn't hit hard)
   for (const [mat, Mat, speed, badge, head, hit] of [['copper', 'Copper', 2, '#d27a48', 0xd27a48, 1], ['gold', 'Golden', 3.2, '#f0c63a', 0xf0c63a, 0]]) {
     const ingot = `${mat}_ingot`;
-    reg(`${mat}_pickaxe`, `${Mat} pickaxe`, '⛏️', { tool: 'pickaxe', tier: 2, speed, badge, head, maxStack: 1, damage: 3 + hit });
-    reg(`${mat}_axe`, `${Mat} axe`, '🪓', { tool: 'axe', tier: 2, speed, badge, head, maxStack: 1, damage: 4 + hit });
-    reg(`${mat}_shovel`, `${Mat} shovel`, '🪏', { tool: 'shovel', tier: 2, speed, badge, head, maxStack: 1, damage: 3 + hit });
-    reg(`${mat}_sword`, `${Mat} sword`, '🗡️', { tool: 'sword', tier: 2, speed, badge, head, maxStack: 1, damage: 7 + hit * 2 });
+    reg(`${mat}_pickaxe`, `${Mat} pickaxe`, null, { draw: `tool:pickaxe:${mat}`, tool: 'pickaxe', tier: 2, speed, badge, head, maxStack: 1, damage: 3 + hit });
+    reg(`${mat}_axe`, `${Mat} axe`, null, { draw: `tool:axe:${mat}`, tool: 'axe', tier: 2, speed, badge, head, maxStack: 1, damage: 4 + hit });
+    reg(`${mat}_shovel`, `${Mat} shovel`, null, { draw: `tool:shovel:${mat}`, tool: 'shovel', tier: 2, speed, badge, head, maxStack: 1, damage: 3 + hit });
+    reg(`${mat}_sword`, `${Mat} sword`, null, { draw: `tool:sword:${mat}`, tool: 'sword', tier: 2, speed, badge, head, maxStack: 1, damage: 7 + hit * 2 });
     R(`${mat}_pickaxe`, { [ingot]: 3, stick: 2 }, { at: 'workbench' });
     R(`${mat}_axe`, { [ingot]: 3, stick: 2 }, { at: 'workbench' });
     R(`${mat}_shovel`, { [ingot]: 1, stick: 2 }, { at: 'workbench' });
     R(`${mat}_sword`, { [ingot]: 2, stick: 1 }, { at: 'workbench' });
   }
-  reg('copper_armour', 'Copper armour', '🦺', { armour: 0.45, maxStack: 1, badge: '#d27a48', look: 0xc87a4a });
-  reg('gold_armour', 'Golden armour', '🛡️', { armour: 0.5, maxStack: 1, badge: '#f0c63a', look: 0xe8c040 });
+  reg('copper_armour', 'Copper armour', null, { draw: 'armour:copper', armour: 0.45, maxStack: 1, badge: '#d27a48', look: 0xc87a4a });
+  reg('gold_armour', 'Golden armour', null, { draw: 'armour:gold', armour: 0.5, maxStack: 1, badge: '#f0c63a', look: 0xe8c040 });
   R('copper_armour', { copper_ingot: 6, leather: 2 }, { at: 'workbench' });
   R('gold_armour', { gold_ingot: 6, leather: 2 }, { at: 'workbench' });
 
@@ -165,7 +165,7 @@ export function defineCatalogItems(reg, RECIPES) {
   R('melon_juice', { melon_slice: 3, bottle: 1 });
 
   // --- Paper and books (for bookshelves)
-  reg('paper', 'Paper', null, { color: 'linear-gradient(160deg, #fbf8ee, #e0d9c4)' });
+  reg('paper', 'Paper', null, { draw: 'paper' });
   reg('book', 'Book', '📕');
   R('paper', { bamboo: 3 }, { n: 3, at: 'workbench' });
   R('book', { paper: 3, leather: 1 }, { at: 'workbench' });

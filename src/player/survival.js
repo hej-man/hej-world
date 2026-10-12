@@ -63,11 +63,12 @@ export function updateStats(dt) {
     starveTimer += dt;
     if (starveTimer > 1.5) { starveTimer = 0; damagePlayer(2, 'starved'); }
   }
-  // fire: 24 health a second in lava, 6 a second while still burning after stepping out; water puts it out
+  // fire: 24 health a second in lava up to your knees, 36 up to your chest, 48 over your head; 6 a second
+  // while still burning after stepping out; water puts it out
   if (player.inWater && !player.inLava) state.burning = 0;
   if (state.burning > 0) {
     state.burning -= dt; burnTimer += dt;
-    if (burnTimer > 0.25) { burnTimer = 0; damagePlayer(player.inLava ? 6 : 1.5, 'burned to death in the lava'); }
+    if (burnTimer > 0.25) { burnTimer = 0; damagePlayer(!player.inLava ? 1.5 : player.lavaDepth > 1.6 ? 12 : player.lavaDepth > 0.8 ? 9 : 6, 'burned to death in the lava'); }
   }
   if (stats.thirst <= 0) {
     thirstTimer += dt;

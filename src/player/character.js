@@ -110,6 +110,7 @@ export function heldItemModel(id) {
       if (def.tool === 'pickaxe') { const b = M(new THREE.BoxGeometry(0.42, 0.05, 0.05), head, 0, 0.47, 0, metal); b.scale.y = 1; }
       if (def.tool === 'axe') M(new THREE.BoxGeometry(0.03, 0.16, 0.14), head, 0, 0.44, -0.07, metal);
       if (def.tool === 'shovel') M(new THREE.BoxGeometry(0.13, 0.17, 0.02), head, 0, 0.56, 0, metal);
+      if (def.tool === 'hammer') M(new THREE.BoxGeometry(0.2, 0.08, 0.08), head, 0, 0.48, 0, metal);
     }
   } else if (def.wand) {
     M(new THREE.CylinderGeometry(0.012, 0.016, 0.4, 6), 0x6b4a2f, 0, 0.12, 0);

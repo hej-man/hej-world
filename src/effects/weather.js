@@ -26,7 +26,7 @@ export const WEATHER = {
   storm:  { name: 'Thunderstorm', cloud: 1, rain: 1, storm: 1, wind: 1, last: [60, 150], next: { rain: 1 } },
 };
 const ORDER = ['clear', 'cloudy', 'rain', 'storm'];
-export const weather = { state: 'clear', timer: 200, cloud: 0.1, rain: 0, storm: 0, wind: 0.2, snow: 0, covered: 0, coverT: 0, flash: 0, nextBolt: 6, baked: 0.1 };
+export const weather = { state: 'clear', timer: 200, cloud: 0.1, rain: 0, storm: 0, wind: 0.2, sun: 1, puddles: 0, snow: 0, covered: 0, coverT: 0, flash: 0, nextBolt: 6, baked: 0.1 };
 const skyClear = { zenith: sky.zenith.clone(), horizon: sky.horizon.clone(), sun: sky.sun.clone(), ground: sky.ground.clone() };
 const skyStorm = { zenith: new THREE.Color(0x4a525c), horizon: new THREE.Color(0x7d858d), sun: new THREE.Color(0x9aa0a8), ground: new THREE.Color(0x2c2e2c) };
 const cloudColors = { top: [new THREE.Color(0xffffff), new THREE.Color(0x8d939b)], under: [new THREE.Color(0xc4ccd6), new THREE.Color(0x5c636c)] };
@@ -159,6 +159,12 @@ export function updateWeather(dt) {
   rainFx.visible = weather.rain > 0.01 && weather.snow < 0.99;
   snowFx.visible = weather.rain > 0.01 && weather.snow > 0.01;
   terrainUniforms.uRainWet.value += ((weather.rain > 0.2 ? 1 : 0) - terrainUniforms.uRainWet.value) * Math.min(1, dt / (weather.rain > 0.2 ? 25 : 60));
+  // sunshine (dries puddles, pools and the river): clear skies with no rain
+  weather.sun = (1 - smoothstep(0.25, 0.85, weather.cloud)) * (1 - smoothstep(0.05, 0.3, weather.rain));
+  // puddles gather in hollows over a minute or two of rain and dry up in the sun, slowly under cloud
+  weather.puddles = Math.min(1, Math.max(0, weather.puddles + (weather.rain * 0.012 - weather.sun * 0.006 - 0.0008) * dt));
+  terrainUniforms.uPuddles.value = weather.puddles;
+  terrainUniforms.uRaining.value = weather.rain * (1 - weather.snow);
   grassUniforms.uWind.value = weather.wind;
 
   // lightning

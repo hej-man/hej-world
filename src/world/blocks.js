@@ -253,8 +253,52 @@ function lanternParts() {
   const light = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.36, 0.24).translate(0, 0.24, 0), new THREE.MeshStandardMaterial({ color: 0xffd080, emissive: 0xffa040, emissiveIntensity: 1.8, transparent: true, opacity: 0.85 }));
   return [cage, light];
 }
+// A smelter: a squat brick kiln with a roaring fire mouth on the front (+z), a crucible glowing on
+// top under a hood, and a chimney; base at y = 0.
+function smelterParts() {
+  const brick = 0x9a4a32, dark = 0x5e2c1e;
+  const base = new THREE.Mesh(mergeColored([
+    [roundedBox(1, 0.7, 1, 0, 0.35, 0), brick], [roundedBox(1.02, 0.1, 1.02, 0, 0.12, 0), dark], [roundedBox(1.02, 0.1, 1.02, 0, 0.66, 0), dark],
+    [roundedBox(0.5, 0.36, 0.14, 0, 0.32, 0.45), 0x1c1512],
+    [new THREE.CylinderGeometry(0.3, 0.42, 0.22, 10).translate(0, 0.82, 0), brick],
+    [roundedBox(0.2, 0.5, 0.2, 0.3, 1.05, -0.3), dark],
+    [new THREE.CylinderGeometry(0.17, 0.13, 0.2, 10).translate(0, 0.98, 0), 0xb8a890],
+  ]), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 }));
+  const hot = new THREE.MeshStandardMaterial({ color: 0xffa040, emissive: 0xff5a10, emissiveIntensity: 2.2 });
+  const fire = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.26, 0.02).translate(0, 0.3, 0.525), hot);
+  const melt = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.02, 10).translate(0, 1.075, 0), hot);
+  return [base, fire, melt];
+}
+// An anvil on a tree stump: a heavy dark iron body with a horn pointing sideways; base at y = 0.
+function anvilParts() {
+  const iron = 0x3b3e43;
+  const stump = new THREE.Mesh(mergeColored([
+    [new THREE.CylinderGeometry(0.34, 0.38, 0.42, 9).translate(0, 0.21, 0), 0x6b4a2f], [new THREE.CylinderGeometry(0.3, 0.3, 0.02, 9).translate(0, 0.425, 0), 0xb08a5a],
+  ]), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 }));
+  const body = new THREE.Mesh(mergeColored([
+    [roundedBox(0.56, 0.12, 0.36, 0, 0.49, 0), iron], [roundedBox(0.3, 0.18, 0.22, 0, 0.64, 0), iron], [roundedBox(0.72, 0.16, 0.32, -0.04, 0.8, 0), iron],
+    [new THREE.ConeGeometry(0.11, 0.34, 8).rotateZ(-Math.PI / 2).scale(1, 0.9, 1).translate(0.48, 0.81, 0), iron],
+    [new THREE.BoxGeometry(0.68, 0.01, 0.28).translate(-0.04, 0.885, 0), 0x9aa0a8], // the worn, shiny face
+  ]), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.45, metalness: 0.7 }));
+  return [stump, body];
+}
+// Bellows: two wooden boards with pleated leather between them and an iron nozzle at the front (+z),
+// on a little stand; base at y = 0.
+function bellowsParts() {
+  const wood = 0x8a5a32, leather = 0x6e4421;
+  const parts = [
+    [roundedBox(0.7, 0.12, 0.18, 0, 0.06, -0.2), 0x5a3a20], [roundedBox(0.7, 0.12, 0.18, 0, 0.06, 0.2), 0x5a3a20],
+    [new THREE.BoxGeometry(0.62, 0.05, 0.8).translate(0, 0.2, 0), wood],
+    [new THREE.BoxGeometry(0.62, 0.05, 0.8).rotateX(-0.28).translate(0, 0.5, -0.06), wood],
+    [new THREE.BoxGeometry(0.1, 0.05, 0.4).rotateX(-0.28).translate(0, 0.62, -0.5), wood], // handle
+    [new THREE.CylinderGeometry(0.05, 0.08, 0.32, 8).rotateX(Math.PI / 2).translate(0, 0.28, 0.52), 0x4a4d52],
+  ];
+  for (let k = 0; k < 4; k++) parts.push([new THREE.BoxGeometry(0.6 - k * 0.02, 0.07, 0.72 - k * 0.12).translate(0, 0.25 + k * 0.065, -0.04 - k * 0.04), k % 2 ? leather : 0x8a5a3a]);
+  return [new THREE.Mesh(mergeColored(parts), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8 }))];
+}
+
 // Blocks drawn with their own model stand on the bottom of their cell instead of being centred.
-const BASED = new Set(['campfire', 'furnace', 'purifier']);
+const BASED = new Set(['campfire', 'furnace', 'purifier', 'smelter', 'anvil', 'bellows']);
 const isBased = (type) => BASED.has(type) || ['sapling', 'torch', 'lantern'].includes(BLOCKS[type].model);
 function blockTemplates(type, shape) {
   const def = BLOCKS[type];
@@ -262,6 +306,9 @@ function blockTemplates(type, shape) {
     case 'campfire': return campfireParts();
     case 'furnace': return furnaceParts();
     case 'purifier': return purifierParts();
+    case 'smelter': return smelterParts();
+    case 'anvil': return anvilParts();
+    case 'bellows': return bellowsParts();
     case 'sapling': return saplingParts(def);
     case 'fence': return fenceParts(type);
     case 'torch': return torchParts();

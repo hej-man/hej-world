@@ -15,7 +15,7 @@ for (const s of STONES) {
   STONE_TINT[s.id] = [c.r / 0.52, c.g / 0.52, c.b / 0.52];
 }
 // Ores by index, in the order the shader picks their colours (see oreRaw).
-const ORE_INDEX = { iron: 0, coal: 1, copper: 2, gold: 3 };
+const ORE_INDEX = { iron: 0, coal: 1, copper: 2, gold: 3, titanium: 4 };
 const SAND_LIKE = new Set(['sand', 'red_sand', 'gravel', 'snow']), DIRT_LIKE = new Set(['dirt', 'clay', 'mud', 'podzol']);
 
 // ---------------------------------------------------------------------------
@@ -140,6 +140,8 @@ export function buildRenderGeometry(colliderGeo, T) {
 export const terrainUniforms = {
   uTime: { value: 0 },
   uRainWet: { value: 0 },  // how wet the ground is from rain, 0..1
+  uPuddles: { value: 0 },  // how much rain has gathered in puddles, 0..1 (dries in the sun)
+  uRaining: { value: 0 },  // how hard it's raining now (rings on the puddles)
   uSnowLine: { value: 84 },
   uVolc: { value: [0, 1, 2, 3].map(() => new THREE.Vector4(-1e4, -1e4, 1, 0)) }, // x, z, crater radius, lava height
   uTexScale: { value: TEX_LAYERS.map((l) => 1 / l.size) },
@@ -174,7 +176,7 @@ export function makeTerrainMaterial() {
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
         ${TEX_GLSL}
-        uniform float uTime, uRainWet, uSnowLine;
+        uniform float uTime, uRainWet, uSnowLine, uPuddles, uRaining;
         uniform float uTexScale[${TEX_LAYERS.length}];
         uniform vec4 uVolc[4];
         varying vec4 vSplat;
@@ -238,7 +240,7 @@ export function makeTerrainMaterial() {
         float nug = smoothstep(0.6, 0.66, nn), rim = smoothstep(0.55, 0.6, nn) - nug;
         float ore = oreAmt * nug;
         int oi = int(vExtra.z + 0.5);
-        vec3 oreRaw = oi == 1 ? vec3(0.07, 0.07, 0.08) : oi == 2 ? vec3(0.25, 0.68, 0.55) : oi == 3 ? vec3(1.0, 0.8, 0.2) : vec3(0.85, 0.42, 0.14);
+        vec3 oreRaw = oi == 1 ? vec3(0.07, 0.07, 0.08) : oi == 2 ? vec3(0.25, 0.68, 0.55) : oi == 3 ? vec3(1.0, 0.8, 0.2) : oi == 4 ? vec3(0.82, 0.8, 0.97) : vec3(0.85, 0.42, 0.14);
         vec3 oreC = srgb(oreRaw);
         col *= 1.0 - oreAmt * (0.12 + rim * 0.45);
         float facet = 0.7 + 0.6 * smoothstep(0.3, 0.8, vnoise(vWorldPos * 3.1 + 7.0));
@@ -264,9 +266,21 @@ export function makeTerrainMaterial() {
         float wet = (1.0 - smoothstep(vExtra.y - 0.3, vExtra.y + 0.9, vWorldPos.y)) * surf;
         float rainWet = uRainWet * surf * smoothstep(0.3, 0.8, wN.y);
         col *= mix(1.0, 0.62, wet) * mix(1.0, 0.72, rainWet);
+        // puddles: rain gathers in patches on flat open ground (not on sand or snow, which soak it
+        // up), dark and mirror-smooth, with rings where the drops land; they shrink as they dry
+        float flatOpen = smoothstep(0.93, 0.985, wN.y) * surf * (1.0 - snowW) * (1.0 - sandFrac * 0.85) * (1.0 - rockFrac * 0.5);
+        float pn = vnoise(vWorldPos * vec3(0.17, 0.0, 0.17)) * 0.7 + vnoise(vWorldPos * vec3(0.55, 0.0, 0.55)) * 0.3;
+        float pLine = 1.0 - uPuddles * 0.36;
+        float puddle = smoothstep(pLine, pLine + 0.025, pn) * flatOpen * step(0.005, uPuddles);
+        col = mix(col, col * 0.3 + srgb(vec3(0.06, 0.08, 0.09)), puddle * 0.9);
         diffuseColor.rgb = col;
-        float tRough = mix(mix(tAlb.a, 0.25, wet * 0.8), 0.3, rainWet * 0.75) - ore * 0.3 - fleck * 0.6;
-        vec3 tNW = normalize(wN + tN * 1.2);`)
+        float tRough = mix(mix(mix(tAlb.a, 0.25, wet * 0.8), 0.3, rainWet * 0.75) - ore * 0.3 - fleck * 0.6, 0.03, puddle);
+        vec3 tNW = normalize(wN + tN * 1.2 * (1.0 - puddle));
+        if (puddle > 0.0) {
+          vec2 rp = vWorldPos.xz * 5.0;
+          vec2 rip = vec2(vnoise(vec3(rp, uTime * 5.0)), vnoise(vec3(rp + 17.0, uTime * 5.0))) - 0.5;
+          tNW = normalize(mix(tNW, normalize(vec3(rip.x * 0.5 * uRaining, 1.0, rip.y * 0.5 * uRaining)), puddle));
+        }`)
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
         roughnessFactor = clamp(tRough, 0.05, 1.0);`)
       .replace('#include <normal_fragment_maps>', `

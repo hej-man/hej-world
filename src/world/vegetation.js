@@ -145,7 +145,7 @@ function placeVegTile(seed, ti, tj, kit) {
       if (!hit) continue;
       const y = hit.point.y, ny = hit.face.normal.y;
       if (Math.abs(y - T.surfaceHeight(x, z)) > 4) continue; // not on cave floors
-      const wl = T.waterAt(x, z);
+      const wl = T.baseWaterAt(x, z);
       if (wantRock) { if (y > wl + 0.5 && ny > 0.6) rocks.push({ x, y, z, s: 0.6 + rand() * 1.4, rot: rand() * 6.28, iron: rand() < 0.14 }); continue; }
       if (ny < 0.72 || y < wl + (wl > W ? 1.0 : 1.8) || y > 76 || vi > 0.35) continue;
       if (vi > 0.2 && lavaAt(x, y, z, 1.5)) continue;

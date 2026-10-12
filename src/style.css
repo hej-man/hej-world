@@ -94,6 +94,7 @@
   .filters input[type=text], .filters input:not([type]) { flex: 1; min-width: 120px; background: rgba(0,0,0,0.35); color: #fff; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; padding: 4px 8px; font: inherit; font-size: 12px; }
   .filters .only { font-size: 12px; opacity: 0.8; display: flex; gap: 4px; align-items: center; }
   .stations { font-size: 11px; opacity: 0.65; margin-bottom: 6px; }
+  .jobs { font-size: 12px; margin-bottom: 6px; padding: 5px 8px; border-radius: 6px; background: rgba(255, 140, 50, 0.14); }
   #recipes { height: 236px; overflow-y: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 3px; padding-right: 4px; align-content: start; }
   .recipe { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 6px; background: rgba(255,255,255,0.04); opacity: 0.45; cursor: default; }
   .recipe.ok { opacity: 1; cursor: pointer; background: rgba(255,255,255,0.08); }

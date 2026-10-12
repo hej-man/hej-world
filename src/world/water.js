@@ -94,7 +94,16 @@ export function makeWater() {
     m.rotation.x = -Math.PI / 2;
     m.position.set(lk.x, lk.level, lk.z);
     m.renderOrder = 1;
+    m.userData.lake = lk;
     group.add(m);
   }
+  group.userData.sea = water;
   return group;
+}
+
+// The river and lakes rise and fall with the weather (world/hydro.js): move their surfaces to match.
+export function updateWaterLevels(group) {
+  if (!group) return;
+  group.userData.sea.position.y = WORLD.waterLevel + terrainFns.live.sea;
+  for (const m of group.children) if (m.userData.lake) m.position.y = m.userData.lake.level + m.userData.lake.offset;
 }

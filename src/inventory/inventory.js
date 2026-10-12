@@ -7,7 +7,7 @@ import { updateOverlay } from '../ui/menu.js';
 import { keys } from '../ui/input.js';
 import { MAX_HEALTH, stats } from '../player/survival.js';
 import { blockIcon, hasBlockIcon } from '../world/blocks.js';
-import { drawnIcon, hasDrawnIcon } from './icons.js';
+import { drawnIcon, iconSpec } from './icons.js';
 
 // ---------------------------------------------------------------------------
 // Inventory + hotbar (items get registered later with game.registerItem)
@@ -61,13 +61,14 @@ export function fillSlotEl(el, stack, keyLabel) {
   el.removeAttribute('title');
   if (!stack) return;
   const def = ITEMS[stack.id] || { name: stack.id };
-  if (hasDrawnIcon(def.id)) el.insertAdjacentHTML('beforeend', `<span class="swatch cube" style="background-image:url(${drawnIcon(def.id)})"></span>`);
+  const spec = iconSpec(def);
+  if (spec) el.insertAdjacentHTML('beforeend', `<span class="swatch cube" style="background-image:url(${drawnIcon(spec)})"></span>`);
   else if (def.icon) el.insertAdjacentHTML('beforeend', `<span>${def.icon}</span>`);
   else if (def.block) {
     const url = hasBlockIcon(def.place) ? blockIcon(def.place) : (queueIcon(def.place), '');
     el.insertAdjacentHTML('beforeend', `<span class="swatch cube" data-cube="${def.place}"${url ? ` style="background-image:url(${url})"` : ''}></span>`);
   } else el.insertAdjacentHTML('beforeend', `<span class="swatch${def.flat ? ' flat' : ''}" style="background:${def.color || '#999'}"></span>`);
-  if (def.badge) el.insertAdjacentHTML('beforeend', `<span class="badge" style="background:${def.badge}"></span>`);
+  if (def.badge && !spec) el.insertAdjacentHTML('beforeend', `<span class="badge" style="background:${def.badge}"></span>`);
   if (stack.count > 1) el.insertAdjacentHTML('beforeend', `<span class="count">${stack.count}</span>`);
   el.dataset.name = def.name;
 }

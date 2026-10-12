@@ -3,7 +3,7 @@ import { state } from '../state.js';
 import { PLAYER, SLOPE_Y, WORLD } from '../config.js';
 import { lantern } from '../render/scene.js';
 import { CELL, cellKey, chunksIn, obstacleGrid, terrainFns } from '../world/world.js';
-import { craterLavaAt, lavaTouching } from '../world/volcano.js';
+import { craterLavaAt, lavaDepth } from '../world/volcano.js';
 import { sampleField } from '../terrain/material.js';
 import { fluidAt } from '../world/fluids.js';
 import { FOOT_OFFSET, player, respawn } from './character.js';
@@ -248,7 +248,15 @@ export function updatePlayer(dt) {
   else player.viewY += dy * Math.min(1, dt * 14);
   // lava burns while you're in it (and a little longer); creative mode just bounces you out
   const feet = player.position.y - FOOT_OFFSET;
-  player.inLava = lavaTouching(player.position.x, feet, player.position.z) || fluidAt(player.position.x, feet + 0.05, player.position.z)?.type === 'lava';
+  // how far you are in: deeper burns faster, and with your head under it burns fastest
+  const px = player.position.x, pz = player.position.z;
+  let depth = lavaDepth(px, feet, pz);
+  for (const up of [0.05, 0.9, 1.7]) {
+    const fl = fluidAt(px, feet + up, pz);
+    if (fl?.type === 'lava') depth = Math.max(depth, fl.top - feet);
+  }
+  player.lavaDepth = Math.max(0, depth);
+  player.inLava = depth >= -0.1;
   if (player.inLava) {
     if (state.creative) player.velocity.y = 12;
     else state.burning = Math.max(state.burning, 3);

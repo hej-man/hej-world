@@ -97,7 +97,7 @@ export function createTerrainFunctions(seed) {
     }
     const peak = Math.min(H - 14, 112), base = 26, crater = R * 0.2, depth = 17;
     const rim = base + (peak - base) * Math.pow(1 - crater / R, 1.7);
-    volcanoes.push({ ...best, R, peak, base, crater, depth, rim, lavaY: rim - depth + 3 });
+    volcanoes.push({ ...best, R, peak, base, crater, depth, rim, lavaY: rim - depth + 3, lavaTop: rim - depth + 3 }); // lavaY drops as lava is scooped out
   }
 
   function volcanoHeight(v, x, z) {
@@ -136,7 +136,15 @@ export function createTerrainFunctions(seed) {
   }
   // Height of the water surface over this point: the sea level outside the lakes. Only open water
   // counts: where the ground above is well over the water (caves and tunnels under hills), it's dry.
+  // The river (the sea) and the lakes rise in rain and sink in sunshine (world/hydro.js): `live.sea`
+  // and each lake's `offset` say by how much. baseWaterAt is the level the land was shaped for, which
+  // is what anything worked out once when the world is made (plants, shore colours) must use.
+  const live = { sea: 0 };
   function waterAt(x, z) {
+    const lk = lakes.length ? lakeAt(x, z) : null, level = lk ? lk.level + lk.offset : W + live.sea;
+    return surfaceHeight(x, z) < level + DRY_ABOVE ? level : NO_WATER;
+  }
+  function baseWaterAt(x, z) {
     const lk = lakes.length ? lakeAt(x, z) : null, level = lk ? lk.level : W;
     return surfaceHeight(x, z) < level + DRY_ABOVE ? level : NO_WATER;
   }
@@ -209,17 +217,33 @@ export function createTerrainFunctions(seed) {
       }
       if (hi - lo > 9 || lo < W + 6 || hi > 66) continue;
       lk.level = lo - 1.8; // the ground has small 3D bumps, up to about a metre lower than the height
+      lk.offset = 0;
       lakes.push(lk);
     }
   }
 
-  // Ores: veins in the rock, found in cliffs, caves and anywhere you dig into stone. Each kind has
-  // its own noise field and depths: coal is common and fairly high up, copper in the middle, gold
-  // rare and deep. oreAt gives the amount of iron (0..1; above 0.5 is ore); oreKind the ore here.
-  const oreAt = (x, y, z) => smoothstep(0.68, 0.8, noise3(x * 0.09 + 500, y * 0.11, z * 0.09 - 200));
+  // Ores. Iron forms long winding veins, the way it does in real rock: a seam where two smooth
+  // noise fields both cross zero (like the spaghetti tunnels), only in some regions, thickest in the
+  // middle of one. Around the ore the rock is rusty granite, so a vein shows as a red-brown band in a
+  // cliff or cave wall with the ore in its core. The other ores are clusters with their own noise
+  // fields and depths: coal is common and fairly high up, copper in the middle, gold rare and deep,
+  // and titanium rarest and deepest, next to the deepslate.
+  // ironVein gives 0..1 (1 in the core, above 0.5 is ore, 0.12..0.5 the rusty rock around it).
+  let veinX = NaN, veinY = NaN, veinZ = NaN, veinV = 0;
+  function ironVein(x, y, z) {
+    if (x === veinX && y === veinY && z === veinZ) return veinV; // oreKind and stoneAt ask for the same point
+    veinX = x; veinY = y; veinZ = z; veinV = 0;
+    if (y < 6 || y > 96) return 0;
+    const region = noise3(x * 0.006 + 71, y * 0.01, z * 0.006 - 33);
+    if (region < 0.02) return 0;
+    const a = noise3(x * 0.021 + 500, y * 0.028, z * 0.021 - 200), b = noise3(x * 0.021 - 140, y * 0.028 + 60, z * 0.021 + 310);
+    const r = Math.sqrt(a * a + b * b), th = 0.03 + 0.05 * smoothstep(0.02, 0.4, region);
+    return (veinV = 1 - smoothstep(th * 0.5, th * 1.9, r));
+  }
+  const oreAt = (x, y, z) => smoothstep(0.62, 0.74, ironVein(x, y, z));
   const ORES = [
     // [kind, offset, threshold, lowest y, highest y]
-    ['coal', 900, 0.75, 16, 128], ['copper', 1700, 0.8, 8, 64], ['gold', 2500, 0.88, 4, 26],
+    ['coal', 900, 0.75, 16, 128], ['copper', 1700, 0.8, 8, 64], ['gold', 2500, 0.88, 4, 26], ['titanium', 3300, 0.9, 3, 22],
   ];
   // Returns null or [kind, amount]; the array is reused by the next call.
   const _ore = ['', 0];
@@ -238,6 +262,7 @@ export function createTerrainFunctions(seed) {
   const STONES_AT = Array.from({ length: WORLD.height + 1 }, (_, y) => STONES.filter((s) => y >= s.depth[0] && y <= s.depth[1] && s.id !== 'deepslate' && s.id !== 'blackstone'));
   function stoneAt(x, y, z) {
     if (y < 10 + noise2(x * 0.05 + 3, z * 0.05 - 8) * 3) return y < 6.5 ? 'blackstone' : 'deepslate';
+    if (ironVein(x, y, z) > 0.12) return 'granite'; // the rusty rock around an iron vein
     const blob = noise3(x * 0.035 + 41, y * 0.05, z * 0.035 - 17);
     if (blob < 0.3) return 'stone';
     const choices = STONES_AT[Math.max(0, Math.min(STONES_AT.length - 1, Math.round(y)))];
@@ -311,7 +336,7 @@ export function createTerrainFunctions(seed) {
 
   return {
     surfaceHeight, landHeight, mountainMask, forestMask, volcanoInfluence, ...biomes, density, tunnel, cavern, riverZ, ledge, volcanoes,
-    lakes, lakeAt, lakeRadius, waterAt, oreAt, oreKind, stoneAt, LAKE_EDGE, noise2, noise3,
+    lakes, lakeAt, lakeRadius, waterAt, baseWaterAt, live, oreAt, ironVein, oreKind, stoneAt, LAKE_EDGE, noise2, noise3,
   };
 }
 

@@ -431,8 +431,9 @@ function tryMoveAnimal(a, mx, mz) {
   if (!g || g.point.y < terrainFns.waterAt(nx, nz) + 0.2 || g.face.normal.y < 0.6 || Math.abs(g.point.y - a.y) > 0.9) return false;
   const gy = g.point.y;
   if (lavaFlows.length && terrainFns.volcanoInfluence(nx, nz) > 0.25 && lavaAt(nx, gy, nz, 0.5)) return false;
-  // stays out of poured water and lava (but can always walk out of a pool it is standing in)
-  if (fluidAt(nx, gy + 0.2, nz) && !fluidAt(a.x, a.y + 0.2, a.z)) return false;
+  // stays out of poured water and lava deeper than a puddle (but can always walk out of a pool it is standing in)
+  const deep = (x, y, z) => { const fl = fluidAt(x, y + 0.2, z); return fl && (fl.type === 'lava' || fl.top > y + 0.3); };
+  if (deep(nx, gy, nz) && !deep(a.x, a.y, a.z)) return false;
   const list = obstacleGrid.get(cellKey(Math.floor(nx / CELL), Math.floor(nz / CELL)));
   if (list) for (const o of list) {
     if (o.min) { if (nx > o.min.x - a.sp.r * 0.5 && nx < o.max.x + a.sp.r * 0.5 && nz > o.min.z - a.sp.r * 0.5 && nz < o.max.z + a.sp.r * 0.5 && gy + 0.3 < o.max.y && gy + a.sp.h > o.min.y) return false; }
