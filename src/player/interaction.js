@@ -27,6 +27,7 @@ export const mouse = { left: false, right: false };
 
 export let swingTime = 0, breakProgress = 0, breakKey = null, attackCd = 0, warnCd = 0;
 export let aimWater = null;
+const _underWater = { t: 0, point: new THREE.Vector3(), under: true };
 const _aimO = new THREE.Vector3(), _aimD = new THREE.Vector3(), _eye = new THREE.Vector3(), _tv = new THREE.Vector3();
 
 const outline = new THREE.LineSegments(
@@ -130,7 +131,7 @@ const nice = (id) => id.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase())
 function targetName(t) {
   switch (t.kind) {
     case 'tree': return TREE_KINDS[t.target.species].name;
-    case 'plant': return t.target.flower ? nice(t.target.flower) : t.target.plant === 'mushrooms' ? (t.target.red ? 'Red mushroom' : 'Brown mushroom') : PLANT_KINDS[t.target.plant].name;
+    case 'plant': return t.target.flower ? (ITEMS[t.target.flower]?.name || nice(t.target.flower)) : t.target.plant === 'mushrooms' ? (t.target.red ? 'Red mushroom' : 'Brown mushroom') : PLANT_KINDS[t.target.plant].name;
     case 'rock': return t.target.iron ? 'Iron-rich boulder' : 'Boulder';
     case 'block': { const b = blocks.get(t.key); return BLOCKS[t.type].name + (b?.plantedAt !== undefined ? ' (growing)' : ''); }
     case 'animal': return `${t.animal.sp.name}  ${Math.max(0, Math.ceil(t.animal.hp))}/${t.animal.sp.hp}`;
@@ -274,6 +275,12 @@ export function useWater() {
   state.useCd = 0.6;
 }
 
+// Does a right click on water drink it? Only with nothing in hand that has a use of its own (a block
+// to place, a bucket, food...) and nothing you can use in front of you (a workbench, a furnace...).
+const hasUse = (def) => !!(def && (def.place || def.bucket || def.fluid || def.spawn || def.food || def.drink || def.heal || def.mana || def.armour || def.wand));
+const usable = (t) => t?.kind === 'block' && !!BLOCKS[t.type].station;
+function drinksWater(t, def) { return !hasUse(def) && !usable(t) && def?.id !== 'bottle'; }
+
 // Right click
 export function useItem(t) {
   const s = slots[state.selectedSlot], def = s && ITEMS[s.id];
@@ -287,7 +294,7 @@ export function useItem(t) {
       useWater(); return;
     }
   }
-  if (aimWater && !(def && (def.place || def.bucket || def.fluid || def.spawn || def.food || def.drink || def.heal || def.mana || def.armour || def.wand))) { useWater(); return; }
+  if (aimWater && drinksWater(t, def)) { useWater(); return; }
   if (t?.kind === 'block' && BLOCKS[t.type].station && !(def && def.place)) {
     // take anything the station finished, then open the crafting page
     const b = blocks.get(t.key);
@@ -429,6 +436,11 @@ export function updateInteraction(dt) {
   if (active && !cameraUnderwater) {
     const t0 = aimRange();
     aimWater = waterRay(_aimO, _aimD, t0, t ? Math.min(t.t, t0 + PLAYER.reach) : t0 + PLAYER.reach);
+  } else if (active && terrainFns.waterAt(_aimO.x, _aimO.z) > _aimO.y) {
+    // under the river, the sea or a lake the water is all around you: a bottle or bucket fills from
+    // it, and you can drink it, but anything you aim at (a block to build on, a chest) comes first
+    _underWater.point.copy(_aimO);
+    aimWater = _underWater;
   }
   const held = slots[state.selectedSlot], def = held && ITEMS[held.id];
 
@@ -441,7 +453,9 @@ export function updateInteraction(dt) {
     outline.position.set(t.cell[0] + 0.5, t.cell[1] + 0.5, t.cell[2] + 0.5);
     outline.material.color.set(0x000000); outline.visible = true;
   } else outline.visible = false;
-  targetEl.textContent = aimWater ? (held?.id === 'bottle' ? 'Water: right click to fill the bottle' : 'Water: right click to drink (unpurified, makes you sick)') : t ? targetName(t) : '';
+  const waterNote = !aimWater ? null : held?.id === 'bottle' ? 'Water: right click to fill the bottle'
+    : drinksWater(t, def) ? 'Water: right click to drink (unpurified, makes you sick)' : null;
+  targetEl.textContent = (aimWater?.under || !waterNote) && t ? targetName(t) : waterNote || '';
 
   if (active && mouse.left) {
     if (t?.kind === 'animal') {

@@ -11,7 +11,7 @@
 //   trees:   how dense the trees are (0..1) and which kinds, by weight (see world/vegetation.js)
 //   plants:  small things growing on the ground, as chances per spot
 //   animals: which kinds live here (see animals/animals.js)
-//   shape:   changes to the land: 'dunes', 'terraces' (mesa plateaus), 'flat', 'hills'
+//   shape:   changes to the land: 'dunes', 'hoodoos' (the painted wastes' rock towers), 'flat', 'hills'
 // ---------------------------------------------------------------------------
 export const BIOMES = {
   plains: {
@@ -92,11 +92,11 @@ export const BIOMES = {
     trees: { density: 0.07, mix: { acacia: 1 } }, plants: { bush: 0.015, dead_bush: 0.004 },
     animals: ['zebra', 'cow', 'chicken', 'rabbit'], shape: 'flat',
   },
-  mesa: {
-    name: 'Mesa', at: [0.96, 0.34],
+  mesa: { // the painted wastes
+    name: 'Painted wastes', at: [0.96, 0.34],
     ground: { redsand: 1, terracotta: 1 }, grass: { amount: 0 },
     trees: { density: 0.004, mix: { acacia: 1 } }, plants: { dead_bush: 0.02, cactus: 0.004 },
-    animals: ['goat', 'scorpion', 'rabbit'], shape: 'terraces',
+    animals: ['goat', 'scorpion', 'rabbit'], shape: 'hoodoos',
   },
   jungle: {
     name: 'Jungle', at: [0.86, 0.82],

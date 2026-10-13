@@ -44,7 +44,7 @@ export function createTerrainFunctions(seed) {
   const home = { x: 0, z: 0, r: 0 };
   const biomes = makeBiomes(noise2, mountainMask, home);
   const SHAPE = (k) => Float32Array.from(BIOME_IDS, (id) => (BIOMES[id].shape === k ? 1 : 0));
-  const FLAT = SHAPE('flat'), HILLS = SHAPE('hills'), DUNES = SHAPE('dunes'), TERRACES = SHAPE('terraces');
+  const FLAT = SHAPE('flat'), HILLS = SHAPE('hills'), DUNES = SHAPE('dunes'), HOODOOS = SHAPE('hoodoos');
   const TREES = Float32Array.from(BIOME_IDS, (id) => BIOMES[id].trees.density);
   const sumW = (w, k) => { let v = 0; for (let i = 0; i < w.length; i++) v += w[i] * k[i]; return v; };
 
@@ -54,11 +54,24 @@ export function createTerrainFunctions(seed) {
     return dens * smoothstep(-0.35, 0.1, fbm2(x * 0.009 + 400, z * 0.009 - 120, 3));
   }
 
-  // Mesa plateaus: flat tops with stepped cliffs between them.
-  function terraces(x, z) {
-    const p = smoothstep(-0.15, 0.35, fbm2(x * 0.011 + 61, z * 0.011 - 17, 3)) * 30;
-    const step = 5, k = p / step, f = k - Math.floor(k);
-    return (Math.floor(k) + smoothstep(0.75, 1, f)) * step;
+  // Painted wastes: low swells of pale sand broken by hoodoos, lone towers of soft rock a few metres
+  // across and up to twenty high, worn narrower at the waist, standing in loose clusters. Each 26 m
+  // square of the map may hold one, placed and sized by noise, so they're the same every time.
+  const HOODOO = 26;
+  function hoodoos(x, z) {
+    let h = (fbm2(x * 0.013 + 61, z * 0.013 - 17, 3) * 0.5 + 0.5) * 6;
+    const cx = Math.floor(x / HOODOO), cz = Math.floor(z / HOODOO);
+    for (let j = cz - 1; j <= cz + 1; j++) for (let i = cx - 1; i <= cx + 1; i++) {
+      const keep = noise2(i * 7.31 + 0.5, j * 7.31 + 0.5);
+      if (keep < -0.05) continue;
+      const px = (i + 0.5 + noise2(i * 3.7 + 11.5, j * 3.7) * 0.7) * HOODOO, pz = (j + 0.5 + noise2(i * 3.7, j * 3.7 - 11.5) * 0.7) * HOODOO;
+      const d = Math.hypot(x - px, z - pz), r = 2.2 + (noise2(i * 5.1 - 3.3, j * 5.1 + 2.2) * 0.5 + 0.5) * 3;
+      if (d > r * 1.6) continue;
+      const tall = 8 + (keep + 0.05) * 22 + noise2(i * 9.9, j * 9.9 + 4.4) * 4;
+      // a flared foot, a straight stem and a rounded cap
+      h = Math.max(h, tall * (1 - smoothstep(r * 0.75, r, d)) + 3 * (1 - smoothstep(r, r * 1.6, d)));
+    }
+    return h;
   }
   // Desert dunes: long ridges with a gentle side and a steeper one.
   function dunes(x, z) {
@@ -68,11 +81,11 @@ export function createTerrainFunctions(seed) {
 
   function landHeight(x, z) {
     const wx = warpX(x, z), wz = warpZ(x, z), w = biomes.biomeWeights(x, z);
-    const flat = sumW(w, FLAT), hills = sumW(w, HILLS), dune = sumW(w, DUNES), mesa = sumW(w, TERRACES);
+    const flat = sumW(w, FLAT), hills = sumW(w, HILLS), dune = sumW(w, DUNES), mesa = sumW(w, HOODOOS);
     let h = 34 + fbm2(wx * 0.007, wz * 0.007, 5) * 12 * (1 - flat * 0.55);  // rolling land
     if (hills > 0.01) h += hills * (fbm2(wx * 0.016 + 30, wz * 0.016, 3) + 0.3) * 12;
     if (dune > 0.01) h += dune * dunes(x, z);
-    if (mesa > 0.01) h += mesa * terraces(x, z);
+    if (mesa > 0.01) h += mesa * hoodoos(x, z);
     const mm = mountainMask(x, z);
     if (mm > 0) {
       // tall ridged mountains; the ridges only reach full height in the middle of a range, so the
@@ -230,6 +243,7 @@ export function createTerrainFunctions(seed) {
   // and titanium rarest and deepest, next to the deepslate.
   // ironVein gives 0..1 (1 in the core, above 0.5 is ore, 0.12..0.5 the rusty rock around it).
   let veinX = NaN, veinY = NaN, veinZ = NaN, veinV = 0;
+  let ironX = NaN, ironZ = NaN, ironSurf = 0;
   function ironVein(x, y, z) {
     if (x === veinX && y === veinY && z === veinZ) return veinV; // oreKind and stoneAt ask for the same point
     veinX = x; veinY = y; veinZ = z; veinV = 0;
@@ -238,12 +252,16 @@ export function createTerrainFunctions(seed) {
     if (region < 0.02) return 0;
     const a = noise3(x * 0.021 + 500, y * 0.028, z * 0.021 - 200), b = noise3(x * 0.021 - 140, y * 0.028 + 60, z * 0.021 + 310);
     const r = Math.sqrt(a * a + b * b), th = 0.03 + 0.05 * smoothstep(0.02, 0.4, region);
-    return (veinV = 1 - smoothstep(th * 0.5, th * 1.9, r));
+    // veins thin out towards the surface: plenty down in the caves, little in the top few metres of
+    // a hillside (the surface height is worked out once per column)
+    if (x !== ironX || z !== ironZ) { ironX = x; ironZ = z; ironSurf = surfaceHeight(x, z); }
+    const deep = 0.6 + 0.4 * smoothstep(3, 16, ironSurf - y);
+    return (veinV = (1 - smoothstep(th * 0.5, th * 1.9, r)) * deep);
   }
   const oreAt = (x, y, z) => smoothstep(0.62, 0.74, ironVein(x, y, z));
   const ORES = [
     // [kind, offset, threshold, lowest y, highest y]
-    ['coal', 900, 0.75, 16, 128], ['copper', 1700, 0.8, 8, 64], ['gold', 2500, 0.88, 4, 26], ['titanium', 3300, 0.9, 3, 22],
+    ['coal', 900, 0.75, 16, 128], ['copper', 1700, 0.74, 6, 72], ['gold', 2500, 0.82, 4, 34], ['titanium', 3300, 0.84, 3, 28],
   ];
   // Returns null or [kind, amount]; the array is reused by the next call.
   const _ore = ['', 0];
@@ -297,16 +315,27 @@ export function createTerrainFunctions(seed) {
   // stay above the sea, since the sea would show through their roofs (see waterAt).
   const BEDROCK = 4;
   // Per column (x, z) values, worked out once for all the heights in the column.
-  let colX = NaN, colZ = NaN, colFloor = 0, colPillar = 0, colMouth = 0;
+  let colX = NaN, colZ = NaN, colFloor = 0, colPillar = 0, colMouth = 0, colRoof = 0;
   function caveDistance(x, y, z, h) {
     if (x !== colX || z !== colZ) {
       colX = x; colZ = z;
+      // the roof is measured from the lowest ground nearby, not just straight up: under a steep
+      // mountainside the ground a few metres away is much lower, and a cave measured only from the
+      // peak above would break out through the side and hollow the mountain
+      let low = h;
+      for (const r of [5, 11]) for (let k = 0; k < 6; k++) {
+        const a = (k / 6) * Math.PI * 2 + r;
+        low = Math.min(low, surfaceHeight(x + Math.cos(a) * r, z + Math.sin(a) * r) + r * 0.35);
+      }
+      const mm = mountainMask(x, z);
+      colRoof = low - mm * 6;
       // how deep caves may go here: right down where the ground is high, only to sea level where it's low
       colFloor = lerp(W + 1, WORLD.caveFloor, smoothstep(W + DRY_ABOVE + 3, W + DRY_ABOVE + 14, h));
       colPillar = noise2(x * 0.09 + 13, z * 0.09 - 71);
-      colMouth = smoothstep(0.45, 0.6, noise2(x * 0.012 - 77, z * 0.012 + 41));
+      // cave mouths open in low hills, not in the mountains
+      colMouth = smoothstep(0.45, 0.6, noise2(x * 0.012 - 77, z * 0.012 + 41)) * (1 - smoothstep(0.05, 0.25, mm));
     }
-    const floor = colFloor, pillar = colPillar, mouth = colMouth;
+    const floor = colFloor, pillar = colPillar, mouth = colMouth, roof = colRoof;
     if (y < floor) return 30;
     // cheese: big rounded caverns, flattened a little so they're wider than tall
     const c = noise3(x * 0.0105 + 200, y * 0.02, z * 0.0105 - 300) + noise3(x * 0.03 - 50, y * 0.04, z * 0.03 + 80) * 0.18;
@@ -317,9 +346,9 @@ export function createTerrainFunctions(seed) {
     const a = noise3(x * 0.016, y * 0.022, z * 0.016), b = noise3(x * 0.016 + 57.1, y * 0.022 - 13.7, z * 0.016 + 91.3);
     const thick = 0.07 + 0.06 * noise3(x * 0.007 - 9, y * 0.01, z * 0.007 + 4);
     cave = Math.min(cave, (Math.sqrt(a * a + b * b) - thick) * 55);
-    // a roof of at least 6 m under the surface (more over the big caverns), except where a cave
-    // mouth is allowed to open to the sky
-    cave += Math.max(0, y - (h - 6)) * 6 * (1 - mouth) + Math.max(0, y - (h - 14)) * 2.5 * (1 - mouth) * smoothstep(0.3, 0.5, c);
+    // a roof of at least 6 m under the lowest ground nearby (more over the big caverns, and more in
+    // the mountains), except where a cave mouth is allowed to open to the sky
+    cave += Math.max(0, y - (roof - 6)) * 6 * (1 - mouth) + Math.max(0, y - (roof - 14)) * 2.5 * (1 - mouth) * smoothstep(0.3, 0.5, c);
     cave = Math.min(cave, tunnelDistance(x, y, z));
     // fade out towards the floor, so caves get rounded bottoms instead of flat cut-offs (and
     // never reach below the floor, which under low ground is just above the sea)

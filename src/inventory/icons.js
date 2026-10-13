@@ -311,6 +311,36 @@ function station(g, kind) {
     g.fillStyle = '#4a4d52'; poly(g, [38, 30, 46, 34, 44, 36, 36, 33]); g.fill();
   }
 }
+// Spawner eggs: an egg in the creature's colours, with spots (so every spawner has a picture, even
+// where the emoji for that animal isn't in the font).
+const EGG = {
+  cow: ['#f2efe8', '#3a2c22'], pig: ['#f4b6b0', '#c46a6a'], sheep: ['#f0ece2', '#c9b9a0'], chicken: ['#fbfaf4', '#d8402c'],
+  deer: ['#b07a48', '#f2e2c4'], rabbit: ['#c9b49a', '#f6efe4'], wolf: ['#9a9a9e', '#4a4a50'], bear: ['#6a4428', '#3a2414'],
+  boar: ['#5a4232', '#c9b08a'], spider: ['#2c2626', '#c0202a'], camel: ['#d8b07a', '#9a7040'], zebra: ['#f4f4f0', '#1c1c1c'],
+  goat: ['#e8e2d4', '#8a7a62'], fox: ['#e0782c', '#f8f2e8'], parrot: ['#2cb04a', '#e83a2a'], polar_bear: ['#f4f6f8', '#9ab4c8'],
+  jaguar: ['#e8b048', '#3a2a14'], scorpion: ['#3a2c1e', '#c8a040'],
+};
+function egg(g, kind) {
+  let c = EGG[kind];
+  if (!c) { let h = 0; for (const ch of kind) h = (h * 31 + ch.charCodeAt(0)) % 360; c = [`hsl(${h} 45% 62%)`, `hsl(${(h + 150) % 360} 55% 32%)`]; }
+  g.save();
+  g.beginPath(); g.moveTo(24, 5);
+  g.bezierCurveTo(37, 5, 41, 26, 40, 32); g.bezierCurveTo(39, 41, 32, 45, 24, 45);
+  g.bezierCurveTo(16, 45, 9, 41, 8, 32); g.bezierCurveTo(7, 26, 11, 5, 24, 5); g.closePath();
+  const gr = g.createRadialGradient(18, 16, 2, 24, 28, 24);
+  gr.addColorStop(0, '#ffffff'); gr.addColorStop(0.25, c[0]); gr.addColorStop(1, c[0]);
+  g.fillStyle = gr; g.fill();
+  g.clip();
+  g.fillStyle = c[1];
+  for (const [x, y, r] of [[30, 14, 4], [16, 26, 5], [31, 32, 4.5], [21, 40, 3.5], [36, 23, 2.5], [14, 14, 2.5]]) { g.beginPath(); g.arc(x, y, r, 0, 7); g.fill(); }
+  g.fillStyle = 'rgba(0, 0, 0, 0.18)'; g.beginPath(); g.ellipse(30, 34, 14, 13, 0, 0, 7); g.fill();
+  g.restore();
+  g.beginPath(); g.moveTo(24, 5);
+  g.bezierCurveTo(37, 5, 41, 26, 40, 32); g.bezierCurveTo(39, 41, 32, 45, 24, 45);
+  g.bezierCurveTo(16, 45, 9, 41, 8, 32); g.bezierCurveTo(7, 26, 11, 5, 24, 5); g.closePath();
+  outline(g);
+}
+
 function crucibleTop(g) { g.fillStyle = '#ffd070'; g.beginPath(); g.ellipse(24, 14, 7, 2.6, 0, 0, 7); g.fill(); }
 
 // Pictures by item id, for items that don't name one with `draw`.
@@ -328,6 +358,7 @@ const DRAW = {
   armour: (g, m) => armour(g, MATERIAL_COLORS[m]), coal: (g) => coal(g), stick: (g) => stick(g), leather: (g) => leather(g), brick: (g) => brick(g),
   gem: (g, m) => gem(g, MATERIAL_COLORS[m]), paper: (g) => paper(g), nails: (g) => nails(g), chain: (g) => chain(g), gear: (g) => gear(g),
   bucket: (g, f) => bucket(g, f), bottle: (g, f) => bottle(g, f), station: (g, k) => station(g, k),
+  egg: (g, k) => egg(g, k),
 };
 export const iconSpec = (def) => def.draw || BY_ID[def.id] || null;
 const cache = {};

@@ -84,7 +84,12 @@ run it. See README.md for features, controls and the code layout table.
 - Glowing blocks share four point lights, moved to the nearest ones each frame: adding or removing
   lights recompiles every shader, so the count must stay fixed.
 - `terrainFns.waterAt` returns a very low value where the ground is well above the water, so
-  caves under land stay dry; the water shader discards there too.
+  caves under land stay dry; the water shader discards there too. Natural water also discards
+  inside any 1 m column whose top block (`groundTop`, a texture kept up to date by `setGroundTops`
+  as chunks build) is above the water, so lakes reach right up to blocky shores.
+- Poured fluid is one merged mesh per fluid with block-shaped cells, drawn with the same materials
+  as natural water (`waterMaterial(false)`) and crater lava (`lavaMaterial()` in `volcano.js`).
+  Crater lakes and lava flows are instanced lava blocks too.
 
 ## Biomes and caves
 

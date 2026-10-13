@@ -1,5 +1,25 @@
 # Changelog
 
+## Round 12, part 1: fixes for the block world
+
+- Volcano craters have their lava lake again, built of lava blocks that fill the crater, and the
+  lava flows down the sides are thin lava sheets lying on the blocks.
+- Lakes, ponds and the river reach right up to the blocky shore instead of stopping short of it.
+- Poured water and lava look like natural water and lava, in block-shaped cells.
+- Lava poured into a lake or the river hardens into obsidian or stone. A thin sheet of spilled
+  lava slowly cools away to nothing.
+- Underwater, right-click works on what you aim at instead of always drinking. You only drink
+  unpurified water when what you hold has no other use and you aren't aiming at something to use.
+- Every spawner has a drawn egg icon in its animal's colours (the polar bear spawner had none).
+- Flowers have their own names: Goldenbell, Emberbloom, Skyblossom, Violet globe, Blush cup,
+  Sunset cup, Snowbell and Moonpetal.
+- Caves no longer cut holes through the sides of mountains.
+- More copper (about 1.7×), gold (2.7×) and titanium (3×); far less iron near the surface.
+- Animals hop up single blocks and step down drops on the block ground.
+- In water or lava you can climb out onto a bank up to 2.6 m above your feet by moving toward it.
+- The mesa is now the painted wastes: tall rock towers on swelling ground, with wavy cream,
+  salmon, rust and lilac bands.
+
 ## Round 11: the ground is blocks
 
 - The ground is now made of 1 m blocks, the same size and shapes as the ones you place, with

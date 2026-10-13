@@ -125,8 +125,7 @@ export function defineCatalogItems(reg, RECIPES) {
   R('lantern', { iron_ingot: 2, torch: 1 }, { at: 'workbench' });
 
   // --- Plants gathered in the biomes
-  for (const [id, hex] of FLOWERS) {
-    const name = id.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
+  for (const [id, hex, name] of FLOWERS) {
     reg(id, name, null, { color: `radial-gradient(circle at 50% 38%, #${hex.toString(16).padStart(6, '0')} 0 7px, transparent 8px), linear-gradient(90deg, transparent 46%, #3f7a2a 46% 54%, transparent 54%)`, flat: true, cat: 'nature' });
   }
   const plant = (id, name, look, extra = {}) => reg(id, name, look, { cat: 'nature', ...extra });

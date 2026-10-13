@@ -5,6 +5,7 @@ import { lantern } from '../render/scene.js';
 import { CELL, cellKey, chunksIn, obstacleGrid, terrainFns } from '../world/world.js';
 import { craterLavaAt, lavaDepth } from '../world/volcano.js';
 import { solidAt } from '../terrain/voxels.js';
+import { groundAt } from '../world/query.js';
 import { fluidAt } from '../world/fluids.js';
 import { FOOT_OFFSET, player, respawn } from './character.js';
 import { animateCharacter } from './animation.js';
@@ -111,8 +112,9 @@ function collideCapsule() {
 
 // Walking into a low ledge (a slab, a stair, a crease or lump in the ground) steps up onto it instead
 // of stopping you dead: try the same move from up to STEP higher, and keep it if that gets further.
-const STEP = 0.55, _from = new THREE.Vector3(), _blocked = new THREE.Vector3(), _steepN = new THREE.Vector3(), _saved = { ground: false, steep: false, slope: false, ceiling: false };
-function stepUp(dt) {
+const STEP = 0.55, _top = new THREE.Vector3(), _from = new THREE.Vector3(), _blocked = new THREE.Vector3(), _steepN = new THREE.Vector3(), _saved = { ground: false, steep: false, slope: false, ceiling: false };
+// Returns whether it stepped up.
+function stepUp(dt, height = STEP) {
   const want = Math.hypot(player.velocity.x, player.velocity.z) * dt;
   if (want < 1e-4) return;
   _blocked.copy(player.position);
@@ -120,21 +122,38 @@ function stepUp(dt) {
   _steepN.copy(contact.steepN);
   const gotBlocked = Math.hypot(_blocked.x - _from.x, _blocked.z - _from.z);
   // lift, move across, then settle back down onto whatever is there
-  player.position.set(_from.x + player.velocity.x * dt, _from.y + STEP, _from.z + player.velocity.z * dt);
+  player.position.set(_from.x + player.velocity.x * dt, _from.y + height, _from.z + player.velocity.z * dt);
   contact.ground = contact.steep = contact.slope = contact.ceiling = false; contact.steepN.set(0, 0, 0);
   collideCapsule();
   player.position.copy(_seg.start);
   const lifted = !contact.ceiling;
-  player.position.y -= STEP;
-  contact.ground = contact.steep = contact.slope = contact.ceiling = false; contact.steepN.set(0, 0, 0);
-  collideCapsule();
-  player.position.copy(_seg.start);
+  // come back down a little at a time until something is underfoot
+  _top.copy(player.position);
+  for (let d = Math.min(0.3, height); ; d = Math.min(height, d + 0.3)) {
+    player.position.set(_top.x, _top.y - d, _top.z);
+    contact.ground = contact.steep = contact.slope = contact.ceiling = false; contact.steepN.set(0, 0, 0);
+    collideCapsule();
+    player.position.copy(_seg.start);
+    if (contact.ground || d >= height) break;
+  }
   const got = Math.hypot(player.position.x - _from.x, player.position.z - _from.z);
-  if (lifted && contact.ground && got > gotBlocked + want * 0.3 && player.position.y - _from.y < STEP + 0.05) return; // stepped up
+  const ok = lifted && contact.ground && got > gotBlocked + want * 0.3 && player.position.y - _from.y < height + 0.05;
+  if (ok) return true; // stepped up
   // no better: back to where the wall stopped you
   player.position.copy(_blocked);
   contact.ground = _saved.ground; contact.steep = _saved.steep; contact.slope = _saved.slope; contact.ceiling = _saved.ceiling;
   contact.steepN.copy(_steepN);
+  return false;
+}
+
+// Is there ground to climb onto just ahead (its top between half a metre and 2.6 m above your
+// feet, with room to stand on it)?
+function shoreAhead(dir) {
+  const feet = player.position.y - FOOT_OFFSET, r = PLAYER.radius + 0.35;
+  const x = player.position.x + dir.x * r, z = player.position.z + dir.z * r;
+  const top = groundAt(x, z, feet + 2.8)?.point.y;
+  if (top === undefined || top < feet + 0.3 || top > feet + 2.6) return false;
+  return !solidAt(x, top + 0.5, z) && !solidAt(x, top + 1.5, z);
 }
 
 function stepPhysics(dt, inputDir, speed) {
@@ -172,7 +191,10 @@ function stepPhysics(dt, inputDir, speed) {
   contact.steepN.set(0, 0, 0);
   collideCapsule();
   player.position.copy(_seg.start);
-  if (contact.steep && wasOnGround && !swimming && !state.creative && inputDir.lengthSq() > 0) stepUp(dt);
+  const stepped = contact.steep && wasOnGround && !swimming && !state.creative && inputDir.lengthSq() > 0 && stepUp(dt);
+  // in water or lava, swimming or wading against the shore: if there's ground to stand on within a
+  // couple of metres up (a block, a slope), you pull yourself up and out onto it
+  if (!stepped && contact.steep && player.inWater && !state.creative && inputDir.lengthSq() > 0 && player.velocity.y < 4.5 && shoreAhead(inputDir)) player.velocity.y = 4.5;
 
   player.onGround = contact.ground;
   // fall damage: hitting the ground faster than after about a 5 m drop hurts, on flat ground and

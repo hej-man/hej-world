@@ -590,12 +590,19 @@ export function spawnAnimals(seed) {
   return animals.length;
 }
 
-// Moves an animal if the spot is walkable: on land, not too steep, no step over 0.9 m, no tree, rock or block in the way.
+// Moves an animal if the spot is walkable: on land, not too steep, no tree, rock or block in the
+// way. The ground is blocks, so an animal hops up one block (or a slope) and steps down a drop of up
+// to three; anything higher it walks round. Small animals (except hoppers) don't climb blocks.
+const STEP_UP = 1.05, STEP_DOWN = 3.1;
 function tryMoveAnimal(a, mx, mz) {
   const S = WORLD.size, nx = a.x + mx, nz = a.z + mz;
   if (nx < 3 || nz < 3 || nx > S - 3 || nz > S - 3) return false;
   const g = groundAt(nx, nz, a.y + 2.2);
-  if (!g || g.point.y < terrainFns.waterAt(nx, nz) + 0.2 || g.face.normal.y < 0.6 || Math.abs(g.point.y - a.y) > 0.9) return false;
+  if (!g || g.point.y < terrainFns.waterAt(nx, nz) + 0.2 || g.face.normal.y < 0.6) return false;
+  const rise = g.point.y - a.y, up = a.sp.h < 0.5 && !a.sp.hop ? 0.55 : STEP_UP;
+  if (rise > up || rise < -STEP_DOWN) return false;
+  // room for its body above the new ground (not under a ledge)
+  if (rise > 0.1 && groundAt(nx, nz, g.point.y + a.sp.h + 0.2)?.point.y > g.point.y + 0.1) return false;
   const gy = g.point.y;
   if (lavaFlows.length && terrainFns.volcanoInfluence(nx, nz) > 0.25 && lavaAt(nx, gy, nz, 0.5)) return false;
   // stays out of poured water and lava deeper than a puddle (but can always walk out of a pool it is standing in)
@@ -744,7 +751,10 @@ export function updateAnimals(frameDt) {
     a.tailT = (a.tailT || 0) + dt * (1.5 + Math.min(3, hs));
     a.tail.rotation.y = Math.sin(a.tailT * 2.2) * (0.15 + 0.2 * Math.max(0, Math.sin(a.tailT * 0.37)));
     const hop = sp.hop && hs > 0.2 ? Math.abs(Math.sin(a.phase)) * 0.25 : 0;
-    a.group.position.set(a.x, a.y + hop, a.z);
+    // the body follows the ground smoothly: a quick hop up a block, a short drop down one
+    if (a.vy === undefined || Math.abs(a.vy - a.y) > 4) a.vy = a.y;
+    a.vy += (a.y - a.vy) * Math.min(1, dt * (a.y > a.vy ? 12 : 8));
+    a.group.position.set(a.x, a.vy + hop, a.z);
     a.group.rotation.y = a.facing;
     const mat = a.hurtT > 0 ? hurtMat : animalMat;
     if (a.meshes[0].material !== mat) for (const m of a.meshes) m.material = mat;

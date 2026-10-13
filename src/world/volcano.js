@@ -2,17 +2,16 @@ import * as THREE from 'three';
 import { lerp, mulberry32 } from '../noise.js';
 import { puffTexture } from './plant-looks.js';
 import { terrainFns, volcanoFx, whenLoaded, world } from './world.js';
-import { groundAt } from './query.js';
+import { slopeDir, solidCell } from '../terrain/voxels.js';
 
 export function addVolcanoEffects() {
   lavaFlows.length = 0;
   for (const v of terrainFns.volcanoes) {
     // the flows' paths are known now (so lava burns and plants avoid it from the start); each
-    // flow's mesh is draped over the ground once the ground under that flow exists
+    // flow's lava is laid on the ground once the ground under that flow exists
     addLavaFlows(v, mulberry32(Math.round(v.x * 1000 + v.z)));
-    const lavaMat = new THREE.MeshBasicMaterial({ color: 0xff5a1a, side: THREE.DoubleSide });
-    const lava = new THREE.Mesh(craterLakeGeometry(v), lavaMat);
-    lava.position.set(v.x, v.lavaY, v.z);
+    const lava = new THREE.InstancedMesh(cellBox, lavaMaterial(), 1600);
+    lava.count = 0; lava.frustumCulled = false;
     world.add(lava);
     const light = new THREE.PointLight(0xff6a2a, 260, 45, 1.5);
     light.position.set(v.x, v.lavaY + 6, v.z);
@@ -24,8 +23,69 @@ export function addVolcanoEffects() {
       world.add(m);
       smoke.push(m);
     }
-    volcanoFx.push({ v, lava, lavaMat, light, smoke });
+    const fx = { v, lava, light, smoke, builtY: null, ready: false, wait: 0 };
+    volcanoFx.push(fx);
+    const r = v.crater * 1.3;
+    whenLoaded(v.x - r, v.x + r, v.z - r, v.z + r, () => { fx.ready = true; });
   }
+}
+
+// Lava looks the same everywhere (crater lakes, flows): crust and glowing cracks that drift slowly,
+// worked out from the world position so neighbouring blocks join up.
+const lavaUniforms = { uTime: { value: 0 } };
+const cellBox = new THREE.BoxGeometry(1, 1, 1).translate(0.5, 0.5, 0.5);
+let _lavaMat = null;
+export function lavaMaterial() {
+  if (_lavaMat) return _lavaMat;
+  const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+  mat.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, lavaUniforms);
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vLavaP;')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        vec4 lp = vec4(transformed, 1.0);
+        #ifdef USE_INSTANCING
+          lp = instanceMatrix * lp;
+        #endif
+        vLavaP = (modelMatrix * lp).xyz;`);
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>
+        uniform float uTime;
+        varying vec3 vLavaP;
+        float lh(vec2 p) { p = fract(p * vec2(0.3183, 0.3679) + 0.1) * 17.0; return fract(p.x * p.y * (p.x + p.y)); }
+        float ln(vec2 x) { vec2 i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f);
+          return mix(mix(lh(i), lh(i + vec2(1, 0)), f.x), mix(lh(i + vec2(0, 1)), lh(i + vec2(1, 1)), f.x), f.y); }`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+        vec2 q = vLavaP.xz + vec2(vLavaP.y * 0.7, -vLavaP.y * 0.5);
+        float n = ln(q * 0.55 + vec2(uTime * 0.12, uTime * 0.07)) * 0.6 + ln(q * 1.7 - vec2(uTime * 0.2, 0.0)) * 0.4;
+        float hot = smoothstep(0.35, 0.75, n);
+        vec3 crust = vec3(0.32, 0.07, 0.02), glow = vec3(1.0, 0.38, 0.05), white = vec3(1.0, 0.82, 0.35);
+        diffuseColor.rgb = mix(crust, mix(glow, white, smoothstep(0.82, 1.0, n)), hot);`);
+  };
+  return (_lavaMat = mat);
+}
+
+// The crater lake: every open cell in the crater below the lava's height is lava, the top layer
+// only as deep as the lava reaches. Rebuilt when the level changes (scooping, refilling) and now and
+// then in case the crater was dug into.
+const _cm = new THREE.Matrix4();
+function buildCraterLake(fx) {
+  const v = fx.v, m = fx.lava, R = Math.ceil(v.crater * 1.25), top = v.lavaY;
+  const cx = Math.floor(v.x), cz = Math.floor(v.z), y0 = Math.floor(v.rim - v.depth - 3);
+  let i = 0;
+  for (let x = cx - R; x <= cx + R; x++) for (let z = cz - R; z <= cz + R; z++) {
+    if (Math.hypot(x + 0.5 - v.x, z + 0.5 - v.z) > v.crater * 1.25) continue;
+    for (let y = y0; y < top && i < m.instanceMatrix.count; y++) {
+      if (solidCell(x, y, z)) continue;
+      // only cells inside the bowl: there's crater wall around them at this height
+      if (Math.hypot(x + 0.5 - v.x, z + 0.5 - v.z) > lakeRadiusToward(v, x + 0.5 - v.x, z + 0.5 - v.z) + 1.5) continue;
+      _cm.makeScale(1, Math.min(1, top - y), 1).setPosition(x, y, z);
+      m.setMatrixAt(i++, _cm);
+    }
+  }
+  m.count = i;
+  m.instanceMatrix.needsUpdate = true;
+  fx.builtY = top;
 }
 
 // The crater lake fills the crater up to its lava height, whatever shape the crater floor has: in
@@ -43,19 +103,6 @@ function lakeRadii(v) {
   }
   return (v.lakeR = rs);
 }
-function craterLakeGeometry(v) {
-  const rs = lakeRadii(v), pos = [0, 0, 0], idx = [];
-  for (let k = 0; k < LAKE_SIDES; k++) {
-    const a = (k / LAKE_SIDES) * Math.PI * 2, r = rs[k] + 1.2;
-    pos.push(Math.cos(a) * r, 0, Math.sin(a) * r);
-    idx.push(0, 1 + ((k + 1) % LAKE_SIDES), 1 + k);
-  }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.setIndex(idx);
-  g.computeVertexNormals();
-  return g;
-}
 // How far the crater lake reaches from the centre in the direction of (dx, dz).
 function lakeRadiusToward(v, dx, dz) {
   const rs = lakeRadii(v), f = ((Math.atan2(dz, dx) / (Math.PI * 2) + 1) % 1) * LAKE_SIDES, k = Math.floor(f) % LAKE_SIDES;
@@ -63,53 +110,12 @@ function lakeRadiusToward(v, dx, dz) {
 }
 
 // Lava flows: glowing rivers running from each crater rim down the volcano's side. Each follows the
-// slope downhill (with a little wander) until the ground flattens out at the foot of the cone.
+// slope downhill (with a little wander) until the ground flattens out at the foot of the cone. On the
+// block ground a flow is a thin sheet of lava on top of each column it covers, so it steps down
+// with the ground.
 export const lavaFlows = [];   // { pts: [{x, y, z, w}], minX, maxX, minZ, maxZ }
-const lavaUniforms = { uTime: { value: 0 } };
-function lavaFlowMaterial() {
-  const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
-  mat.onBeforeCompile = (shader) => {
-    Object.assign(shader.uniforms, lavaUniforms);
-    shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nvarying vec2 vLavaUv;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvLavaUv = uv;');
-    shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', `#include <common>
-        uniform float uTime;
-        varying vec2 vLavaUv;
-        float lh(vec2 p) { p = fract(p * vec2(0.3183, 0.3679) + 0.1) * 17.0; return fract(p.x * p.y * (p.x + p.y)); }
-        float ln(vec2 x) { vec2 i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f);
-          return mix(mix(lh(i), lh(i + vec2(1, 0)), f.x), mix(lh(i + vec2(0, 1)), lh(i + vec2(1, 1)), f.x), f.y); }`)
-      .replace('#include <color_fragment>', `#include <color_fragment>
-        // u runs across the flow (0..1), v along it in metres; the pattern slides downhill
-        float along = vLavaUv.y * 0.35 - uTime * 0.5;
-        float n = ln(vec2(vLavaUv.x * 4.0, along)) * 0.6 + ln(vec2(vLavaUv.x * 11.0, along * 2.7)) * 0.4;
-        float middle = 1.0 - abs(vLavaUv.x - 0.5) * 2.0;
-        float hot = smoothstep(0.25, 0.65, n * 0.6 + middle * 0.8);
-        vec3 crust = vec3(0.16, 0.05, 0.02), glow = vec3(2.6, 0.85, 0.15), white = vec3(3.2, 2.0, 0.7);
-        diffuseColor.rgb = mix(crust, mix(glow, white, smoothstep(0.85, 1.0, hot)), hot);`);
-  };
-  return mat;
-}
-
-// A soft additive glow over and around each flow, so lava shows up from a distance and at night.
-function lavaHaloMaterial() {
-  const mat = new THREE.MeshBasicMaterial({ color: 0xff6a1a, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
-  mat.onBeforeCompile = (shader) => {
-    Object.assign(shader.uniforms, lavaUniforms);
-    shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nvarying vec2 vLavaUv;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvLavaUv = uv;');
-    shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nuniform float uTime;\nvarying vec2 vLavaUv;')
-      .replace('#include <color_fragment>', `#include <color_fragment>
-        float edge = 1.0 - abs(vLavaUv.x - 0.5) * 2.0;
-        diffuseColor.a = edge * edge * (0.45 + 0.12 * sin(uTime * 2.0 + vLavaUv.y * 0.3));`);
-  };
-  return mat;
-}
 // Embers: sparks drifting up from the flows
-const emberUniforms = { uTime: lavaUniforms.uTime };
+const emberUniforms = lavaUniforms;
 function emberPoints(pts, rand) {
   const n = Math.min(80, pts.length), pos = [], seed = [];
   for (let i = 0; i < n; i++) {
@@ -140,7 +146,7 @@ function emberPoints(pts, rand) {
 // How far a volcano's slopes (and its lava flows) reach from its centre, in metres.
 export const volcanoRadius = (v) => v.R * 1.1 + 6;
 function addLavaFlows(v, rand) {
-  const T = terrainFns, mat = lavaFlowMaterial(), haloMat = lavaHaloMaterial();
+  const T = terrainFns;
   const n = 3 + Math.floor(rand() * 2);
   for (let f = 0; f < n; f++) {
     const a0 = (f / n) * Math.PI * 2 + rand() * 1.2;
@@ -165,42 +171,39 @@ function addLavaFlows(v, rand) {
     const xs = pts.map((p) => p.x), zs = pts.map((p) => p.z);
     const flow = { pts, minX: Math.min(...xs) - 3, maxX: Math.max(...xs) + 3, minZ: Math.min(...zs) - 3, maxZ: Math.max(...zs) + 3 };
     lavaFlows.push(flow);
-    whenLoaded(flow.minX, flow.maxX, flow.minZ, flow.maxZ, () => buildFlowMesh(pts, mat, haloMat, mulberry32(Math.round(pts[0].x * 97 + pts[0].z))));
+    whenLoaded(flow.minX, flow.maxX, flow.minZ, flow.maxZ, () => buildFlowMesh(pts, mulberry32(Math.round(pts[0].x * 97 + pts[0].z))));
   }
 }
-function buildFlowMesh(pts, mat, haloMat, rand) {
-  const T = terrainFns;
-  // a strip of three vertices across the flow at each point, each draped on the ground; and a
-  // wider glow strip a little above it
-  const pos = [], uv = [], idx = [], hpos = [];
-  let along = 0;
-  pts.forEach((p, k) => {
-    if (k) along += Math.hypot(p.x - pts[k - 1].x, p.z - pts[k - 1].z);
-    const px = -p.dz, pz = p.dx;
-    for (let c = 0; c < 3; c++) {
-      const off = (c - 1) * p.w, cx = p.x + px * off, cz = p.z + pz * off;
-      const hit = groundAt(cx, cz);
-      const y = (hit ? hit.point.y : T.surfaceHeight(cx, cz)) + 0.2;
-      pos.push(cx, y, cz); uv.push(c / 2, along);
-      if (c === 1) p.y = y;
-      hpos.push(p.x + px * off * 2.4, y + 0.35, p.z + pz * off * 2.4);
-    }
-    if (k) for (let c = 0; c < 2; c++) { const a = (k - 1) * 3 + c, b = k * 3 + c; idx.push(a, b, a + 1, a + 1, b, b + 1); }
-  });
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
-  geo.setIndex(idx);
-  geo.computeBoundingSphere();
-  const mesh = new THREE.Mesh(geo, mat);
-  const halo = new THREE.BufferGeometry();
-  halo.setAttribute('position', new THREE.Float32BufferAttribute(hpos, 3));
-  halo.setAttribute('uv', geo.attributes.uv);
-  halo.setIndex(idx);
-  halo.computeBoundingSphere();
-  const glow = new THREE.Mesh(halo, haloMat);
-  glow.renderOrder = 3;
-  world.add(mesh, glow, emberPoints(pts, rand));
+// The height of the ground's top in the column at (x, z), searching down from about `near`: the top
+// of the highest ground block, or halfway up a slope sitting on it.
+function columnTop(x, z, near) {
+  for (let y = Math.floor(near) + 4; y > near - 12; y--) {
+    if (!solidCell(x, y, z)) continue;
+    return slopeDir(x, y + 1, z) >= 0 ? y + 1.5 : y + 1;
+  }
+  return null;
+}
+function buildFlowMesh(pts, rand) {
+  const T = terrainFns, cols = new Map();
+  for (const p of pts) {
+    const r = p.w;
+    for (let x = Math.floor(p.x - r); x <= Math.floor(p.x + r); x++)
+      for (let z = Math.floor(p.z - r); z <= Math.floor(p.z + r); z++) {
+        if (cols.has(`${x},${z}`) || Math.hypot(x + 0.5 - p.x, z + 0.5 - p.z) > r * 0.95) continue;
+        const top = columnTop(x, z, T.surfaceHeight(x + 0.5, z + 0.5));
+        if (top !== null) cols.set(`${x},${z}`, [x, top, z]);
+      }
+    const c = cols.get(`${Math.floor(p.x)},${Math.floor(p.z)}`);
+    p.y = (c ? c[1] : T.surfaceHeight(p.x, p.z)) + 0.1;
+  }
+  const m = new THREE.InstancedMesh(cellBox, lavaMaterial(), cols.size);
+  let i = 0;
+  for (const [x, top, z] of cols.values()) {
+    _cm.makeScale(1, 0.2, 1).setPosition(x, top - 0.05, z);
+    m.setMatrixAt(i++, _cm);
+  }
+  m.computeBoundingSphere();
+  world.add(m, emberPoints(pts, rand));
 }
 
 // The volcano whose crater lake is at (x, z), or null.
@@ -256,11 +259,11 @@ export function updateVolcanoes(dt, time) {
   lavaUniforms.uTime.value = time;
   for (const fx of volcanoFx) {
     const pulse = 0.5 + 0.5 * Math.sin(time * 1.7);
-    fx.lavaMat.color.setRGB(2.2, 0.7 + pulse * 0.25, 0.15); // brighter than white: it glows
     fx.light.intensity = 220 + pulse * 80;
     // the lava lake sinks when lava is scooped out, and fills back up (world/hydro.js)
-    fx.lava.position.y = fx.v.lavaY;
     fx.light.position.y = fx.v.lavaY + 6;
+    fx.wait -= dt;
+    if (fx.ready && (fx.builtY === null || Math.abs(fx.builtY - fx.v.lavaY) > 0.04 || fx.wait <= 0)) { buildCraterLake(fx); fx.wait = 3; }
     for (const s of fx.smoke) {
       const u = s.userData;
       u.t = (u.t + dt * 0.05) % 1;

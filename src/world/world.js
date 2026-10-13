@@ -5,7 +5,7 @@ import { blockMesh } from '../terrain/mesh.js';
 import { fillSolid, resetVoxels, slopeDir } from '../terrain/voxels.js';
 import { buildRenderGeometry, makeTerrainMaterial, terrainUniforms } from '../terrain/material.js';
 import { forgetMaterial, prepareLighting, scene } from '../render/scene.js';
-import { makeWater } from './water.js';
+import { makeWater, setGroundTops } from './water.js';
 import { addVolcanoEffects } from './volcano.js';
 import { addClouds, placeVegetation, vegTiles } from './vegetation.js';
 import { clearGrass } from './grass.js';
@@ -76,6 +76,7 @@ function disposeWorld() {
 
 export const chunkWidth = () => CHUNK * WORLD.voxel;
 
+let _tops = new Uint8Array(0);
 // (Re)builds the collider + render mesh of one chunk from the current density field.
 export function buildChunk(i, j) {
   const ch = chunks[i + chunkCount * j];
@@ -85,6 +86,10 @@ export function buildChunk(i, j) {
     colliders.splice(colliders.indexOf(ch.collider), 1); ch.collider = null;
   }
   const w = chunkWidth(), geo = blockMesh(i * w, (i + 1) * w, j * w, (j + 1) * w, fillSolid, slopeDir);
+  // the water needs to know where the ground's top is in every column
+  if (_tops.length < w * w * WORLD.height) _tops = new Uint8Array(w * w * WORLD.height);
+  fillSolid(i * w, j * w, w, w, _tops);
+  setGroundTops(i * w, j * w, w, w, _tops);
   if (!geo.index.count) { geo.dispose(); return 0; }
   geo.computeBoundsTree();
   ch.collider = new THREE.Mesh(geo);

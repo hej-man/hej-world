@@ -47,7 +47,7 @@ export function defineItems() {
   // spawners only come from the creative item list
   const ANIMAL_ICONS = { cow: '🐄', pig: '🐖', sheep: '🐑', chicken: '🐔', deer: '🦌', rabbit: '🐇', wolf: '🐺', bear: '🐻', boar: '🐗', spider: '🕷️',
     camel: '🐫', zebra: '🦓', goat: '🐐', fox: '🦊', parrot: '🦜', polar_bear: '🐻‍❄️', jaguar: '🐆', scorpion: '🦂' };
-  for (const [kind, sp] of Object.entries(SPECIES)) reg(`spawn_${kind}`, `${sp.name} spawner`, ANIMAL_ICONS[kind] || '🥚', { spawn: kind });
+  for (const [kind, sp] of Object.entries(SPECIES)) reg(`spawn_${kind}`, `${sp.name} spawner`, ANIMAL_ICONS[kind] || '🥚', { spawn: kind, draw: `egg:${kind}` });
   reg('crystal_wand', 'Crystal wand', '🪄', { wand: true, maxStack: 1 });
   reg('mana_tonic', 'Mana tonic', '🧪', { mana: 50 });
   reg('bandage', 'Bandage', '🩹', { heal: 30 });

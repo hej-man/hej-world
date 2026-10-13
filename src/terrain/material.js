@@ -268,17 +268,21 @@ export function makeTerrainMaterial() {
         float shiny = oi == 1 ? 0.0 : 1.0; // coal doesn't glint
         float fleck = oreAmt * smoothstep(0.72, 0.8, vnoise(vWorldPos * 11.0)) * shiny;
         col = mix(col, mix(srgb(vec3(0.85, 0.86, 0.9)), oreC * 1.4, 0.5), fleck * 0.8);
-        // biome looks: red sand, terracotta bands on mesa cliffs, sandstone strata in the desert
+        // biome looks: sand, painted rock in the painted wastes, sandstone strata in the desert
         float lum = dot(tAlb.rgb, vec3(0.3, 0.59, 0.11));
         float sandFrac = W[3] / max(total, 1e-4);
-        col = mix(col, srgb(vec3(0.86, 0.45, 0.24)) * (0.6 + 1.4 * lum), vBiome.w * sandFrac * surf);
+        col = mix(col, srgb(vec3(0.93, 0.66, 0.48)) * (0.6 + 1.4 * lum), vBiome.w * sandFrac * surf); // pale salmon sand
         if (vBiome.y > 0.01) {
-          float by = floor((vWorldPos.y + (vnoise(vWorldPos * vec3(0.03, 0.0, 0.03)) - 0.5) * 5.0) / 2.3);
-          float bi = by - 8.0 * floor(by / 8.0);
-          vec3 band = bi < 1.0 ? vec3(0.66, 0.38, 0.26) : bi < 2.0 ? vec3(0.84, 0.58, 0.40) : bi < 3.0 ? vec3(0.78, 0.50, 0.22)
-                    : bi < 4.0 ? vec3(0.88, 0.80, 0.68) : bi < 5.0 ? vec3(0.56, 0.30, 0.22) : bi < 6.0 ? vec3(0.82, 0.64, 0.26)
-                    : bi < 7.0 ? vec3(0.66, 0.54, 0.50) : vec3(0.72, 0.34, 0.20);
-          col = mix(col, srgb(band) * (0.7 + 0.6 * lum), vBiome.y * rockFrac * surf);
+          // painted wastes: wavy cross-bedded layers, swept up and down in long curves, in cream,
+          // salmon, rust and pale lilac, with thin dark seams
+          vec3 wp = vWorldPos;
+          float sweep = sin(wp.x * 0.045 + sin(wp.z * 0.06) * 1.7) * 3.5 + sin(wp.z * 0.033 - wp.x * 0.011) * 4.0;
+          float s = (wp.y + sweep + (vnoise(wp * vec3(0.05, 0.1, 0.05)) - 0.5) * 2.5) * 0.42;
+          float t = fract(s), k = mod(floor(s), 4.0);
+          vec3 a = k < 1.0 ? vec3(0.93, 0.82, 0.68) : k < 2.0 ? vec3(0.90, 0.60, 0.46) : k < 3.0 ? vec3(0.76, 0.42, 0.26) : vec3(0.74, 0.62, 0.72);
+          vec3 b = k < 1.0 ? vec3(0.90, 0.60, 0.46) : k < 2.0 ? vec3(0.76, 0.42, 0.26) : k < 3.0 ? vec3(0.74, 0.62, 0.72) : vec3(0.93, 0.82, 0.68);
+          vec3 band = mix(a, b, smoothstep(0.55, 0.95, t)) * (1.0 - 0.35 * smoothstep(0.93, 1.0, t));
+          col = mix(col, srgb(band) * (0.72 + 0.56 * lum), vBiome.y * rockFrac * surf);
         }
         float strata = 0.86 + 0.14 * sin(vWorldPos.y * 2.6 + vnoise(vWorldPos * 0.2) * 3.0);
         col = mix(col, srgb(vec3(0.86, 0.75, 0.54)) * strata * (0.65 + 0.7 * lum), vBiome.z * rockFrac * surf);

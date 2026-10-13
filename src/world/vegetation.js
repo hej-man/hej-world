@@ -44,9 +44,10 @@ export const PLANT_KINDS = {
   bamboo:     { name: 'Bamboo', drops: [['bamboo', 2, 4]] },
   petals:     { name: 'Pink petals', drops: [['pink_petals', 1, 2]] },
 };
+// [item id, colour, name]: the game's own flowers
 export const FLOWERS = [
-  ['dandelion', 0xf2d23a], ['poppy', 0xd8352a], ['cornflower', 0x4a6ee0], ['allium', 0xa45ad8],
-  ['pink_tulip', 0xf09ac0], ['orange_tulip', 0xf08a2a], ['lily_of_the_valley', 0xf4f4ee], ['oxeye_daisy', 0xe8e6da],
+  ['dandelion', 0xf2d23a, 'Goldenbell'], ['poppy', 0xd8352a, 'Emberbloom'], ['cornflower', 0x4a6ee0, 'Skyblossom'], ['allium', 0xa45ad8, 'Violet globe'],
+  ['pink_tulip', 0xf09ac0, 'Blush cup'], ['orange_tulip', 0xf08a2a, 'Sunset cup'], ['lily_of_the_valley', 0xf4f4ee, 'Snowbell'], ['oxeye_daisy', 0xe8e6da, 'Moonpetal'],
 ];
 
 // Vegetation is placed per square tile, once the terrain under the tile has been generated.

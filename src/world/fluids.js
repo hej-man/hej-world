@@ -5,6 +5,8 @@ import { BLOCKS, blockKey, blocks, placeBlock } from './blocks.js';
 import { terrainFns, world } from './world.js';
 import { raycastTerrain } from './query.js';
 import { pourIntoNature } from './hydro.js';
+import { lavaMaterial } from './volcano.js';
+import { groundTop, waterMaterial } from './water.js';
 
 // ---------------------------------------------------------------------------
 // Water and lava you pour, on the 1 m block grid. Each cell holds an amount of fluid (1 = a full
@@ -106,7 +108,7 @@ function meet(f, other) {
 // out in that open water rather than in a cave under the land.
 function natureOver(x, y, z) {
   const T = terrainFns, cx = x + 0.5, cz = z + 0.5, level = T.waterAt(cx, cz);
-  return level > y + 0.5 && T.surfaceHeight(cx, cz) < y + 0.5 ? level : null;
+  return level > y + 0.5 && groundTop(cx, cz) <= y ? level : null;
 }
 
 // How much a cell holds when it sits under one holding `total` between them: a full cell, and any
@@ -145,6 +147,12 @@ function step(type) {
       if (type === 'water') pourIntoNature(x + 0.5, z + 0.5, f.m);
       removeFluid(x, y, z);
       if (type === 'lava') placeBlock(f.m >= 0.95 ? 'obsidian' : 'stone', x, y, z);
+      continue;
+    }
+    // lava running up against the river, the sea or a lake hardens, like it does against poured water
+    if (type === 'lava' && AROUND.some(([dx, dy, dz]) => dy <= 0 && !cellSolid(x + dx, y + dy, z + dz) && natureOver(x + dx, y + dy, z + dz) !== null)) {
+      removeFluid(x, y, z);
+      placeBlock(f.m >= 0.95 ? 'obsidian' : 'stone', x, y, z);
       continue;
     }
     // the other fluid next to it?
@@ -210,7 +218,7 @@ export function floodFromNature(cx, cy, cz, r) {
       if (y + 0.5 > level || cellSolid(x, y, z) || fluids.has(blockKey(x, y, z))) continue;
       const open = SIDES.some(([dx, , dz]) => {
         const nx = x + dx, nz = z + dz;
-        return !cellSolid(nx, y, nz) && T.surfaceHeight(nx + 0.5, nz + 0.5) < y + 0.5 && T.waterAt(nx + 0.5, nz + 0.5) > y + 0.5;
+        return !cellSolid(nx, y, nz) && groundTop(nx + 0.5, nz + 0.5) <= y && T.waterAt(nx + 0.5, nz + 0.5) > y + 0.5;
       });
       if (open) makeCell('water', x, y, z, 1, true);
     }
@@ -307,41 +315,87 @@ export function weatherOnFluids(dt, rain, sun) {
   }
 }
 
-// Drawing: one instanced box per cell, as tall as its fluid
+// Drawing: one surface per fluid, with only the faces you can see (none between two cells of the
+// same pool, none against the ground or a block). The top's corners are the average height of the
+// cells around them, so a pool's surface slopes smoothly down to its spreading edge instead of
+// stepping cell by cell. Both use the same look as the natural water and the volcanoes' lava.
 const meshes = {};
-const fluidGeo = new THREE.BoxGeometry(1, 1, 1).translate(0.5, 0.5, 0.5);
 function fluidMesh(type) {
   if (meshes[type]) return meshes[type];
-  const mat = type === 'water'
-    ? new THREE.MeshStandardMaterial({ color: 0x2b7fb2, roughness: 0.08, transparent: true, opacity: 0.62, depthWrite: false })
-    : new THREE.MeshStandardMaterial({ color: 0xff7a2a, emissive: 0xff4a10, emissiveIntensity: 2.4, roughness: 0.7, side: THREE.DoubleSide }); // seen from inside too
-  const m = new THREE.InstancedMesh(fluidGeo, mat, MAX_CELLS);
-  m.count = 0; m.frustumCulled = false; m.renderOrder = type === 'water' ? 2 : 0;
+  const m = new THREE.Mesh(new THREE.BufferGeometry(), type === 'water' ? waterMaterial(false) : lavaMaterial());
+  m.frustumCulled = false; m.renderOrder = type === 'water' ? 2 : 0;
   m.receiveShadow = type === 'water';
   world.add(m);
   return (meshes[type] = m);
 }
-const _m = new THREE.Matrix4(), _c = new THREE.Color();
+// the faces of a unit cell: [neighbour offset, 4 corners as (x, z, top?) going round the face]
+const SIDE_FACES = [
+  [[1, 0], [[1, 0, 0], [1, 1, 0], [1, 1, 1], [1, 0, 1]]],
+  [[-1, 0], [[0, 1, 0], [0, 0, 0], [0, 0, 1], [0, 1, 1]]],
+  [[0, 1], [[1, 1, 0], [0, 1, 0], [0, 1, 1], [1, 1, 1]]],
+  [[0, -1], [[0, 0, 0], [1, 0, 0], [1, 0, 1], [0, 0, 1]]],
+];
 function redraw(type) {
-  const m = fluidMesh(type);
-  let i = 0;
+  const m = fluidMesh(type), pos = [], nor = [];
+  const same = (x, y, z) => fluids.get(blockKey(x, y, z))?.type === type;
+  // the height of the top at a cell corner (cx, cz are the corner's grid position)
+  const corner = (cx, y, cz) => {
+    let sum = 0, n = 0;
+    for (const [dx, dz] of [[0, 0], [-1, 0], [0, -1], [-1, -1]]) {
+      const c = fluids.get(blockKey(cx + dx, y, cz + dz));
+      if (c?.type !== type) continue;
+      if (same(c.x, y + 1, c.z)) return 1; // fluid above: this corner is full
+      sum += cellHeight(c); n++;
+    }
+    return n ? sum / n : 0;
+  };
+  const quad = (a, b, c, d, nx, ny, nz) => {
+    pos.push(...a, ...b, ...c, ...a, ...c, ...d);
+    for (let k = 0; k < 6; k++) nor.push(nx, ny, nz);
+  };
   for (const f of fluids.values()) {
     if (f.type !== type) continue;
-    _m.makeScale(1, cellHeight(f), 1).setPosition(f.x, f.y, f.z);
-    m.setMatrixAt(i, _m);
-    m.setColorAt(i, _c.setScalar(type === 'lava' ? 0.85 + ((f.x * 7 + f.z * 3 + f.y) % 5) * 0.04 : 1));
-    i++;
+    const { x, y, z } = f, full = same(x, y + 1, z);
+    const h00 = full ? 1 : corner(x, y, z), h10 = full ? 1 : corner(x + 1, y, z);
+    const h11 = full ? 1 : corner(x + 1, y, z + 1), h01 = full ? 1 : corner(x, y, z + 1);
+    const H = { '0,0': h00, '1,0': h10, '1,1': h11, '0,1': h01 };
+    if (!full) quad([x, y + h00, z], [x, y + h01, z + 1], [x + 1, y + h11, z + 1], [x + 1, y + h10, z], 0, 1, 0);
+    for (const [[dx, dz], cs] of SIDE_FACES) {
+      if (same(x + dx, y, z + dz) || cellSolid(x + dx, y, z + dz)) continue;
+      const v = cs.map(([cx, cz, top]) => [x + cx, y + (top ? H[`${cx},${cz}`] : 0), z + cz]);
+      quad(v[0], v[3], v[2], v[1], dx, 0, dz);
+    }
+    if (!same(x, y - 1, z) && !cellSolid(x, y - 1, z)) quad([x, y, z], [x + 1, y, z], [x + 1, y, z + 1], [x, y, z + 1], 0, -1, 0);
   }
-  m.count = i;
-  m.instanceMatrix.needsUpdate = true;
-  if (m.instanceColor) m.instanceColor.needsUpdate = true;
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  m.geometry.dispose();
+  m.geometry = g;
+}
+
+// Thin lava cools away: a layer less than a third of a cell deep, lying on its own (no lava over or
+// under it), loses a little every second until it's gone, so a spill runs thin and then disappears
+// (about half a minute for the thinnest).
+let coolT = 0;
+function coolThinLava(dt) {
+  coolT += dt;
+  if (coolT < 1) return;
+  const secs = coolT; coolT = 0;
+  for (const f of [...fluids.values()]) {
+    if (f.type !== 'lava' || f.m > 0.34) continue;
+    if (fluids.get(blockKey(f.x, f.y + 1, f.z))?.type === 'lava' || fluids.get(blockKey(f.x, f.y - 1, f.z))?.type === 'lava') continue; // part of a deeper pool
+    f.m -= 0.008 * secs;
+    dirty.lava = true;
+    if (f.m < GONE) removeFluid(f.x, f.y, f.z);
+  }
 }
 
 export function updateFluids(dt, time) {
+  coolThinLava(dt);
   for (const type in FLUIDS) {
     timer[type] += dt;
     if (timer[type] >= FLUIDS[type].every) { timer[type] = 0; if (active[type].size) step(type); }
     if (dirty[type]) { dirty[type] = false; redraw(type); }
   }
-  if (meshes.lava) meshes.lava.material.emissiveIntensity = 2.2 + Math.sin(time * 2.3) * 0.3;
 }
