@@ -6,7 +6,8 @@ import { SPECIES } from '../animals/animals.js';
 import { BOLT_COST } from '../player/survival.js';
 import { toast } from '../ui/hud.js';
 import { TAGS, defineCatalogItems } from './catalog-items.js';
-import { defineMetalwork } from './metalwork.js';
+import { FORGE, HAMMER, defineMetalwork } from './metalwork.js';
+import { PIECE_NAMES, defineArmour } from './armour.js';
 
 // ---------------------------------------------------------------------------
 // Items and recipes
@@ -20,7 +21,7 @@ export function defineItems() {
   reg('crystal', 'Crystal', null, { draw: 'gem:crystal' });
   reg('workbench', 'Workbench', '🛠️', { place: 'workbench' });
   reg('furnace', 'Furnace', '🧱', { place: 'furnace' });
-  reg('iron_ore', 'Iron ore', null, { draw: 'ore:iron' });
+  reg('iron_ore', 'Iron ore', null, { draw: 'ore:iron', place: 'iron_ore', cat: 'materials' });
   reg('iron_ingot', 'Iron ingot', null, { draw: 'ingot:iron' });
   reg('campfire', 'Campfire', '🔥', { place: 'campfire' });
   reg('apple', 'Apple', '🍎', { food: 15, drink: 6 });
@@ -32,6 +33,9 @@ export function defineItems() {
   reg('water_bottle', 'Clean water', '💧', { drink: 40, leaves: 'bottle' });
   reg('murky_water', 'Murky water', '🫗', { drink: 30, leaves: 'bottle', dirty: true });
   reg('purifier', 'Water filter', '⚗️', { place: 'purifier' });
+  reg('basket', 'Wicker basket', '🧺', { place: 'basket' });
+  reg('chest', 'Chest', '🧰', { place: 'chest' });
+  reg('crate', 'Large crate', '📦', { place: 'crate' });
   reg('silk', 'Spider silk', '🕸️');
   reg('feather', 'Feather', '🪶');
   reg('leather', 'Leather', null, { draw: 'leather' });
@@ -51,14 +55,26 @@ export function defineItems() {
   reg('crystal_wand', 'Crystal wand', '🪄', { wand: true, maxStack: 1 });
   reg('mana_tonic', 'Mana tonic', '🧪', { mana: 50 });
   reg('bandage', 'Bandage', '🩹', { heal: 30 });
-  reg('leather_armour', 'Leather armour', null, { draw: 'armour:leather', armour: 0.35, maxStack: 1 });
-  reg('iron_armour', 'Iron armour', null, { draw: 'armour:iron', armour: 0.6, maxStack: 1 });
+  // what the night monsters drop, and the magic made from it
+  reg('fire_starter', 'Fire starter', '🎇', { ignite: true, hint: 'Right click on a tree or a wooden block to set it alight. Fire spreads to trees and wood nearby!' });
+  reg('grave_dust', 'Grave dust', '⚱️');
+  reg('bone', 'Bone', '🦴');
+  reg('hex_shard', 'Hex shard', '💠');
+  reg('gloom_silk', 'Gloom silk', '🧶');
+  reg('arcane_dust', 'Arcane dust', '✨');
+  reg('hex_staff', 'Hex staff', '🔱', { wand: { cost: 25, damage: 24, color: 0xc070ff, size: 0.24 }, maxStack: 1 });
+  reg('grave_salve', 'Grave salve', '🏺', { heal: 60 });
+  reg('gill_tonic', 'Gill tonic', '🫧', { effect: 'gills', secs: 90, hint: 'Right click to drink: breathe underwater for 90 seconds' });
+  reg('swift_draught', 'Swiftness draught', '🥤', { effect: 'swift', secs: 60, hint: 'Right click to drink: run 40% faster for 60 seconds' });
+  reg('nighteye_draught', 'Owl-eye draught', '🦉', { effect: 'nighteye', secs: 180, hint: 'Right click to drink: see in the dark for 3 minutes' });
   defineCatalogItems(reg, RECIPES);
   defineMetalwork(reg, RECIPES);
+  defineArmour(reg, (out, inp, extra = {}) => RECIPES.push({ out, in: inp, ...extra }), FORGE, HAMMER);
 }
 
 export function itemHint(def) {
   if (def.hint) return def.hint;
+  if (def.id === 'campfire') return 'Right click to place. Not under a tree or against wood: it can set them alight';
   if (def.id === 'crucible') return 'Melt metal in it at a smelter';
   if (def.id.endsWith('_mould')) return 'Cast molten metal in it at a smelter (it is kept)';
   if (def.id === 'smith_hammer') return 'Forge metal at an anvil next to a smelter (it is kept)';
@@ -66,21 +82,26 @@ export function itemHint(def) {
   if (def.id === 'smelter') return 'Right click to place. Melts ore into molten metal, slowly; titanium needs bellows next to it';
   if (def.id === 'anvil') return 'Right click to place. Forge plates, rods, tools and armour on it, next to a smelter';
   if (def.id === 'bellows') return 'Right click to place next to a smelter: hot enough to melt titanium';
-  if (def.id === 'raw_titanium') return 'Melt it at a smelter with bellows';
-  if (def.place) return BLOCKS[def.place]?.station ? 'Right click to place' : 'Right click to place · B changes the shape (block, slab, slope, stairs, prism, pillar)';
+  if (def.id === 'raw_titanium') return 'Melt it at a smelter with bellows. Right click to place it as a block of ore';
+  if (def.id === 'iron_ore') return 'Smelt it at a furnace, or melt it at a smelter. Right click to place it as a block of ore';
+  if (def.id === 'raw_copper' || def.id === 'raw_gold') return 'Smelt it at a furnace, or melt it at a smelter. Right click to place it as a block of ore';
+  if (def.id === 'coal') return 'Fuel for furnaces and campfires. Right click to place it as a block of ore';
+  if (BLOCKS[def.place]?.storage) return `Right click to place, then right click it to store up to ${BLOCKS[def.place].storage} stacks. Breaking it gives back what's inside`;
+  if (def.place) return BLOCKS[def.place]?.station ? 'Right click to place' : 'Right click to place · B changes the shape (block, slab, gentle, normal or steep slope, corner slope, stairs, roof ridge, pillar)';
   if (def.food) return `Right click to eat (+${def.food} hunger${def.drink ? `, +${def.drink} thirst` : ''})`;
-  if (def.dirty) return `Unpurified: drinking it makes you sick. Purify it at a water filter, or boil it at a campfire or furnace`;
+  if (def.dirty === true) return `Unpurified: drinking it makes you sick. Purify it at a water filter, or boil it at a campfire or furnace`;
+  if (def.dirty) return `Raw: may carry germs that make you sick. Heat it at a campfire or furnace to make it safe`;
   if (def.drink) return `Right click to drink (+${def.drink} thirst)`;
   if (def.id === 'purifier') return 'Place it, then turn murky water into clean water next to it';
-  if (def.id === 'bottle') return 'Right click on water to fill it';
-  if (def.id === 'iron_ore') return 'Smelt it at a furnace, or melt it at a smelter';
+  if (def.id === 'bottle') return 'Right click on water to fill it, or on a cow or goat to milk it';
   if (def.bucket) return 'Right click on water or lava (or poured fluid) to scoop it up';
   if (def.fluid) return `Right click to pour the ${def.fluid}; it flows like a liquid`;
   if (def.spawn) return `Right click on the ground to spawn a ${SPECIES[def.spawn].name.toLowerCase()}`;
   if (def.heal) return `Right click to use (+${def.heal} health)`;
   if (def.mana) return `Right click to drink (+${def.mana} mana)`;
-  if (def.wand) return `Right click to cast a bolt (${BOLT_COST} mana)`;
-  if (def.armour) return `Right click to wear (takes ${Math.round(def.armour * 100)}% less damage)`;
+  if (def.wand) return `Right click to cast a bolt (${def.wand.cost || BOLT_COST} mana, ${def.wand.damage || 10} damage)`;
+  if (def.air) return `Right click to wear on your head: your air lasts ${def.air} times as long underwater`;
+  if (def.wear) return `Right click to wear (${PIECE_NAMES[def.wear].toLowerCase()}: ${Math.round(def.armour * 100)}% less damage; a whole set adds up)`;
   if (def.tool === 'pickaxe') return def.tier >= 2 ? 'Breaks stone, iron ore, boulders and crystal' : 'Breaks stone, boulders and crystal (iron ore needs stone or better)';
   if (def.tool === 'axe') return 'Chops trees and wood faster';
   if (def.tool === 'shovel') return 'Digs dirt and sand faster';
@@ -111,10 +132,12 @@ export const RECIPES = [
   { out: 'iron_axe', in: { iron_ingot: 3, stick: 2 }, at: 'workbench' },
   { out: 'iron_shovel', in: { iron_ingot: 1, stick: 2 }, at: 'workbench' },
   { out: 'iron_sword', in: { iron_ingot: 2, stick: 1 }, at: 'workbench' },
-  { out: 'leather_armour', in: { leather: 5 }, at: 'workbench' },
   { out: 'bucket', in: { iron_ingot: 3 }, at: 'workbench' },
-  { out: 'iron_armour', in: { iron_ingot: 6, leather: 2 }, at: 'workbench' },
   { out: 'bottle', n: 2, in: { glass: 1 }, at: 'workbench' },
+  { out: 'basket', in: { plant_fibre: 6, stick: 2 }, at: 'workbench' },
+  { out: 'basket', in: { bamboo: 4 }, at: 'workbench' },
+  { out: 'chest', in: { '#planks': 8 }, at: 'workbench' },
+  { out: 'crate', in: { '#planks': 12, iron_ingot: 2 }, at: 'workbench' },
   { out: 'purifier', in: { '#planks': 4, sand: 3, glass: 1 }, at: 'workbench' },
   { out: 'water_bottle', in: { murky_water: 1 }, at: 'purifier' },
   { out: 'water_bottle', in: { murky_water: 1, stick: 1 }, at: 'campfire' },
@@ -123,6 +146,14 @@ export const RECIPES = [
   { out: 'cooked_meat', in: { raw_meat: 1 }, at: 'campfire' },
   { out: 'glass', in: { sand: 2 }, at: 'campfire' },
   { out: 'mana_tonic', in: { crystal: 1, berries: 2 }, at: 'campfire' },
+  { out: 'fire_starter', n: 2, in: { stick: 2, plant_fibre: 2, stone: 1 } },
+  { out: 'arcane_dust', n: 2, in: { crystal: 1, hex_shard: 1 }, at: 'workbench' },
+  { out: 'arcane_dust', in: { grave_dust: 3, crystal: 1 }, at: 'workbench' },
+  { out: 'hex_staff', in: { stick: 2, hex_shard: 3, bone: 2 }, at: 'workbench' },
+  { out: 'grave_salve', in: { grave_dust: 2, plant_fibre: 2, berries: 1 }, at: 'campfire' },
+  { out: 'gill_tonic', in: { water_bottle: 1, arcane_dust: 1, plant_fibre: 1 }, at: 'campfire' },
+  { out: 'swift_draught', in: { water_bottle: 1, arcane_dust: 1, feather: 1 }, at: 'campfire' },
+  { out: 'nighteye_draught', in: { water_bottle: 1, arcane_dust: 1, gloom_silk: 1 }, at: 'campfire' },
   { out: 'bandage', n: 2, in: { '#wool': 2 } },
   { out: 'bandage', n: 2, in: { silk: 3 } },
 ];
@@ -253,9 +284,9 @@ export const CATEGORIES = [
 export function itemCategory(def) {
   if (def.cat) return def.cat;
   if (def.spawn) return 'spawners';
-  if (def.tool || def.armour || def.wand || def.bucket || def.fluid) return 'tools';
-  if (def.food || def.drink || def.heal || def.mana) return 'food';
-  if (def.place) return BLOCKS[def.place]?.station ? 'stations' : BLOCKS[def.place]?.natural ? 'nature' : 'building';
+  if (def.tool || def.armour || def.wand || def.bucket || def.fluid || def.ignite) return 'tools';
+  if (def.food || def.drink || def.heal || def.mana || def.effect) return 'food';
+  if (def.place) return BLOCKS[def.place]?.station || BLOCKS[def.place]?.storage ? 'stations' : BLOCKS[def.place]?.natural ? 'nature' : 'building';
   return 'materials';
 }
 

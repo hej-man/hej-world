@@ -11,7 +11,9 @@ import { addClouds, placeVegetation, vegTiles } from './vegetation.js';
 import { clearGrass } from './grass.js';
 import { initBlocks, resetBlocks } from './blocks.js';
 import { resetFluids } from './fluids.js';
-import { animals, spawnAnimals } from '../animals/animals.js';
+import { animals, clearHexes, spawnAnimals } from '../animals/animals.js';
+import { clearFelling } from './felling.js';
+import { clearFire } from './fire.js';
 import { bolts } from '../player/interaction.js';
 
 export const world = new THREE.Group();
@@ -69,7 +71,7 @@ function disposeWorld() {
   obstacleGrid.clear(); targetGrid.clear();
   volcanoFx.length = 0;
   vegTiles.length = 0;
-  animals.length = 0; bolts.length = 0;
+  animals.length = 0; bolts.length = 0; clearHexes(); clearFelling(); clearFire();
   resetBlocks(); resetFluids();
   clearGrass();
 }

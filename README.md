@@ -88,9 +88,10 @@ caves, metalwork, flowing water and more.
   iron tools are the fastest. Placed blocks break back into their item.
 - **Building.** Right-click with a block (dirt, sand, log, planks, stone, stone bricks, smooth
   stone, glass, wool, workbench, campfire, furnace) to place it on the face you aim at; a white
-  outline shows where it goes. Press B to choose the shape: a full block, half-height slab, slope,
-  stairs, roof prism or thin pillar. Slopes, stairs, prisms and furnaces turn to face the way you
-  look, and you can walk up slopes and stairs. Every shape has rounded edges. Dirt and sand are
+  outline shows where it goes. Press B to choose the shape: a full block, half slab, gentle slope
+  (half a metre up), slope, steep slope (a metre up over half a block), corner slope (sloping on
+  two sides), stairs, roof ridge or round pillar. Slopes, stairs, ridges and furnaces turn to face
+  the way you look. You can walk up gentle and normal slopes and stairs; you slide off steep ones. Every shape has rounded edges. Dirt and sand are
   placed as blocks too, in any shape.
 - **Crafting.** Basic recipes work anywhere; tools, bricks, armour and the wand need a
   workbench within 4.5 m, cooking, glass and the mana tonic need a campfire, and smelting iron
@@ -105,14 +106,19 @@ caves, metalwork, flowing water and more.
   | Wooden pickaxe / axe / shovel / sword | planks + sticks, at a workbench                                 |
   | Stone pickaxe / axe / shovel / sword  | stone + sticks, at a workbench (faster, harder hitting)         |
   | Stone bricks ×4                       | 4 stone, at a workbench                                         |
-  | Leather armour                        | 5 leather, at a workbench (35% less damage)                     |
+  | Leather helmet / breastplate / gauntlets / pants | 3 / 5 / 2 / 4 leather, at a workbench (a whole set: 20% less damage) |
   | Furnace                               | 8 stone, at a workbench                                         |
   | Iron ingot ×2                         | 2 iron ore, 1 log, at a furnace                                 |
   | Smooth stone ×2                       | 2 stone, 1 log, at a furnace                                    |
   | Glass ×3                              | 3 sand, 1 log, at a furnace                                     |
   | Cooked meat ×3                        | 3 raw meat, 1 log, at a furnace                                 |
   | Iron pickaxe / axe / shovel / sword   | iron ingots + sticks, at a workbench (fastest, hardest hitting) |
-  | Iron armour                           | 6 iron ingots, 2 leather, at a workbench (60% less damage)      |
+  | Iron helmet / breastplate / gauntlets / pants | 3 / 5 / 2 / 4 iron ingots (+1 leather for the breastplate and gauntlets), at a workbench (a set: 34%) |
+  | Diving helmet                         | 4 copper ingots, 2 glass, 1 leather, at a workbench (air lasts 3× as long) |
+  | Basket / chest / large crate          | 6 plant fibre + 2 sticks or 4 bamboo / 8 planks / 12 planks + 2 iron ingots, at a workbench (9 / 18 / 36 slots) |
+  | Trail bread                           | 3 wild grain at a campfire, or 6 wild grain + fuel for 2 at a furnace |
+  | Pasteurised milk                      | 1 raw milk + 1 stick at a campfire, or 3 + fuel at a furnace    |
+  | Fire starter ×2                       | 2 sticks, 2 plant fibre, 1 stone                                |
   | Bucket                                | 3 iron ingots, at a workbench                                   |
   | Bottle ×2                             | 1 glass, at a workbench                                         |
   | Water filter                          | 4 planks, 3 sand, 1 glass, at a workbench                       |
@@ -122,6 +128,10 @@ caves, metalwork, flowing water and more.
   | Cooked meat                           | 1 raw meat, at a campfire                                       |
   | Glass                                 | 2 sand, at a campfire                                           |
   | Mana tonic                            | 1 crystal, 2 berries, at a campfire                             |
+  | Arcane dust ×2                        | 1 crystal, 1 hex shard, at a workbench (or 3 grave dust + 1 crystal) |
+  | Hex staff                             | 2 sticks, 3 hex shards, 2 bones, at a workbench (25 mana, 24 damage) |
+  | Grave salve                           | 2 grave dust, 2 plant fibre, 1 berries, at a campfire (heals 60) |
+  | Gill tonic / swiftness / owl-eye draught | clean water + arcane dust + plant fibre / feather / gloom silk, at a campfire |
   | Bandage ×2                            | 2 wool                                                          |
   | Bandage                               | 3 silk                                                          |
 
@@ -146,6 +156,17 @@ caves, metalwork, flowing water and more.
   their herd, everything steers around walls and keeps out of poured water and lava, and a predator
   that can't get to you (you're up on blocks, or it makes no headway for a few seconds) gives up
   for a while.
+- **Day and night.** A day lasts 20 minutes; the top right corner shows your coordinates, the day
+  and the time. At night the sky fills with stars, the light dims to moonlight, wolves hunt
+  further and in bigger numbers, and night monsters come out: rotwalkers, hexcallers (which throw
+  hexes from a distance) and gloomstalkers. They fade at dawn and drop grave dust, bones, hex
+  shards and gloom silk, which make arcane dust, the hex staff, grave salve and potions.
+- **Armour** is four pieces worn separately (helmet, breastplate, gauntlets, pants), each taking
+  off part of the damage; a whole set of one material adds up to 20% (leather) to 48% (titanium).
+  Right-click a piece to put it on; the Wearing row in the inventory shows what you have on.
+- **Storage.** A basket, chest or large crate holds 9, 18 or 36 stacks; right-click it to open it.
+- **Fire.** Lava next to trees, a campfire under a tree or against wood, and the fire starter set
+  trees and wooden blocks burning. Fire spreads to trees and wood nearby unless it's raining.
 - **Health, hunger, thirst, mana.** You have 150 health. Hunger and thirst drain over time
   (thirst faster when sprinting or near a volcano); at zero you start losing health, and when
   fed and watered you heal. You start with bread, apples, cooked meat and three bottles of clean
@@ -182,7 +203,9 @@ caves, metalwork, flowing water and more.
   water left in the open; a long dry spell shrinks the river between dry banks and slowly dries
   pools. In creative mode K steps through the weather by hand.
 - **Swimming.** In deep water you float with your head out; Space swims up and Shift dives. You
-  swim a front crawl when moving and tread water when still.
+  swim a front crawl when moving and tread water when still. Under water you have 20 seconds of
+  air (an air bar shows it), then you start to drown; a diving helmet makes it last three times as
+  long, and a gill tonic lets you breathe under water for a while.
 - **Creative mode** (G): fly, no damage or hunger, instant breaking without tools, placing
   doesn't use up items, and the inventory shows every item to take stacks from (click it again
   while holding a stack to throw that stack away). It also has a spawner for every animal:
@@ -217,7 +240,7 @@ game.getSelectedItem(); // stack in the selected hotbar slot, or null
 
 ## How it works
 
-- **Terrain** is a 3D density field sampled every 2 m over 1024 × 128 × 1024 m:
+- **Terrain** is a 3D density field sampled every 2 m over 1024 × 152 × 1024 m (sea level 44):
   - domain-warped fractal noise for rolling land,
   - eroded-looking ridged multifractal mountains rising away from the valley, with crags and
     overhangs from 3D noise, rock strata on cliffs and snow above ~85 m,

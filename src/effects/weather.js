@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { state } from '../state.js';
-import { QUALITY } from '../config.js';
+import { QUALITY, WORLD } from '../config.js';
 import { mulberry32, smoothstep } from '../noise.js';
 import { terrainUniforms } from '../terrain/material.js';
 import { FOG_DENSITY, bakeSkyLight, camera, csm, scene, sky, skyColor, skyDome } from '../render/scene.js';
@@ -10,6 +10,7 @@ import { grassUniforms } from '../world/grass.js';
 import { voxelRay } from '../world/blocks.js';
 import { cameraIn } from './underwater.js';
 import { sound, thunder } from './sound.js';
+import { day } from './daynight.js';
 
 // ---------------------------------------------------------------------------
 // Weather: clear, cloudy, rain and thunderstorms come and go on their own, one step at a time (clear
@@ -37,6 +38,9 @@ export function startWeather() {
 export const weather = { state: 'clear', timer: 200, cloud: 0.1, rain: 0, storm: 0, wind: 0.2, sun: 1, puddles: 0, snow: 0, covered: 0, coverT: 0, flash: 0, nextBolt: 6, baked: 0.1 };
 const skyClear = { zenith: sky.zenith.clone(), horizon: sky.horizon.clone(), sun: sky.sun.clone(), ground: sky.ground.clone() };
 const skyStorm = { zenith: new THREE.Color(0x4a525c), horizon: new THREE.Color(0x7d858d), sun: new THREE.Color(0x9aa0a8), ground: new THREE.Color(0x2c2e2c) };
+// the sky at night and the glow around sunrise and sunset (see daynight.js)
+const skyNight = { zenith: new THREE.Color(0x070c1e), horizon: new THREE.Color(0x1c2540), sun: new THREE.Color(0x8a9ccc), ground: new THREE.Color(0x0c0d10) };
+const dusk = { horizon: new THREE.Color(0xe8905a), sun: new THREE.Color(0xffa060) };
 const cloudColors = { top: [new THREE.Color(0xffffff), new THREE.Color(0x8d939b)], under: [new THREE.Color(0xc4ccd6), new THREE.Color(0x5c636c)] };
 const flashEl = document.getElementById('flash');
 const flashLight = new THREE.HemisphereLight(0xdde6ff, 0x50505a, 0);
@@ -136,17 +140,22 @@ export function updateWeather(dt) {
 
   // sky, sun and fog
   for (const key of ['zenith', 'horizon', 'sun', 'ground']) sky[key].copy(skyClear[key]).lerp(skyStorm[key], c * 0.9);
+  const night = 1 - day.light, glow = day.twilight * (1 - c * 0.8);
+  sky.horizon.lerp(dusk.horizon, glow * 0.6); sky.sun.lerp(dusk.sun, glow * 0.7);
+  for (const key of ['zenith', 'horizon', 'sun', 'ground']) sky[key].lerp(skyNight[key], night);
   if (weather.flash > 0) sky.horizon.lerp(new THREE.Color(0xd8e0f0), weather.flash * 0.5);
   skyDome.material.uniforms.uSunGlow.value = 1 - c * 0.85;
-  for (const l of csm.lights) l.intensity = 3.4 * (1 - 0.7 * c);
+  // sunlight in the day, dim moonlight at night
+  for (const l of csm.lights) { l.intensity = (3.4 * day.light + 0.6 * night * (state.effects.nighteye > 0 ? 5 : 1)) * (1 - 0.7 * c); l.color.copy(skyClear.sun).lerp(dusk.sun, glow * 0.7).lerp(skyNight.sun, night); }
   if (!cameraIn()) {
     scene.fog.color.copy(skyColor);
     scene.fog.density = FOG_DENSITY * (1 + c * 0.6 + weather.rain * 1.4);
   }
-  if (Math.abs(c - weather.baked) > 0.04) { weather.baked = c; bakeSkyLight(); }
+  const bake = c + night * 2 + glow;
+  if (Math.abs(bake - weather.baked) > 0.04) { weather.baked = bake; bakeSkyLight(); }
   if (cloudMats.top) {
-    cloudMats.top.color.copy(cloudColors.top[0]).lerp(cloudColors.top[1], c);
-    cloudMats.under.color.copy(cloudColors.under[0]).lerp(cloudColors.under[1], c);
+    cloudMats.top.color.copy(cloudColors.top[0]).lerp(cloudColors.top[1], c).multiplyScalar(0.2 + 0.8 * day.light);
+    cloudMats.under.color.copy(cloudColors.under[0]).lerp(cloudColors.under[1], c).multiplyScalar(0.2 + 0.8 * day.light);
     const n = clouds.children.length, show = Math.round(n * (0.3 + 0.7 * weather.cloud));
     clouds.children.forEach((g, i) => { g.visible = i < show; });
   }
@@ -159,7 +168,7 @@ export function updateWeather(dt) {
     weather.coveredTarget = above || cameraIn() ? 1 : 0;
   }
   weather.covered += ((weather.coveredTarget || 0) - weather.covered) * Math.min(1, dt * 4);
-  weather.snow = smoothstep(58, 74, cam.y);
+  weather.snow = smoothstep(WORLD.lift + 58, WORLD.lift + 74, cam.y);
   const open = 1 - weather.covered;
   precipUniforms.uTime.value = state.gameTime;
   precipUniforms.uCam.value.copy(cam);

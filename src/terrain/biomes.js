@@ -17,7 +17,7 @@ export const BIOMES = {
   plains: {
     name: 'Plains', at: [0.58, 0.32],
     ground: { grass: 1, tint: [1.02, 1.04, 0.92] }, grass: { amount: 1, color: [1, 1.04, 0.86] },
-    trees: { density: 0.05, mix: { oak: 3, birch: 1 } }, plants: { flowers: 0.05, bush: 0.02 },
+    trees: { density: 0.05, mix: { oak: 3, birch: 1 } }, plants: { flowers: 0.05, bush: 0.02, wild_grain: 0.06 },
     animals: ['cow', 'pig', 'sheep', 'chicken', 'rabbit'], shape: 'flat',
   },
   forest: {
@@ -89,7 +89,7 @@ export const BIOMES = {
   savanna: {
     name: 'Savanna', at: [0.78, 0.3],
     ground: { grass: 0.8, dirt: 0.2, tint: [1.22, 1.06, 0.7] }, grass: { amount: 0.9, color: [1.4, 1.15, 0.55] },
-    trees: { density: 0.07, mix: { acacia: 1 } }, plants: { bush: 0.015, dead_bush: 0.004 },
+    trees: { density: 0.07, mix: { acacia: 1 } }, plants: { bush: 0.015, dead_bush: 0.004, wild_grain: 0.04 },
     animals: ['zebra', 'cow', 'chicken', 'rabbit'], shape: 'flat',
   },
   mesa: { // the painted wastes

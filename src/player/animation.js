@@ -3,8 +3,9 @@ import { state } from '../state.js';
 import { PLAYER } from '../config.js';
 import { smoothstep } from '../noise.js';
 import { camera, prepareLighting, scene } from '../render/scene.js';
-import { FOOT_OFFSET, character, heldItemModel, player } from './character.js';
-import { slots } from '../inventory/inventory.js';
+import { FOOT_OFFSET, armourTextures, character, heldItemModel, player } from './character.js';
+import { PIECES } from '../inventory/armour.js';
+import { ITEMS, slots } from '../inventory/inventory.js';
 import { stats } from './survival.js';
 import { mouse, swingTime } from './interaction.js';
 import { gameState } from '../ui/menu.js';
@@ -116,11 +117,19 @@ export function animateCharacter(dt) {
     if (m) { m.rotation.x = -Math.PI / 2 + 0.25; C.held.add(m); prepareLighting(m); }
     viewModel.setItem(id);
   }
-  const arm = stats.armour;
-  C.armour.visible = arm > 0;
-  if (arm > 0) {
-    const metal = arm >= 0.45; // copper, gold and iron
-    C.armour.material.color.set(stats.armourLook ?? (metal ? 0xa9afb7 : 0x7a4a26)); C.armour.material.metalness = metal ? 0.75 : 0; C.armour.material.roughness = metal ? 0.35 : 0.85;
+  // each worn piece shows in its material's colour, metal plates or stitched leather
+  const key = PIECES.map((p) => stats.worn[p]).join();
+  if (key !== C.wornKey) {
+    C.wornKey = key;
+    for (const p of [...PIECES, 'diving']) {
+      const id = p === 'diving' ? (stats.worn.helmet === 'diving_helmet' ? 'diving_helmet' : null) : p === 'helmet' && stats.worn.helmet === 'diving_helmet' ? null : stats.worn[p];
+      const def = id && ITEMS[id], A = C.armour[p];
+      for (const o of A.parts) o.visible = !!def;
+      if (!def) continue;
+      A.mat.color.set(def.look); A.mat.metalness = def.metal ? 0.75 : 0; A.mat.roughness = def.metal ? 0.35 : 0.85;
+      A.mat.map = def.metal ? armourTextures.metal : armourTextures.leather; A.mat.needsUpdate = true;
+    }
+    for (const o of C.hat) o.visible = !stats.worn.helmet;
   }
 }
 

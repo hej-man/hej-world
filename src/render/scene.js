@@ -18,7 +18,8 @@ document.body.appendChild(renderer.domElement);
 for (const t of [texUniforms.tAlbedo, texUniforms.tNormal]) if (t.value) t.value.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
 
 export const scene = new THREE.Scene();
-const SUN_DIR = new THREE.Vector3(0.62, 0.52, 0.38).normalize(); // towards the sun, about 33 degrees up
+// towards the sun; it moves through the day (effects/daynight.js)
+export const SUN_DIR = new THREE.Vector3(0.62, 0.52, 0.38).normalize();
 export const sky = {
   zenith: new THREE.Color(0x2f6cc0),
   horizon: new THREE.Color(0xb9cfe2),
@@ -86,18 +87,28 @@ export const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window
 // Sky dome: a gradient from the horizon haze to deep blue overhead, with a glow around the sun.
 function makeSkyMaterial(disc) {
   return new THREE.ShaderMaterial({
-    uniforms: { uSun: { value: SUN_DIR }, uZenith: { value: sky.zenith }, uHorizon: { value: sky.horizon }, uGround: { value: disc ? sky.horizon : sky.ground }, uSunCol: { value: sky.sun }, uDisc: { value: disc ? 1 : 0 }, uSunGlow: { value: 1 } },
+    uniforms: { uSun: { value: SUN_DIR }, uZenith: { value: sky.zenith }, uHorizon: { value: sky.horizon }, uGround: { value: disc ? sky.horizon : sky.ground }, uSunCol: { value: sky.sun }, uDisc: { value: disc ? 1 : 0 }, uSunGlow: { value: 1 }, uNight: { value: 0 } },
     vertexShader: `varying vec3 vDir;
       void main() { vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); gl_Position.z = gl_Position.w; }`,
-    fragmentShader: `uniform vec3 uSun, uZenith, uHorizon, uGround, uSunCol; uniform float uDisc, uSunGlow;
+    fragmentShader: `uniform vec3 uSun, uZenith, uHorizon, uGround, uSunCol; uniform float uDisc, uSunGlow, uNight;
       varying vec3 vDir;
+      float hash(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
       void main() {
         vec3 d = normalize(vDir);
         vec3 col = mix(uHorizon, uZenith, pow(clamp(d.y, 0.0, 1.0), 0.55));
         col = mix(col, uGround, smoothstep(0.0, -0.2, d.y));
-        float s = max(dot(d, uSun), 0.0);
-        col += uSunCol * (0.12 * pow(s, 6.0) + 0.45 * pow(s, 90.0)) * (0.4 + 0.6 * uDisc) * uSunGlow;
-        col += uSunCol * smoothstep(0.99965, 0.9998, s) * 30.0 * uDisc * uSunGlow * uSunGlow;
+        float s = max(dot(d, uSun), 0.0), up = smoothstep(-0.12, 0.02, uSun.y);
+        col += uSunCol * (0.12 * pow(s, 6.0) + 0.45 * pow(s, 90.0)) * (0.4 + 0.6 * uDisc) * uSunGlow * up;
+        col += uSunCol * smoothstep(0.99965, 0.9998, s) * 30.0 * uDisc * uSunGlow * uSunGlow * up;
+        // at night: stars, and the moon opposite the sun
+        if (uNight > 0.01 && uDisc > 0.5 && d.y > 0.0) {
+          vec3 cell = floor(d * 260.0);
+          float st = step(0.9965, hash(cell)) * smoothstep(0.0, 0.25, d.y);
+          col += vec3(0.9, 0.92, 1.0) * st * uNight * (0.5 + 0.5 * hash(cell + 7.0));
+          vec3 m = normalize(vec3(-uSun.x, -uSun.y, abs(uSun.z)));
+          float md = dot(d, m);
+          col += vec3(0.85, 0.88, 1.0) * (smoothstep(0.99955, 0.9997, md) * 2.2 + pow(max(md, 0.0), 60.0) * 0.12) * uNight;
+        }
         gl_FragColor = vec4(col, 1.0);
         #include <colorspace_fragment>
       }`,

@@ -89,7 +89,8 @@ function lockPointer() { renderer.domElement.requestPointerLock()?.catch?.(() =>
 export function startGame(mode) {
   if (sound.on) initSound();
   slots.fill(null); state.heldStack = null; state.selectedSlot = 0;
-  Object.assign(stats, fullStats(), { armour: 0 });
+  for (const k in state.effects) state.effects[k] = 0;
+  Object.assign(stats, fullStats(), { armour: 0, worn: { helmet: null, breastplate: null, gauntlets: null, pants: null } });
   state.creative = mode === 'creative';
   document.getElementById('mode').style.display = state.creative ? 'block' : 'none';
   document.getElementById('stats').style.display = state.creative ? 'none' : 'flex';

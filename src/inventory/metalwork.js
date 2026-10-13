@@ -22,15 +22,17 @@ export const METALS = [
   { id: 'iron', name: 'Iron', ore: 'iron_ore', colors: ['#f4f5f7', '#b7bbc2', '#6f747c'], melt: 8 },
   { id: 'copper', name: 'Copper', ore: 'raw_copper', colors: ['#ffc8a0', '#d27a48', '#7e3f1e'], melt: 6 },
   { id: 'gold', name: 'Gold', ore: 'raw_gold', colors: ['#fff6c0', '#f0c63a', '#9a700c'], melt: 6 },
-  { id: 'steel', name: 'Steel', alloy: { iron_ingot: 3, coal: 2 }, colors: ['#dfe6ee', '#8a96a6', '#46505e'], melt: 10, tool: { tier: 3, speed: 3.6, hit: 2 }, armour: 0.7 },
-  { id: 'titanium', name: 'Titanium', ore: 'raw_titanium', blast: true, colors: ['#f2f0fa', '#b8b4cc', '#6c6884'], melt: 14, tool: { tier: 4, speed: 5, hit: 3 }, armour: 0.8 },
-  { id: 'rose_gold', name: 'Rose gold', alloy: { copper_ingot: 2, gold_ingot: 1 }, colors: ['#ffe2d8', '#e8a090', '#9a5a50'], melt: 8, tool: { tier: 2, speed: 4.2, hit: 0 }, armour: 0.55 },
+  { id: 'steel', name: 'Steel', alloy: { iron_ingot: 3, coal: 2 }, colors: ['#dfe6ee', '#8a96a6', '#46505e'], melt: 10, tool: { tier: 3, speed: 3.6, hit: 2 } },
+  { id: 'titanium', name: 'Titanium', ore: 'raw_titanium', blast: true, colors: ['#f2f0fa', '#b8b4cc', '#6c6884'], melt: 14, tool: { tier: 4, speed: 5, hit: 3 } },
+  { id: 'rose_gold', name: 'Rose gold', alloy: { copper_ingot: 2, gold_ingot: 1 }, colors: ['#ffe2d8', '#e8a090', '#9a5a50'], melt: 8, tool: { tier: 2, speed: 4.2, hit: 0 } },
 ];
 export const METAL = Object.fromEntries(METALS.map((m) => [m.id, m]));
 
+// what forging needs: an anvil and a smelter within reach, and the smith's hammer (kept)
+export const FORGE = ['anvil', 'smelter'], HAMMER = ['smith_hammer'];
+
 export function defineMetalwork(reg, RECIPES) {
   const R = (out, inp, extra = {}) => RECIPES.push({ out, in: inp, ...extra });
-  const FORGE = ['anvil', 'smelter'], HAMMER = ['smith_hammer'];
 
   // the stations and tools
   reg('smelter', 'Smelter', null, { place: 'smelter', draw: 'station:smelter' });
@@ -48,7 +50,7 @@ export function defineMetalwork(reg, RECIPES) {
   R('crucible', { clay: 3, '#fuel': 1 }, { at: 'furnace' });
   for (const k of ['ingot', 'plate', 'rod']) R(`${k}_mould`, { clay: 2, sand: 2, '#fuel': 1 }, { at: 'furnace' });
 
-  reg('raw_titanium', 'Raw titanium', null, { draw: 'raw:titanium' });
+  reg('raw_titanium', 'Raw titanium', null, { draw: 'raw:titanium', place: 'raw_titanium', cat: 'materials' });
 
   for (const m of METALS) {
     const ingot = `${m.id}_ingot`, molten = `molten_${m.id}`, plate = `${m.id}_plate`, rod = `${m.id}_rod`;
@@ -71,7 +73,7 @@ export function defineMetalwork(reg, RECIPES) {
     R(rod, { [ingot]: 1 }, { n: 2, at: FORGE, keep: HAMMER });
   }
 
-  // forged tools and armour for the new metals (iron, copper and gold ones are made at the workbench)
+  // forged tools for the new metals (their armour is in armour.js) (iron, copper and gold ones are made at the workbench)
   for (const m of METALS.filter((m) => m.tool)) {
     const { tier, speed, hit } = m.tool, plate = `${m.id}_plate`, rod = `${m.id}_rod`, badge = m.colors[1];
     const tool = (kind, Name, dmg, inp) => {
@@ -82,8 +84,6 @@ export function defineMetalwork(reg, RECIPES) {
     tool('axe', 'axe', 5, { [plate]: 2, [rod]: 1, stick: 1 });
     tool('shovel', 'shovel', 4, { [plate]: 1, [rod]: 1, stick: 1 });
     tool('sword', 'sword', 9, { [plate]: 2, [rod]: 1 });
-    reg(`${m.id}_armour`, `${m.name} armour`, null, { draw: `armour:${m.id}`, armour: m.armour, maxStack: 1, look: parseInt(m.colors[1].slice(1), 16) });
-    R(`${m.id}_armour`, { [plate]: 6, leather: 2 }, { at: FORGE, keep: HAMMER });
   }
 
   // hardware and metal building blocks

@@ -11,7 +11,7 @@ import { STONES } from '../world/block-catalog.js';
 export function createTerrainFunctions(seed) {
   const { noise2, noise3 } = makeNoise(seed);
   const rand = mulberry32(seed * 7 + 3);
-  const S = WORLD.size, W = WORLD.waterLevel, H = WORLD.height;
+  const S = WORLD.size, W = WORLD.waterLevel, H = WORLD.height, L = WORLD.lift;
 
   const fbm2 = (x, z, oct) => { let a = 1, f = 1, s = 0, n = 0; for (let o = 0; o < oct; o++) { s += a * noise2(x * f, z * f); n += a; a *= 0.5; f *= 2; } return s / n; };
   // ridged multifractal: sharp crests, with detail suppressed in valleys (looks eroded)
@@ -82,7 +82,7 @@ export function createTerrainFunctions(seed) {
   function landHeight(x, z) {
     const wx = warpX(x, z), wz = warpZ(x, z), w = biomes.biomeWeights(x, z);
     const flat = sumW(w, FLAT), hills = sumW(w, HILLS), dune = sumW(w, DUNES), mesa = sumW(w, HOODOOS);
-    let h = 34 + fbm2(wx * 0.007, wz * 0.007, 5) * 12 * (1 - flat * 0.55);  // rolling land
+    let h = L + 34 + fbm2(wx * 0.007, wz * 0.007, 5) * 12 * (1 - flat * 0.55);  // rolling land
     if (hills > 0.01) h += hills * (fbm2(wx * 0.016 + 30, wz * 0.016, 3) + 0.3) * 12;
     if (dune > 0.01) h += dune * dunes(x, z);
     if (mesa > 0.01) h += mesa * hoodoos(x, z);
@@ -108,7 +108,7 @@ export function createTerrainFunctions(seed) {
       for (const v of volcanoes) score = Math.min(score, Math.hypot(x - v.x, z - v.z) - R * 1.5);
       if (score > bestScore) { bestScore = score; best = { x, z }; }
     }
-    const peak = Math.min(H - 14, 112), base = 26, crater = R * 0.2, depth = 17;
+    const peak = Math.min(H - 14, L + 112), base = L + 26, crater = R * 0.2, depth = 17;
     const rim = base + (peak - base) * Math.pow(1 - crater / R, 1.7);
     volcanoes.push({ ...best, R, peak, base, crater, depth, rim, lavaY: rim - depth + 3, lavaTop: rim - depth + 3 }); // lavaY drops as lava is scooped out
   }
@@ -228,7 +228,7 @@ export function createTerrainFunctions(seed) {
         const h = surfaceHeight(x + Math.cos(a) * r, z + Math.sin(a) * r);
         lo = Math.min(lo, h); hi = Math.max(hi, h);
       }
-      if (hi - lo > 9 || lo < W + 6 || hi > 66) continue;
+      if (hi - lo > 9 || lo < W + 6 || hi > L + 66) continue;
       lk.level = lo - 1.8; // the ground has small 3D bumps, up to about a metre lower than the height
       lk.offset = 0;
       lakes.push(lk);
@@ -247,29 +247,32 @@ export function createTerrainFunctions(seed) {
   function ironVein(x, y, z) {
     if (x === veinX && y === veinY && z === veinZ) return veinV; // oreKind and stoneAt ask for the same point
     veinX = x; veinY = y; veinZ = z; veinV = 0;
-    if (y < 6 || y > 96) return 0;
-    const region = noise3(x * 0.006 + 71, y * 0.01, z * 0.006 - 33);
-    if (region < 0.02) return 0;
-    const a = noise3(x * 0.021 + 500, y * 0.028, z * 0.021 - 200), b = noise3(x * 0.021 - 140, y * 0.028 + 60, z * 0.021 + 310);
-    const r = Math.sqrt(a * a + b * b), th = 0.03 + 0.05 * smoothstep(0.02, 0.4, region);
-    // veins thin out towards the surface: plenty down in the caves, little in the top few metres of
-    // a hillside (the surface height is worked out once per column)
+    if (y < 6 || y > L + 96) return 0;
+    // veins thin out towards the surface: plenty down in the caves (more regions have them, and
+    // they are thicker), little in the top few metres of a hillside (the surface height is worked
+    // out once per column)
     if (x !== ironX || z !== ironZ) { ironX = x; ironZ = z; ironSurf = surfaceHeight(x, z); }
+    const dd = smoothstep(6, 22, ironSurf - y);
+    const region = noise3(x * 0.006 + 71, y * 0.01, z * 0.006 - 33);
+    if (region < 0.02 - 0.3 * dd) return 0;
+    const a = noise3(x * 0.021 + 500, y * 0.028, z * 0.021 - 200), b = noise3(x * 0.021 - 140, y * 0.028 + 60, z * 0.021 + 310);
+    const r = Math.sqrt(a * a + b * b), th = (0.03 + 0.05 * smoothstep(0.02 - 0.3 * dd, 0.4, region)) * (1 + 0.5 * dd);
     const deep = 0.6 + 0.4 * smoothstep(3, 16, ironSurf - y);
     return (veinV = (1 - smoothstep(th * 0.5, th * 1.9, r)) * deep);
   }
   const oreAt = (x, y, z) => smoothstep(0.62, 0.74, ironVein(x, y, z));
   const ORES = [
     // [kind, offset, threshold, lowest y, highest y]
-    ['coal', 900, 0.75, 16, 128], ['copper', 1700, 0.74, 6, 72], ['gold', 2500, 0.82, 4, 34], ['titanium', 3300, 0.84, 3, 28],
+    ['coal', 900, 0.75, 16, H], ['copper', 1700, 0.74, 6, L + 72], ['gold', 2500, 0.82, 4, L + 34], ['titanium', 3300, 0.84, 3, L + 28],
   ];
   // Returns null or [kind, amount]; the array is reused by the next call.
   const _ore = ['', 0];
   function oreKind(x, y, z) {
     const iron = oreAt(x, y, z);
     if (iron > 0.5) { _ore[0] = 'iron'; _ore[1] = iron; return _ore; }
+    if (x !== ironX || z !== ironZ) { ironX = x; ironZ = z; ironSurf = surfaceHeight(x, z); }
     for (const [kind, o, th, y0, y1] of ORES) {
-      if (y < y0 || y > y1) continue;
+      if (y < y0 || y > y1 || (kind !== 'coal' && y > ironSurf - 4)) continue; // only coal shows at the surface
       const a = smoothstep(th - 0.08, th + 0.06, noise3(x * 0.1 + o, y * 0.12 - o * 0.3, z * 0.1 - o));
       if (a > 0.5) { _ore[0] = kind; _ore[1] = a; return _ore; }
     }
@@ -277,9 +280,10 @@ export function createTerrainFunctions(seed) {
   }
   // Stone: plain stone, with pockets of other stones (granite, marble, tuff...) at the depths each
   // is found (block-catalog.js), and deepslate and blackstone near the bottom.
-  const STONES_AT = Array.from({ length: WORLD.height + 1 }, (_, y) => STONES.filter((s) => y >= s.depth[0] && y <= s.depth[1] && s.id !== 'deepslate' && s.id !== 'blackstone'));
+  // (the depths are for sea level 20: the rock that's further down than that is like the deepest)
+  const STONES_AT = Array.from({ length: WORLD.height + 1 }, (_, y) => STONES.filter((s) => Math.max(0, y - L) >= s.depth[0] && Math.max(0, y - L) <= s.depth[1] && s.id !== 'deepslate' && s.id !== 'blackstone'));
   function stoneAt(x, y, z) {
-    if (y < 10 + noise2(x * 0.05 + 3, z * 0.05 - 8) * 3) return y < 6.5 ? 'blackstone' : 'deepslate';
+    if (y < 10 + L * 0.5 + noise2(x * 0.05 + 3, z * 0.05 - 8) * 3) return y < 6.5 + L * 0.25 ? 'blackstone' : 'deepslate';
     if (ironVein(x, y, z) > 0.12) return 'granite'; // the rusty rock around an iron vein
     const blob = noise3(x * 0.035 + 41, y * 0.05, z * 0.035 - 17);
     if (blob < 0.3) return 'stone';

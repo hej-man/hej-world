@@ -21,10 +21,18 @@ import { blockGroups, blocks, farBlockGeometry, hidden as hiddenBlocks, placeBlo
 import { addSource, fluidAt, fluids, poolAmount, pourFluid, takeFluid, updateFluids, weatherOnFluids } from './world/fluids.js';
 import { MAX_HEALTH, damagePlayer, renderStats, setCreative, stats, updateStats } from './player/survival.js';
 import { animals, spawnAnimal, spawnAnimals, updateAnimals } from './animals/animals.js';
+import { updateFelling } from './world/felling.js';
+import { updateFire } from './world/fire.js';
 import { aimWater, breakTime, doBreak, mouse, pickTarget, updateBolts, updateInteraction, useItem, useWater } from './player/interaction.js';
 import { cameraUnderwater, updateUnderwater } from './effects/underwater.js';
+import { clockText, day, setHour, updateDayNight } from './effects/daynight.js';
 import { WEATHER, cycleWeather, nextWeather, setWeather, startWeather, updateWeather, weather } from './effects/weather.js';
 import { crosshair, hud } from './ui/hud.js';
+const coordsEl = document.getElementById('coords');
+const EFFECT_NAMES = { gills: 'Gills', swift: 'Swiftness', nighteye: 'Owl eyes' };
+// potions you're under, with the seconds left: "\nGills 1:12"
+const effectsText = () => Object.entries(state.effects).filter(([, t]) => t > 0)
+  .map(([k, t]) => `\n${EFFECT_NAMES[k]} ${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`).join('');
 import { $, clampPitch, gameState, startGame, toMainMenu, updateOverlay } from './ui/menu.js';
 import { keys, setView } from './ui/input.js';
 import { updateCamera } from './player/camera.js';
@@ -44,6 +52,7 @@ export function newWorld(seed) {
   generating = true;
   updateOverlay();
   setTimeout(() => {
+    setHour(8); day.count = 1;
     worldStats = generateWorld(seed);
     state.spawnFacing = findSpawn();
     player.facing = state.yaw = state.spawnFacing;
@@ -120,7 +129,10 @@ function frame() {
   }
   updateAnimals(dt);
   updateBolts(dt);
+  updateFelling(dt);
+  updateFire(dt);
   updateUnderwater();
+  updateDayNight(dt);
   updateWeather(dt);
   updateHydro(dt, weather.rain, weather.sun);
   weatherOnFluids(dt, weather.rain, weather.sun);
@@ -142,6 +154,7 @@ function frame() {
   const underground = feet < terrainFns.surfaceHeight(player.position.x, player.position.z) - 4;
   const terrain = terrainProgress();
   const motion = state.creative ? 'flying' : player.inLava ? 'IN LAVA' : player.onGround ? 'grounded' : contact.steep ? 'sliding' : player.inWater ? 'in water' : 'airborne';
+  coordsEl.textContent = gameState === 'playing' ? `X ${Math.floor(player.position.x)}   Y ${Math.floor(feet)}   Z ${Math.floor(player.position.z)}\n${clockText()}${effectsText()}` : '';
   hud.textContent =
     `${{ first: 'First person', back: 'Third person', front: 'Front view' }[state.view]}  ·  ${state.creative ? 'Creative' : 'Survival'}  ·  ${fps} fps  ·  seed ${worldStats.seed}  ·  map ${WORLD.size} m  ·  ${WEATHER[weather.state].name}\n` +
     `pos ${player.position.x.toFixed(1)}, ${feet.toFixed(1)}, ${player.position.z.toFixed(1)}  ·  ${motion}${underground ? '  ·  in a cave' : ''}` +
@@ -174,7 +187,7 @@ requestAnimationFrame(() => setTimeout(() => {
     aimWater: () => aimWater, useWater, grassPatches, MAX_HEALTH, updateGrass,
     loadAll: () => { loadAll(); spawnAnimals(worldStats.seed); }, terrainProgress, vegStats, loadArea,
     lavaFlows, lavaAt, burning: () => state.burning, setShape: (sh) => { state.buildShape = sh; }, blockGroups, hiddenBlocks, removeBlock, character, breakTime,
-    fluids, addSource, fluidAt, pourFluid, takeFluid, poolAmount, updateHydro,
+    fluids, addSource, fluidAt, pourFluid, takeFluid, poolAmount, updateHydro, day, setHour,
   };
   frame();
 }, 30));

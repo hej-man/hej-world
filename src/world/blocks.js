@@ -6,9 +6,10 @@ import { canvasTexture } from './plant-looks.js';
 import { litMaterial, scene } from '../render/scene.js';
 import { PLAYER } from '../config.js';
 import { solidCell } from '../terrain/voxels.js';
+import { clearSlope } from './query.js';
 import { FOOT_OFFSET, player } from '../player/character.js';
 import { addObstacle, gridRemove, obstacleGrid, world } from './world.js';
-import { boxUVs, mergeGeometries, roundedBox, shapeGeometry, sharpShape } from './shapes.js';
+import { WEDGES, boxUVs, mergeGeometries, roundedBox, shapeGeometry, sharpShape } from './shapes.js';
 import { catalogBlocks } from './block-catalog.js';
 import { blockIconURL, drawTexture } from './block-textures.js';
 export { SHAPES, SHAPE_NAMES, shapeGeometry } from './shapes.js';
@@ -27,6 +28,10 @@ export const BLOCKS = {
   campfire:     { name: 'Campfire', mat: 'soft', solid: false, station: true, glow: 0xff8a30 },
   furnace:      { name: 'Furnace', mat: 'stone', station: true, facing: true, glow: 0xff7a30 },
   purifier:     { name: 'Water filter', mat: 'wood', station: true },
+  // storage: right click to put things in; `storage` is how many stacks it holds
+  basket:       { name: 'Wicker basket', mat: 'wood', model: 'basket', storage: 9, facing: true },
+  chest:        { name: 'Chest', mat: 'wood', model: 'chest', storage: 18, facing: true },
+  crate:        { name: 'Large crate', mat: 'wood', model: 'crate', storage: 36, facing: true },
   // woods, stones, ground, metal and coloured blocks, torches and lanterns (see block-catalog.js)
   ...catalogBlocks(),
 };
@@ -312,9 +317,42 @@ function bellowsParts() {
   return [new THREE.Mesh(mergeColored(parts), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8 }))];
 }
 
+// Storage, base at y = 0. A wicker basket woven of light bands with two handles; a wooden chest
+// with iron bands, corners and a lock on the front (+z); a big crate of rough boards with cross
+// braces, as high as a block.
+function basketParts() {
+  const parts = [];
+  for (let k = 0; k < 6; k++) parts.push([new THREE.CylinderGeometry(0.33 + k * 0.01, 0.32 + k * 0.01, 0.075, 12).translate(0, 0.04 + k * 0.075, 0), k % 2 ? 0xb88a50 : 0xd2a868]);
+  parts.push([new THREE.CylinderGeometry(0.32, 0.32, 0.02, 12).translate(0, 0.02, 0), 0x8a6638]);
+  for (const s of [-1, 1]) parts.push([new THREE.TorusGeometry(0.11, 0.022, 5, 10, Math.PI).translate(s * 0.3, 0.44, 0).rotateY(Math.PI / 2), 0xa07840]);
+  return [new THREE.Mesh(mergeColored(parts), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 }))];
+}
+function chestParts() {
+  const wood = 0x9a6a3a, band = 0x45484d;
+  const parts = [
+    [roundedBox(0.86, 0.5, 0.62, 0, 0.25, 0), wood], [roundedBox(0.88, 0.22, 0.64, 0, 0.6, 0), 0xa87440],
+    [new THREE.BoxGeometry(0.89, 0.025, 0.65).translate(0, 0.5, 0), 0x3a2a18],
+    [roundedBox(0.12, 0.16, 0.04, 0, 0.47, 0.33), 0xc8a050],
+  ];
+  for (const x of [-0.3, 0.3]) parts.push([new THREE.BoxGeometry(0.07, 0.74, 0.66).translate(x, 0.36, 0), band]);
+  return [new THREE.Mesh(mergeColored(parts), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7, metalness: 0.15 }))];
+}
+function crateParts() {
+  const board = 0xb08858, brace = 0x8a6a40, parts = [[roundedBox(0.98, 0.98, 0.98, 0, 0.49, 0), board]];
+  for (const [ax, s] of [[0, 1], [0, -1], [1, 1], [1, -1]]) {
+    const g = (k) => new THREE.BoxGeometry(0.98, 0.1, 0.03).rotateZ(k);
+    for (const geo of [g(0).translate(0, 0.07, 0), g(0).translate(0, 0.91, 0), g(Math.PI / 4.4).scale(0.97, 1, 1).translate(0, 0.49, 0)]) {
+      geo.translate(0, 0, s * 0.5);
+      if (ax) geo.rotateY(Math.PI / 2);
+      parts.push([geo, brace]);
+    }
+  }
+  return [new THREE.Mesh(mergeColored(parts), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 }))];
+}
+
 // Blocks drawn with their own model stand on the bottom of their cell instead of being centred.
 const BASED = new Set(['campfire', 'furnace', 'purifier', 'smelter', 'anvil', 'bellows']);
-const isBased = (type) => BASED.has(type) || ['sapling', 'torch', 'lantern'].includes(BLOCKS[type].model);
+const isBased = (type) => BASED.has(type) || ['sapling', 'torch', 'lantern', 'basket', 'chest', 'crate'].includes(BLOCKS[type].model);
 function blockTemplates(type, shape) {
   const def = BLOCKS[type];
   switch (def.model || type) {
@@ -328,6 +366,9 @@ function blockTemplates(type, shape) {
     case 'fence': return fenceParts(type);
     case 'torch': return torchParts();
     case 'lantern': return lanternParts();
+    case 'basket': return basketParts();
+    case 'chest': return chestParts();
+    case 'crate': return crateParts();
   }
   return [new THREE.Mesh(shapeGeometry(shape), blockMaterial(type))];
 }
@@ -374,7 +415,7 @@ const areas = {};
 const _farGeos = {};
 export function farBlockGeometry(shape) {
   if (_farGeos[shape]) return _farGeos[shape];
-  const g = shape === 'slope' || shape === 'prism' ? sharpShape(shape).clone()
+  const g = WEDGES[shape] ? sharpShape(shape).clone()
     : shape === 'pillar' ? new THREE.CylinderGeometry(0.3, 0.3, 1, 8).toNonIndexed()
     : shape === 'block' ? new THREE.BoxGeometry(1, 1, 1).toNonIndexed() : null;
   return (_farGeos[shape] = g ? boxUVs(g) : shapeGeometry(shape));
@@ -407,7 +448,7 @@ function blockObstacles(shape, x, y, z, m) {
     for (const v of [min, max]) v.set(Math.round(v.x * 1000) / 1000, Math.round(v.y * 1000) / 1000, Math.round(v.z * 1000) / 1000);
     return { type: 'box', x: x + 0.5, z: z + 0.5, min, max };
   });
-  if (shape === 'slope' || shape === 'prism') {
+  if (WEDGES[shape]) {
     const p = sharpShape(shape).attributes.position, tris = [];
     for (let i = 0; i < p.count; i += 3) {
       const t = new ExtendedTriangle();
@@ -433,6 +474,7 @@ export function placeBlock(type, x, y, z, shape = 'block', tilt = 0, { turn: set
   const key = blockKey(x, y, z);
   if (blocks.has(key)) return false;
   hidden.delete(key);
+  if (def.solid !== false) clearSlope(x, y, z);
   const bt = blockGroup(type, shape, tag);
   if (bt.keys.length >= bt.meshes[0].instanceMatrix.count) growGroup(bt);
   const idx = bt.keys.length;
@@ -454,6 +496,7 @@ export function placeBlock(type, x, y, z, shape = 'block', tilt = 0, { turn: set
   blocks.set(key, b);
   if (def.glow) glowing.add(b);
   if (def.model === 'sapling') { b.plantedAt = state.gameTime; saplings.add(b); }
+  if (def.storage) b.items = new Array(def.storage).fill(null);
   return true;
 }
 

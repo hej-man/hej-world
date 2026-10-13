@@ -5,7 +5,7 @@ import { WORLD } from '../config.js';
 import { mulberry32 } from '../noise.js';
 import { sampleField } from '../terrain/material.js';
 import { CELL, cellKey, isLoaded, obstacleGrid, terrainFns, world } from '../world/world.js';
-import { groundAt } from '../world/query.js';
+import { groundAt, raycastTerrain } from '../world/query.js';
 import { lavaAt, lavaFlows } from '../world/volcano.js';
 import { fluidAt } from '../world/fluids.js';
 import { FOOT_OFFSET, player } from '../player/character.js';
@@ -14,12 +14,15 @@ import { give } from '../player/interaction.js';
 import { gameState } from '../ui/menu.js';
 import { litMaterial } from '../render/scene.js';
 import { BIOMES } from '../terrain/biomes.js';
+import { day, isNight } from '../effects/daynight.js';
 
 // ---------------------------------------------------------------------------
 // Animals: livestock and wildlife that wander, graze and flee, and predators that hunt you
 // ---------------------------------------------------------------------------
 // per: how many live on a 256 x 256 m map. shy: runs from you inside this range. hostile: chases you
 // inside this range. bite: damage per attack, knock: how hard it shoves you. home 'cave' lives underground.
+// night: only out at night, anywhere on land (they crumble away at dawn). cast: throws a curse
+// (damage) from up to this far instead of biting, keeping its distance.
 export const SPECIES = {
   cow:     { name: 'Cow', hp: 30, walk: 1.3, run: 4.5, r: 0.75, h: 1.5, graze: true, home: 'meadow', herd: [2, 4], per: 7, drops: [['raw_meat', 2, 3], ['leather', 1, 2]] },
   pig:     { name: 'Pig', hp: 20, walk: 1.2, run: 4.2, r: 0.55, h: 1.0, graze: true, home: 'meadow', herd: [2, 3], per: 5, drops: [['raw_meat', 2, 3]] },
@@ -39,6 +42,10 @@ export const SPECIES = {
   polar_bear: { name: 'Polar bear', hp: 90, walk: 1.2, run: 6.4, r: 0.95, h: 1.8, hostile: 8, bite: 22, knock: 10, attackEvery: 1.6, home: 'any', herd: [1, 2], per: 1.5, drops: [['raw_meat', 3, 5], ['leather', 2, 3]] },
   jaguar:  { name: 'Jaguar', hp: 34, walk: 1.6, run: 8.4, r: 0.55, h: 0.95, hostile: 12, bite: 14, knock: 6, home: 'any', herd: [1, 1], per: 1.5, drops: [['leather', 1, 2], ['raw_meat', 1, 2]] },
   scorpion: { name: 'Scorpion', hp: 14, walk: 1.4, run: 5.5, r: 0.4, h: 0.45, hostile: 8, bite: 9, home: 'any', herd: [1, 2], per: 2.5, drops: [['silk', 0, 1], ['raw_meat', 0, 1]] },
+  // night monsters
+  rotwalker:    { name: 'Rotwalker', hp: 44, walk: 0.9, run: 3.9, r: 0.5, h: 2.0, hostile: 24, bite: 15, knock: 7, attackEvery: 1.4, home: 'night', night: true, herd: [1, 3], per: 3, drops: [['grave_dust', 1, 2], ['bone', 0, 2]] },
+  hexcaller:    { name: 'Hexcaller', hp: 30, walk: 1.0, run: 3.2, r: 0.45, h: 2.2, hostile: 26, bite: 12, cast: 16, attackEvery: 2.6, home: 'night', night: true, herd: [1, 1], per: 1.5, drops: [['hex_shard', 1, 2], ['grave_dust', 0, 1]] },
+  gloomstalker: { name: 'Gloomstalker', hp: 34, walk: 1.6, run: 7.6, r: 0.6, h: 1.6, hostile: 20, bite: 13, knock: 5, home: 'night', night: true, herd: [1, 2], per: 1.5, drops: [['gloom_silk', 1, 2]] },
   spider:  { name: 'Cave spider', hp: 18, walk: 1.8, run: 6.2, r: 0.6, h: 0.6, hostile: 13, bite: 8, home: 'cave', herd: [1, 3], per: 2.5, drops: [['silk', 1, 2]] },
 };
 export const animals = [];
@@ -481,6 +488,81 @@ function buildAnimal(kind, rand) {
       box(tail, 0.07, 0.07, 0.09, shell, 0, ty + 0.02, tz - 0.04, 0, { bevel: 0.02 }); box(tail, 0.025, 0.08, 0.025, sting, 0, ty - 0.03, tz - 0.1, 0.8);
       break;
     }
+    case 'rotwalker': {
+      // a hunched, long-armed walking corpse: grey-green skin, torn rags, moss on its shoulders,
+      // ribs showing, a small head sunk forward and dim yellow eyes
+      const skin = M(rand() < 0.5 ? 0x7d8c68 : 0x8a8a6e), dark = M(0x4c5240), rag = M(0x3e352c), rag2 = M(0x5a4a3a), moss = M(0x4e6a2a), bone = M(0xd8d0b8), eye = M(0xe8e070);
+      eye.emissive.set(0x9a9010);
+      variant = rand() < 0.5 ? 0 : 1;
+      leg(rag, skin, 0.2, 0.95, -0.17, 0.95, 0.04, { taper: 0.8 });
+      leg(rag, skin, 0.2, 0.95, 0.17, 0.95, 0.04, { taper: 0.8 });
+      box(g, 0.5, 0.3, 0.32, rag, 0, 0.98, 0.04, 0, { bevel: 0.06 }); // hips
+      box(g, 0.56, 0.72, 0.36, skin, 0, 1.32, -0.06, 0.38, { bevel: 0.08, taper: 1.25 }); // bent back
+      box(g, 0.46, 0.38, 0.06, rag2, 0, 1.18, 0.1, 0.38, { bevel: 0 }); // what's left of a shirt
+      for (let i = 0; i < 3; i++) box(g, 0.34 - i * 0.04, 0.03, 0.04, bone, 0, 1.24 + i * 0.1, -0.26 - i * 0.04, 0.38, { bevel: 0 }); // ribs
+      box(g, 0.86, 0.26, 0.38, skin, 0, 1.6, -0.2, 0.2, { bevel: 0.08 }); // heavy shoulders
+      box(g, 0.3, 0.06, 0.26, moss, variant ? 0.26 : -0.26, 1.74, -0.18, 0.2);
+      box(g, 0.18, 0.05, 0.2, moss, variant ? -0.2 : 0.22, 1.73, -0.1, 0.2);
+      head.position.set(0, 1.62, -0.42);
+      box(head, 0.3, 0.3, 0.32, skin, 0, 0.06, -0.06, 0, { bevel: 0.07 });
+      box(head, 0.24, 0.1, 0.22, dark, 0, -0.12, -0.08, 0.25, { bevel: 0.03 }); // hanging jaw
+      box(head, 0.16, 0.03, 0.02, bone, 0, -0.06, -0.21); // teeth
+      eyes(head, 0.075, 0.1, -0.22, 0.05, eye, false);
+      // long arms hanging forward, swinging as it lurches
+      for (const sx of [-1, 1]) {
+        const p = new THREE.Group(); p.position.set(sx * 0.46, 1.62, -0.2);
+        box(p, 0.15, 1.0, 0.15, skin, 0, -0.44, -0.24, 0.5, { taper: 0.8 });
+        box(p, 0.17, 0.12, 0.18, dark, 0, -0.9, -0.46, 0.5, { bevel: 0.03 }); // hand
+        for (const f of [-1, 0, 1]) box(p, 0.03, 0.12, 0.03, bone, f * 0.05, -1.0, -0.56, 0.9, { bevel: 0 }); // claws
+        g.add(p); legs.push(p);
+      }
+      break;
+    }
+    case 'hexcaller': {
+      // a hooded caster in a long tattered robe that floats just off the ground: no face under the
+      // hood, only two violet eyes, and a crooked staff with a glowing stone
+      const robe = M(0x2c2438), robe2 = M(0x3c3050), trim = M(0x6a5a3a), wood = M(0x4a3a28), skin = M(0x8a9a80), rune = M(0xb070ff), eye = M(0xd090ff);
+      rune.emissive.set(0x7020d0); eye.emissive.set(0xa040ff);
+      box(g, 0.74, 1.15, 0.62, robe, 0, 0.72, 0.02, 0, { taper: 0.62, bevel: 0.06 }); // robe, wide at the hem
+      for (const [x, z] of [[-0.3, -0.24], [0.1, -0.3], [0.32, 0.1], [-0.2, 0.3]]) box(g, 0.16, 0.2, 0.05, robe, x, 0.18, z, 0, { ry: Math.atan2(x, z), bevel: 0 }); // ragged hem
+      box(g, 0.5, 0.62, 0.4, robe2, 0, 1.55, 0, 0, { taper: 0.75, bevel: 0.06 });
+      box(g, 0.52, 0.06, 0.42, trim, 0, 1.28, 0);
+      for (const y of [0.9, 1.1, 1.45]) box(g, 0.06, 0.06, 0.02, rune, 0, y, -0.3 + (y - 0.9) * 0.12, 0, { bevel: 0 }); // glowing marks
+      box(g, 0.66, 0.16, 0.46, robe2, 0, 1.82, 0, 0, { bevel: 0.05 }); // mantle
+      head.position.set(0, 1.98, -0.02);
+      box(head, 0.42, 0.46, 0.44, robe, 0, 0.12, 0, 0, { taper: 0.55, bevel: 0.08 }); // hood
+      box(head, 0.26, 0.26, 0.04, M(0x08060c), 0, 0.06, -0.21); // the dark inside
+      eyes(head, 0.06, 0.08, -0.235, 0.045, eye, false);
+      // sleeves: one holding the staff out to the side, one raised a little
+      box(g, 0.16, 0.6, 0.16, robe2, 0.38, 1.5, -0.08, 0.3, { rz: -0.25 });
+      box(g, 0.1, 0.1, 0.1, skin, 0.46, 1.24, -0.18);
+      box(g, 0.16, 0.56, 0.16, robe2, -0.36, 1.48, -0.1, 0.6, { rz: 0.3 });
+      box(g, 0.05, 2.1, 0.05, wood, 0.48, 1.15, -0.2, 0, { rz: -0.04, bevel: 0 }); // staff
+      box(g, 0.14, 0.05, 0.05, wood, 0.43, 2.18, -0.2, 0, { rz: 0.6, bevel: 0 });
+      box(g, 0.13, 0.13, 0.13, rune, 0.5, 2.28, -0.2, 0.6, { rz: 0.6, bevel: 0.02 }); // the stone
+      tail.position.set(0, 1.0, 0.3);
+      box(tail, 0.4, 0.8, 0.06, robe, 0, -0.3, 0.02, 0.15, { taper: 1.3, bevel: 0 }); // trailing back of the robe
+      break;
+    }
+    case 'gloomstalker': {
+      // a long-legged shadow with no eyes: a narrow body on four stilt legs, a long neck and a
+      // blind head with a glowing seam of a mouth, and pale blue lights along its back
+      const black = M(0x1b1824), hide = M(0x2a2436), glow = M(0x7adcff), mouth = M(0x9af0ff);
+      glow.emissive.set(0x2aa0e0); mouth.emissive.set(0x40c8f0);
+      for (const [x, z] of [[-0.2, -0.42], [0.2, -0.42], [-0.2, 0.48], [0.2, 0.48]]) leg(black, black, 0.09, 1.08, x, 1.12, z, { taper: 0.6, footW: 1.4, footD: 2.2, toe: -0.04 });
+      box(g, 0.4, 0.34, 1.2, hide, 0, 1.2, 0.04, 0.08, { bevel: 0.1, taper: 0.8 });
+      box(g, 0.46, 0.3, 0.4, black, 0, 1.28, -0.4, 0, { bevel: 0.1 }); // shoulders
+      for (let i = 0; i < 5; i++) box(g, 0.05, 0.12 - i * 0.012, 0.05, glow, 0, 1.43 - i * 0.02, -0.4 + i * 0.24, -0.4, { bevel: 0 }); // lights along the back
+      head.position.set(0, 1.38, -0.58);
+      box(head, 0.16, 0.16, 0.5, hide, 0, 0.14, -0.2, -0.6, { bevel: 0.04 }); // neck
+      box(head, 0.24, 0.2, 0.46, black, 0, 0.36, -0.52, 0.15, { taper: 0.7, bevel: 0.06 }); // blind head
+      box(head, 0.2, 0.025, 0.3, mouth, 0, 0.29, -0.6, 0.15, { bevel: 0 }); // the seam of its mouth
+      for (const [x, y] of [[-0.08, 0.44], [0.08, 0.44], [-0.1, 0.38], [0.1, 0.38]]) box(head, 0.025, 0.025, 0.025, glow, x, y, -0.66, 0, { bevel: 0 });
+      tail.position.set(0, 1.24, 0.62);
+      box(tail, 0.07, 0.07, 0.8, hide, 0, -0.22, 0.34, 0.6, { taper: 0.5 });
+      box(tail, 0.05, 0.05, 0.05, glow, 0, -0.45, 0.68, 0, { bevel: 0 });
+      break;
+    }
     case 'spider': {
       const black = M(0x1d1b1e), hair = M(0x3a3236), mark = M(0x7a1a14), eye = M(0xff2a1a), fang = M(0x5a4a40);
       eye.emissive.set(0xc01000);
@@ -548,16 +630,16 @@ function findAnimalSpot(kind, home, rand, awayFromPlayer) {
       if (g) return { x, y: g.point.y, z };
       continue;
     }
-    if (!BIOMES[T.biomeAt(x, z)].animals.includes(kind)) continue; // each kind lives in its own biomes
+    if (home !== 'night' && !BIOMES[T.biomeAt(x, z)].animals.includes(kind)) continue; // each kind lives in its own biomes
     const W = T.waterAt(x, z);
     const g = groundAt(x, z);
     if (!g) continue;
     const y = g.point.y;
-    if (y < W + 1.5 || y > 72 || g.face.normal.y < 0.8 || Math.abs(y - T.surfaceHeight(x, z)) > 3 || T.volcanoInfluence(x, z) > 0.25) continue;
+    if (y < W + 1.5 || y > WORLD.lift + 72 || g.face.normal.y < 0.8 || Math.abs(y - T.surfaceHeight(x, z)) > 3 || T.volcanoInfluence(x, z) > 0.25) continue;
     const fm = T.forestMask(x, z);
     if (home === 'meadow' && fm > 0.45) continue;
     if (home === 'forest' && fm < 0.4) continue;
-    if (home === 'forest' && Math.hypot(x - L.x, z - L.z) < 45) continue; // keep wolves away from the starting ledge
+    if ((home === 'forest' || home === 'night') && Math.hypot(x - L.x, z - L.z) < 45) continue; // keep wolves away from the starting ledge
     return { x, y, z };
   }
   return null;
@@ -580,12 +662,20 @@ function spawnHerd(kind, rand, awayFromPlayer) {
   return made;
 }
 
+// How many of a kind there should be right now: night monsters only at night, and twice the
+// wolves after dark.
+function wanted(kind) {
+  const sp = SPECIES[kind], n = population[kind];
+  if (sp.night) return isNight() ? n : 0;
+  return kind === 'wolf' && isNight() ? n * 2 : n;
+}
+
 export function spawnAnimals(seed) {
   animalRand = mulberry32(seed * 17 + 11);
   const area = (Math.PI * ANIMAL_RANGE ** 2) / 256 ** 2; // populations are per 256 x 256 m, counted around you
   for (const [kind, sp] of Object.entries(SPECIES)) {
     population[kind] = Math.max(1, Math.round(sp.per * area));
-    for (let tries = 0; tries < 12 && animals.filter((a) => a.kind === kind).length < population[kind]; tries++) spawnHerd(kind, animalRand, false);
+    for (let tries = 0; tries < 12 && animals.filter((a) => a.kind === kind).length < wanted(kind); tries++) spawnHerd(kind, animalRand, sp.night);
   }
   return animals.length;
 }
@@ -642,6 +732,37 @@ function killAnimal(a) {
   give(got);
 }
 
+// Curses a hexcaller throws: slow glowing balls that fly at where you are and hurt when they hit.
+const hexes = [];
+const hexGeo = new THREE.IcosahedronGeometry(0.18, 0), hexMat = new THREE.MeshBasicMaterial({ color: 0xc080ff });
+const _hd = new THREE.Vector3();
+function castHex(a) {
+  const m = new THREE.Mesh(hexGeo, hexMat), c = Math.cos(a.facing), s = Math.sin(a.facing);
+  m.position.set(a.x + c * 0.5 - s * -0.2, a.y + 2.3, a.z - s * 0.5 - c * -0.2); // from the stone on its staff
+  const target = _hd.set(player.position.x, player.position.y - FOOT_OFFSET + 1.1, player.position.z).sub(m.position);
+  world.add(m);
+  hexes.push({ mesh: m, vel: target.normalize().multiplyScalar(11).clone(), life: 3, dmg: a.sp.bite, name: a.sp.name });
+}
+function updateHexes(dt) {
+  for (const h of [...hexes]) {
+    h.life -= dt;
+    const p = h.mesh.position, step = h.vel.length() * dt;
+    _hd.copy(h.vel).normalize();
+    let done = h.life <= 0 || !!raycastTerrain(p, _hd, 0, step);
+    if (!done) {
+      p.addScaledVector(h.vel, dt);
+      h.mesh.rotation.x += dt * 8; h.mesh.rotation.y += dt * 5;
+      const feet = player.position.y - FOOT_OFFSET;
+      if (Math.hypot(p.x - player.position.x, p.z - player.position.z) < 0.6 && p.y > feet && p.y < feet + 2) {
+        damagePlayer(h.dmg, `were cursed by a ${h.name.toLowerCase()}`);
+        done = true;
+      }
+    }
+    if (done) { world.remove(h.mesh); hexes.splice(hexes.indexOf(h), 1); }
+  }
+}
+export function clearHexes() { hexes.length = 0; } // (the meshes went with the old world)
+
 export function updateAnimals(frameDt) {
   const px = player.position.x, pz = player.position.z, pfeet = player.position.y - FOOT_OFFSET;
   for (const a of [...animals]) {
@@ -654,6 +775,12 @@ export function updateAnimals(frameDt) {
     a.lag = 0;
     a.timer -= dt; a.hurtT -= dt; a.attackCd -= dt; a.flee -= dt; a.aggro -= dt; a.calm -= dt;
 
+    // night monsters crumble away one by one after dawn
+    if (sp.night && day.light > 0.5) {
+      if (a.fade === undefined) a.fade = 2 + animalRand() * 25;
+      if ((a.fade -= dt) <= 0) { removeAnimal(a); continue; }
+    }
+
     // burning in poured lava
     if (fluidAt(a.x, a.y + 0.2, a.z)?.type === 'lava') {
       a.burnT = (a.burnT || 0) - dt;
@@ -662,9 +789,18 @@ export function updateAnimals(frameDt) {
 
     let wx = 0, wz = 0, speed = 0;
     // a predator that can't get to you (you're up on blocks, across water) gives up for a while
-    const hunting = sp.hostile && a.calm <= 0 && !state.creative && gameState === 'playing' && Math.abs(dy) < 6 && (dist < sp.hostile || (a.aggro > 0 && dist < 30));
+    // (wolves hunt from further away at night)
+    const sees = sp.hostile && (a.kind === 'wolf' && isNight() ? sp.hostile * 1.6 : sp.hostile);
+    const hunting = sp.hostile && a.calm <= 0 && !state.creative && gameState === 'playing' && Math.abs(dy) < 6 && (dist < sees || (a.aggro > 0 && dist < 30));
     if (!hunting && a.mode === 'chase') { a.mode = 'idle'; a.timer = 0; }
-    if (hunting) {
+    if (hunting && sp.cast) {
+      // a caster keeps its distance (backing off when you come close) and throws curses at you
+      a.mode = 'chase';
+      const toward = dist > sp.cast * 0.75 ? 1 : dist < 7 ? -1 : 0;
+      wx = dx / dist * toward; wz = dz / dist * toward; speed = toward ? sp.run : 0;
+      if (!toward) { a.facing = Math.atan2(-dx, -dz); }
+      if (dist < sp.cast && a.attackCd <= 0) { a.attackCd = sp.attackEvery; castHex(a); }
+    } else if (hunting) {
       a.mode = 'chase'; wx = dx / dist; wz = dz / dist; speed = sp.run;
       if (dist < 1.3 + sp.r && Math.abs(dy) < 1.8 && a.attackCd <= 0) {
         a.attackCd = sp.attackEvery || 1.1;
@@ -760,16 +896,18 @@ export function updateAnimals(frameDt) {
     if (a.meshes[0].material !== mat) for (const m of a.meshes) m.material = mat;
   }
 
+  updateHexes(frameDt);
+
   // top populations back up now and then, out of sight (quickly while the world is still filling up)
   animalRespawnTimer -= frameDt;
   if (animalRespawnTimer <= 0) {
-    const want = Object.values(population).reduce((a, b) => a + b, 0);
-    animalRespawnTimer = animals.length < want * 0.7 ? 1.5 : 20;
+    const want = Object.keys(population).reduce((n, k) => n + wanted(k), 0);
+    animalRespawnTimer = animals.length < want * 0.7 ? 1.5 : isNight() ? 8 : 20;
     // animals left far behind make room for new ones near you
     for (const a of [...animals]) if (Math.hypot(a.x - player.position.x, a.z - player.position.z) > ANIMAL_DROP && a.aggro <= 0) removeAnimal(a);
     // top up the kind that is furthest below its population (every kind gets its turn, so a kind
     // that can't find a spot right now doesn't hold the others up)
-    const short = Object.keys(SPECIES).map((k) => [k, animals.filter((a) => a.kind === k).length / population[k]]).filter(([, f]) => f < 1).sort((p, q) => p[1] - q[1]);
+    const short = Object.keys(SPECIES).filter((k) => wanted(k) > 0).map((k) => [k, animals.filter((a) => a.kind === k).length / wanted(k)]).filter(([, f]) => f < 1).sort((p, q) => p[1] - q[1]);
     for (const [kind] of short.slice(0, 3)) if (spawnHerd(kind, animalRand, true)) break;
   }
 }

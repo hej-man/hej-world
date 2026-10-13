@@ -106,7 +106,7 @@ function fieldSurfaceY(x, z) {
 const _gn = new THREE.Vector3();
 function grassAmount(x, y, z) {
   const T = terrainFns;
-  if (y < T.baseWaterAt(x, z) + 1.3 || y > 74) return 0;
+  if (y < T.baseWaterAt(x, z) + 1.3 || y > WORLD.lift + 74) return 0;
   if (T.volcanoInfluence(x, z) > 0.02) return 0;
   fieldNormal(x, y, z, _gn);
   if (_gn.y < 0.8) return 0;

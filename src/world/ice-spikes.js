@@ -1,5 +1,6 @@
 import { hash1 } from '../noise.js';
 import { hideBlock, placeBlock } from './blocks.js';
+import { solidAt } from '../terrain/voxels.js';
 
 // ---------------------------------------------------------------------------
 // Ice spikes, built from real blocks: a tapering spire of packed ice (a little clear ice mixed in),
@@ -31,7 +32,9 @@ export function buildIceSpike(p, surface, tag) {
     levels.push(ring);
   }
   const cells = new Map(); // "x,y,z" -> [type, x, y, z, shape, turn]
-  const put = (type, x, y, z, shape, turn) => cells.set(`${x},${y},${z}`, [type, x, y, z, shape, turn]);
+  // cells the ground already fills get no block: two solids in one cell would show both their faces
+  const ground = (x, y, z) => solidAt(x + 0.5, y + 0.5, z + 0.5);
+  const put = (type, x, y, z, shape, turn) => { if (!ground(x, y, z)) cells.set(`${x},${y},${z}`, [type, x, y, z, shape, turn]); };
   const ice = (x, y, z) => (hash1(x * 3.7 + y * 11.3 + z * 5.1) < 0.12 ? 'ice' : 'packed_ice');
   const thin = (k) => levels[k].size === 1 && (k === H - 1 || levels[k + 1].size === 1);
   levels.forEach((layer, k) => {
@@ -55,12 +58,11 @@ export function buildIceSpike(p, surface, tag) {
       }
     }
   });
-  // a full block is hidden when full blocks (or the ground) are on all six sides
+  // a full block is hidden when full blocks or the ground are on all six sides
   const full = (x, y, z) => cells.get(`${x},${y},${z}`)?.[4] === 'block';
-  const buried = (x, y, z) => y + 1 < surface(x + 0.5, z + 0.5) - 0.3;
   for (const [type, x, y, z, shape, turn] of cells.values()) {
-    const shut = shape === 'block' && (buried(x, y, z) ||
-      [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]].every(([dx, dy, dz]) => full(x + dx, y + dy, z + dz) || buried(x + dx, y + dy, z + dz)));
+    const shut = shape === 'block' &&
+      [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]].every(([dx, dy, dz]) => full(x + dx, y + dy, z + dz) || ground(x + dx, y + dy, z + dz));
     (shut ? hideBlock : placeBlock)(type, x, y, z, shape, 0, { turn, tag });
   }
   return cells.size;

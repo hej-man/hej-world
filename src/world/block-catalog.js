@@ -74,7 +74,16 @@ export const STONE_EXTRAS = [
   { id: 'stone_tiles', name: 'Stone tiles', tex: { kind: 'tiles', hsl: [30, 4, 62] } },
 ];
 
-// Ores found in the ground (items, not blocks), and the metal blocks made from them.
+// Ores found in the ground. Each is an item you dig up that you can also place as a block of rock
+// with the ore in it (the block has the item's id, so breaking it gives the same item back).
+export const ORE_BLOCKS = [
+  { id: 'coal', name: 'Coal ore', nugget: [0, 0, 9] },
+  { id: 'iron_ore', name: 'Iron ore', nugget: [22, 62, 52] },
+  { id: 'raw_copper', name: 'Copper ore', nugget: [20, 66, 48] },
+  { id: 'raw_gold', name: 'Gold ore', nugget: [48, 88, 56] },
+  { id: 'raw_titanium', name: 'Titanium ore', nugget: [255, 22, 80], tier: 2 },
+];
+// The metal blocks made from them.
 export const METAL_BLOCKS = [
   { id: 'coal_block', name: 'Block of coal', mat: 'stone', tex: { kind: 'solid', hsl: [0, 0, 12], noise: 10 } },
   { id: 'copper_block', name: 'Block of copper', mat: 'metal', tex: { kind: 'metal', hsl: [20, 60, 52] } },
@@ -148,6 +157,7 @@ export function catalogBlocks() {
   for (const g of GROUND) B[g.id] = { natural: true, ...g };
   for (const g of STONE_EXTRAS) B[g.id] = { mat: 'stone', ...g };
   for (const m of METAL_BLOCKS) B[m.id] = { ...m };
+  for (const o of ORE_BLOCKS) B[o.id] = { name: o.name, mat: 'stone', natural: true, tier: o.tier || 1, tex: { kind: 'ore', nugget: o.nugget } };
   for (const c of COLOURS) for (const [kind, make] of Object.entries(COLOUR_KINDS)) B[colourBlock(c, kind)] = { colour: c.id, ...make(c) };
   Object.assign(B, METAL_STATIONS);
   B.torch = { name: 'Torch', mat: 'soft', model: 'torch', solid: false, glow: 0xffb050 };

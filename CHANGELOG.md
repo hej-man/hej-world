@@ -1,5 +1,44 @@
 # Changelog
 
+## Round 12, part 2: night, armour, storage, fire and a deeper world
+
+- Day and night: a day lasts 20 minutes. The sun rises and sets, the night sky has stars and a
+  moon, and the light dims to moonlight. The top right corner shows your coordinates, the day
+  and the time.
+- At night wolves hunt further and there are twice as many, and three night monsters come out:
+  the rotwalker (a shambling brute), the hexcaller (a robed caster that throws hexes from a
+  distance) and the gloomstalker (a fast, long-legged shadow). They fade away at dawn and drop
+  grave dust, bones, hex shards and gloom silk.
+- Magic from what they drop: arcane dust, a hex staff (a stronger, purple bolt), grave salve
+  (heals 60), and three potions: the gill tonic (breathe underwater for 90 s), the swiftness
+  draught (40% faster for 60 s) and the owl-eye draught (see in the dark for 3 minutes). The
+  potions you're under show under the clock.
+- Drowning: with your head under water an air bar counts down from 20 seconds, then you drown
+  slowly. A diving helmet (copper, glass and leather) makes your air last three times as long.
+  You no longer get stuck on the bottom of deep water: you float back up.
+- Armour comes in four pieces you wear separately: helmet, breastplate, gauntlets and pants, in
+  leather, copper, gold, iron, rose gold, steel and titanium. You see the pieces you wear on your
+  character, in the metal's colour or as leather. Protection is lower than before: a whole
+  leather set takes off 20%, a titanium set 48%.
+- Storage: a wicker basket (9 slots), a chest (18) and a large crate (36). Right click one to
+  open it; breaking it gives back what's inside.
+- Wild grain grows on the plains and savanna; bake trail bread from it at a campfire or furnace.
+- Milk: an empty bottle milks a cow or goat. Raw milk can make you sick; heat it at a campfire or
+  furnace into pasteurised milk.
+- Iron, copper, gold, titanium and coal ore can be placed as blocks. Cave iron is more common.
+  Ores other than coal no longer show at the surface.
+- Chopped trees fall over away from you before they disappear.
+- Fire: lava poured next to trees, a campfire built under a tree or against wood, and the new fire
+  starter set trees and wooden blocks alight. Fire spreads to trees and wood nearby (not in the
+  rain), burns them away, and sets you on fire if you stand in it.
+- New block shapes: gentle slope, steep slope and corner slope (sloping on two sides), and the
+  shapes have clearer names (Full block, Half slab, Roof ridge, Round pillar). On a surface too
+  steep to stand on you slide down it.
+- The world is 24 m deeper: the sea is at 44 instead of 20, with more rock, caves, deepslate and
+  ore under it.
+- Ice spikes no longer put blocks inside the ground, and a block placed where the ground has a
+  slope takes the slope out, so their faces don't flicker against each other.
+
 ## Round 12, part 1: fixes for the block world
 
 - Volcano craters have their lava lake again, built of lava blocks that fill the crater, and the

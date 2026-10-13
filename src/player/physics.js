@@ -202,7 +202,8 @@ function stepPhysics(dt, inputDir, speed) {
   if ((contact.ground || contact.slope) && fallSpeed > 16 && !player.inWater && !state.creative) damagePlayer((fallSpeed - 16) * 6, 'fell too far');
   if (contact.ground) {
     player.lastGroundTime = state.gameTime;
-    if (player.velocity.y < 0) player.velocity.y = state.creative ? 0 : -2.5; // keeps you stuck to the ground going downhill
+    // keeps you stuck to the ground going downhill; under water you float back up off the bottom
+    if (player.velocity.y < 0) player.velocity.y = state.creative || swimming ? 0 : -2.5;
   }
   if (contact.steep) {
     // remove any velocity pushing into the steep surface (no climbing it)
@@ -214,6 +215,11 @@ function stepPhysics(dt, inputDir, speed) {
       if (into < 0) { player.velocity.x -= nx * into; player.velocity.z -= nz * into; }
     }
     if (!contact.ground) player.velocity.y = Math.max(player.velocity.y, -14); // slide down steep slopes
+    // on a slope too steep to stand on (a steep slope block, a crag) you slide down it and off its
+    // foot instead of clinging to it
+    if (contact.slope && !contact.ground && len > 1e-5 && !swimming && !state.creative) {
+      player.velocity.x += (n.x / len) * 9 * dt; player.velocity.z += (n.z / len) * 9 * dt;
+    }
   }
   if (contact.ceiling && player.velocity.y > 0) player.velocity.y = 0;
 }
@@ -250,6 +256,7 @@ export function updatePlayer(dt) {
   let speed = state.creative ? PLAYER.flySpeed : player.sprinting ? PLAYER.sprintSpeed : PLAYER.walkSpeed;
   if (player.inWater && !state.creative) speed *= 0.55;
   if (player.inLava && !state.creative) speed *= 0.5;
+  if (state.effects.swift > 0 && !state.creative) speed *= 1.4;
 
   // jump only from walkable ground (with a short grace period after leaving it)
   const canJump = player.onGround || state.gameTime - player.lastGroundTime < 0.12;

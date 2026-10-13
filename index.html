@@ -48,6 +48,7 @@
 <div id="flash"></div>
 <div id="underwater"></div>
 <div id="hud"></div>
+<div id="coords"></div>
 <div id="crosshair"></div>
 <div id="target"></div>
 <div id="breakbar"><i></i></div>
@@ -58,6 +59,7 @@
   <div class="bar" id="food"><i></i><span>Hunger</span></div>
   <div class="bar" id="water"><i></i><span>Thirst</span></div>
   <div class="bar" id="mana"><i></i><span>Mana</span></div>
+  <div class="bar" id="air" style="display:none"><i></i><span>Air</span></div>
 </div>
 <div id="mode">CREATIVE</div>
 <div id="hotbar"></div>
@@ -66,6 +68,7 @@
     <button data-tab="bag">🎒 Backpack</button>
     <button data-tab="craft">🔨 Crafting <span class="tab-count" id="craft-count"></span></button>
     <button data-tab="items">📦 All items</button>
+    <button data-tab="store" id="store-tab">🧺 Storage</button>
     <span class="inv-keys" id="inv-keys"></span>
   </div>
   <section class="inv-page" id="page-bag">
@@ -78,11 +81,19 @@
       <div class="bag-side">
         <h3>You</h3>
         <div id="you"></div>
+        <h3>Wearing <span style="opacity: 0.6; font-weight: 400">click to take off or put on</span></h3>
+        <div class="grid" id="worn"></div>
         <h3>Selected item</h3>
         <div id="item-info"></div>
         <button id="btn-sort">Sort backpack</button>
       </div>
     </div>
+  </section>
+  <section class="inv-page" id="page-store">
+    <h2><span id="store-title" style="opacity: 1; font-size: inherit"></span> <span>click to move · right-click to split · shift-click to move between it and your backpack</span></h2>
+    <div class="grid" id="store-slots"></div>
+    <h2>Backpack</h2>
+    <div class="grid" id="store-bag"></div>
   </section>
   <section class="inv-page" id="page-craft">
     <div class="filters">

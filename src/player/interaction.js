@@ -7,10 +7,12 @@ import { cellMaterial, editCell, editedMaterialAt, hitCell, raycastTerrain } fro
 import { solidCell } from '../terrain/voxels.js';
 import { EYE_OFFSET, player } from './character.js';
 import { aimRay } from './camera.js';
-import { ITEMS, addItem, inventoryOpen, renderInventory, setInventoryOpen, slots } from '../inventory/inventory.js';
+import { ITEMS, addItem, inventoryOpen, openStorage, renderInventory, setInventoryOpen, slots } from '../inventory/inventory.js';
 import { BLOCKS, blockKey, blocks, placeBlock, removeBlock, voxelRay } from '../world/blocks.js';
 import { PLANT_KINDS, TREE_KINDS } from '../world/vegetation.js';
-import { BOLT_COST, MAX_HEALTH, drankDirtyWater, stats } from './survival.js';
+import { fellTree } from '../world/felling.js';
+import { flammable, igniteBlock, igniteTree } from '../world/fire.js';
+import { BOLT_COST, MAX_HEALTH, drankDirtyWater, stats, wearArmour } from './survival.js';
 import { animals, hurtAnimal, spawnAnimal } from '../animals/animals.js';
 import { fluidRay, floodFromNature, poolAmount, pourFluid, removeFluid, takeFluid, wakeArea } from '../world/fluids.js';
 import { craterLavaAt, craterOf, lavaAt } from '../world/volcano.js';
@@ -183,7 +185,9 @@ export function give(list) {
 
 const _hide = new THREE.Matrix4().makeScale(0, 0, 0);
 function harvest(tg) {
-  for (const [mesh, i] of tg.parts) { mesh.setMatrixAt(i, _hide); mesh.instanceMatrix.needsUpdate = true; }
+  // a tree falls over (world/felling.js hides it once it's down); everything else just goes
+  if (tg.kind === 'tree') fellTree(tg, player.position.x, player.position.z);
+  else for (const [mesh, i] of tg.parts) { mesh.setMatrixAt(i, _hide); mesh.instanceMatrix.needsUpdate = true; }
   if (tg.obstacle) gridRemove(obstacleGrid, tg.obstacle);
   gridRemove(targetGrid, tg);
   const r = Math.random, between = (a, b) => a + Math.floor(r() * (b - a + 1));
@@ -207,7 +211,14 @@ function harvest(tg) {
 
 export function doBreak(t) {
   if (t.kind === 'tree' || t.kind === 'plant' || t.kind === 'rock') { harvest(t.target); return; }
-  if (t.kind === 'block') { const b = removeBlock(t.key); if (b) { give([[b.type, 1]]); wakeArea(b.x, b.y, b.z, 1); } return; }
+  if (t.kind === 'block') {
+    const b = removeBlock(t.key);
+    if (!b) return;
+    // a basket, chest or crate gives back what was in it too
+    give([[b.type, 1], ...(b.items || []).filter(Boolean).map((s) => [s.id, s.count])]);
+    wakeArea(b.x, b.y, b.z, 1);
+    return;
+  }
   if (t.kind === 'terrain') {
     materialOf(t);
     const mat = t.material;
@@ -277,8 +288,8 @@ export function useWater() {
 
 // Does a right click on water drink it? Only with nothing in hand that has a use of its own (a block
 // to place, a bucket, food...) and nothing you can use in front of you (a workbench, a furnace...).
-const hasUse = (def) => !!(def && (def.place || def.bucket || def.fluid || def.spawn || def.food || def.drink || def.heal || def.mana || def.armour || def.wand));
-const usable = (t) => t?.kind === 'block' && !!BLOCKS[t.type].station;
+const hasUse = (def) => !!(def && (def.place || def.bucket || def.fluid || def.spawn || def.food || def.drink || def.heal || def.mana || def.effect || def.wear || def.wand || def.ignite));
+const usable = (t) => t?.kind === 'block' && !!(BLOCKS[t.type].station || BLOCKS[t.type].storage);
 function drinksWater(t, def) { return !hasUse(def) && !usable(t) && def?.id !== 'bottle'; }
 
 // Right click
@@ -286,6 +297,12 @@ export function useItem(t) {
   const s = slots[state.selectedSlot], def = s && ITEMS[s.id];
   // water in front of whatever you're aiming at: drink or fill a bottle, unless you're building
   // an empty bottle fills from poured water too (a quarter of a bucket)
+  // an empty bottle milks a cow or a goat
+  if (s?.id === 'bottle' && t?.kind === 'animal' && (t.animal.kind === 'cow' || t.animal.kind === 'goat')) {
+    consumeSelected(); give([['raw_milk', 1]]);
+    toast(`Milked the ${t.animal.sp.name.toLowerCase()}`); state.useCd = 0.5;
+    return;
+  }
   if (s?.id === 'bottle' && !aimWater) {
     const t0 = aimRange(), f = fluidRay(_aimO, _aimD, t0, t0 + PLAYER.reach);
     if (f?.type === 'water' && (!t || f.t < t.t + 0.3)) {
@@ -295,6 +312,10 @@ export function useItem(t) {
     }
   }
   if (aimWater && drinksWater(t, def)) { useWater(); return; }
+  if (t?.kind === 'block' && BLOCKS[t.type].storage && !(def && def.place)) {
+    const b = blocks.get(t.key);
+    if (b?.items) { openStorage(b, BLOCKS[b.type].name); return; }
+  }
   if (t?.kind === 'block' && BLOCKS[t.type].station && !(def && def.place)) {
     // take anything the station finished, then open the crafting page
     const b = blocks.get(t.key);
@@ -302,6 +323,13 @@ export function useItem(t) {
     setInventoryOpen(true); return;
   }
   if (!def) return;
+  if (def.ignite) {
+    const lit = t?.kind === 'tree' ? igniteTree(t.target) : t?.kind === 'block' ? igniteBlock(t.key) : false;
+    if (lit) { consumeSelected(); toast(t.kind === 'tree' ? 'The tree catches fire' : 'It catches fire'); }
+    else toast(t?.kind === 'block' && !flammable(t.type) ? "That won't burn" : 'Aim at a tree or a wooden block');
+    state.useCd = 0.5;
+    return;
+  }
   if (def.place) {
     const cell = placementCell(t);
     if (!cell || !cellFree(cell)) return;
@@ -356,8 +384,10 @@ export function useItem(t) {
     stats.thirst = Math.min(100, stats.thirst + def.drink);
     consumeSelected();
     if (def.leaves && !state.creative) addItem(def.leaves, 1);
-    if (def.dirty) drankDirtyWater(30);
-    toast(def.dirty ? `Drank ${def.name.toLowerCase()}. You feel sick` : `Drank ${def.name.toLowerCase()}`);
+    // dirty water always makes you sick, raw milk only sometimes (`dirty` is then the chance)
+    const sick = def.dirty === true || (def.dirty > 0 && Math.random() < def.dirty);
+    if (sick) drankDirtyWater(30);
+    toast(sick ? `Drank ${def.name.toLowerCase()}. You feel sick` : `Drank ${def.name.toLowerCase()}`);
     state.useCd = 0.5;
   } else if (def.heal) {
     if (stats.health >= MAX_HEALTH) { toast('Health is already full'); return; }
@@ -369,29 +399,45 @@ export function useItem(t) {
     stats.mana = Math.min(100, stats.mana + def.mana);
     consumeSelected();
     state.useCd = 0.5;
-  } else if (def.wand) {
-    castBolt();
-  } else if (def.armour) {
-    if (stats.armour >= def.armour) { toast('Already wearing armour'); return; }
-    stats.armour = def.armour; stats.armourLook = def.look;
+  } else if (def.effect) {
+    // potions: drinking one starts (or restarts) its effect
+    state.effects[def.effect] = def.secs;
+    if (def.effect === 'gills') stats.air = Math.max(stats.air, 20);
     consumeSelected();
-    toast(`Wearing ${def.name.toLowerCase()}`);
+    if (!state.creative) addItem('bottle', 1);
+    toast(`Drank ${def.name.toLowerCase()}`);
+    state.useCd = 0.5;
+  } else if (def.wand) {
+    castBolt(def.wand);
+  } else if (def.wear) {
+    // put it on, swapping it for what you wore there before
+    consumeSelected();
+    const old = wearArmour(def.wear, def.id);
+    if (old) addItem(old, 1);
+    renderInventory();
+    toast(`Wearing ${def.name.toLowerCase()}${old ? ` (took off ${ITEMS[old].name.toLowerCase()})` : ''}`);
+    state.useCd = 0.4;
   }
 }
 
 // Wand bolts
 export const bolts = [];
 const boltGeo = new THREE.IcosahedronGeometry(0.16, 0);
-const boltMat = new THREE.MeshBasicMaterial({ color: 0x9fe8ff });
+const boltMats = new Map();
 const _bd = new THREE.Vector3();
-function castBolt() {
-  if (stats.mana < BOLT_COST && !state.creative) { toast('Not enough mana'); return; }
-  if (!state.creative) stats.mana -= BOLT_COST;
+// a crystal wand's bolt, or a stronger one from a staff (`wand` gives its cost, damage, colour and size)
+function castBolt(wand) {
+  const cost = wand.cost || BOLT_COST;
+  if (stats.mana < cost && !state.creative) { toast('Not enough mana'); return; }
+  if (!state.creative) stats.mana -= cost;
   aimRay(_tv, _bd);
-  const m = new THREE.Mesh(boltGeo, boltMat);
+  const color = wand.color || 0x9fe8ff;
+  if (!boltMats.has(color)) boltMats.set(color, new THREE.MeshBasicMaterial({ color }));
+  const m = new THREE.Mesh(boltGeo, boltMats.get(color));
+  m.scale.setScalar((wand.size || 0.16) / 0.16);
   m.position.set(player.position.x, player.position.y + EYE_OFFSET - 0.25, player.position.z).addScaledVector(_bd, 0.7);
   world.add(m);
-  bolts.push({ mesh: m, vel: _bd.clone().multiplyScalar(30), life: 1.5 });
+  bolts.push({ mesh: m, vel: _bd.clone().multiplyScalar(30), life: 1.5, damage: wand.damage || 10 });
   state.useCd = 0.35;
 }
 
@@ -406,7 +452,7 @@ export function updateBolts(dt) {
       const p = b.mesh.position;
       if (blocks.has(blockKey(Math.floor(p.x), Math.floor(p.y), Math.floor(p.z)))) done = true;
       for (const a of animals) {
-        if (Math.hypot(p.x - a.x, p.y - (a.y + a.sp.h * 0.55), p.z - a.z) < a.sp.r + 0.35) { hurtAnimal(a, 10, b.vel.x, b.vel.z); done = true; break; }
+        if (Math.hypot(p.x - a.x, p.y - (a.y + a.sp.h * 0.55), p.z - a.z) < a.sp.r + 0.35) { hurtAnimal(a, b.damage, b.vel.x, b.vel.z); done = true; break; }
       }
       b.mesh.rotation.x += dt * 10; b.mesh.rotation.y += dt * 7;
     }

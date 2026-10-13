@@ -14,11 +14,14 @@ export const QUALITY = urlParams.get('quality') === 'low' ? 'low' : 'high';
 // ---------------------------------------------------------------------------
 export const WORLD = {
   size: 1024,        // width and depth of the map in metres (256 generates in about a second; 1024 takes longer)
-  height: 128,       // vertical extent in metres
+  height: 152,       // vertical extent in metres
   voxel: 2,          // metres between terrain samples; bigger = coarser ground, faster generation
-  waterLevel: 20,
+  waterLevel: 44,
   treeSpacing: 2.6,  // smaller = denser forests
 };
+// how much rock lies under the sea compared with the first worlds (sea level 20): every height the
+// land is shaped with is this much higher, so caves and ores reach that much further down
+WORLD.lift = WORLD.waterLevel - 20;
 WORLD.caveFloor = 6;                 // the lowest cave floors (bedrock below); under low ground caves stay above the water
 WORLD.volcanoes = Math.min(4, Math.max(1, Math.round((WORLD.size / 512) ** 2)));  // about one per 512 x 512 m, at most 4
 

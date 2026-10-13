@@ -5,7 +5,8 @@ import { mouse } from '../player/interaction.js';
 import { toast } from '../ui/hud.js';
 import { updateOverlay } from '../ui/menu.js';
 import { keys } from '../ui/input.js';
-import { MAX_HEALTH, stats } from '../player/survival.js';
+import { MAX_HEALTH, stats, wearArmour } from '../player/survival.js';
+import { PIECES, PIECE_NAMES } from './armour.js';
 import { blockIcon, hasBlockIcon } from '../world/blocks.js';
 import { drawnIcon, iconSpec } from './icons.js';
 
@@ -19,7 +20,8 @@ export const slots = new Array(INVENTORY_SIZE).fill(null); // each slot: null or
 
 
 export let inventoryOpen = false;
-export let inventoryTab = 'bag';   // 'bag', 'craft' or 'items' (creative)
+export let inventoryTab = 'bag';   // 'bag', 'craft', 'items' (creative) or 'store' (a basket, chest or crate)
+export let openStore = null;       // the storage block whose page is open
 
 export function registerItem(def) {
   ITEMS[def.id] = { maxStack: STACK, ...def };
@@ -96,16 +98,17 @@ const invMainEl = document.getElementById('inv-main');
 const invHotbarEl = document.getElementById('inv-hotbar');
 const inventoryEl = document.getElementById('inventory');
 const heldEl = document.getElementById('held');
+const storeEl = document.getElementById('store-slots'), storeBagEl = document.getElementById('store-bag');
 export const tooltipEl = document.getElementById('tooltip');
 
-function makeSlots(container, from, to, interactive) {
+function makeSlots(container, from, to, interactive, list = () => slots) {
   for (let i = from; i < to; i++) {
     const el = document.createElement('div');
     el.className = 'slot';
     el.dataset.index = i;
     if (interactive) {
-      el.addEventListener('mousedown', (e) => { e.preventDefault(); onSlotClick(i, e); });
-      el.addEventListener('mouseenter', () => { const s = slots[i]; if (s) showTooltip(s.id); });
+      el.addEventListener('mousedown', (e) => { e.preventDefault(); onSlotClick(list(), i, e); });
+      el.addEventListener('mouseenter', () => { const s = list()[i]; if (s) showTooltip(s.id); });
       el.addEventListener('mouseleave', () => { tooltipEl.style.display = 'none'; });
       el.addEventListener('contextmenu', (e) => e.preventDefault());
     }
@@ -115,11 +118,32 @@ function makeSlots(container, from, to, interactive) {
 makeSlots(hotbarEl, 0, HOTBAR_SIZE, false);
 makeSlots(invMainEl, HOTBAR_SIZE, INVENTORY_SIZE, true);
 makeSlots(invHotbarEl, 0, HOTBAR_SIZE, true);
+makeSlots(storeBagEl, HOTBAR_SIZE, INVENTORY_SIZE, true);
+// what you're wearing: a slot per armour piece; click one to take it off into your hand, or to put
+// on the piece you're holding
+const wornEl = document.getElementById('worn');
+for (const piece of PIECES) {
+  const el = document.createElement('div');
+  el.className = 'slot';
+  el.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    const h = state.heldStack, def = h && ITEMS[h.id];
+    if (h && def?.wear !== piece) { toast(`Only a ${PIECE_NAMES[piece].toLowerCase()} goes there`); return; }
+    const old = wearArmour(piece, h ? h.id : null);
+    state.heldStack = old ? { id: old, count: 1 } : null;
+    renderInventory();
+  });
+  el.addEventListener('mouseenter', () => { const id = stats.worn[piece]; if (id) showTooltip(id); });
+  el.addEventListener('mouseleave', () => { tooltipEl.style.display = 'none'; });
+  wornEl.appendChild(el);
+}
 
 export function renderInventory() {
   [...hotbarEl.children].forEach((el, i) => { fillSlotEl(el, slots[i], String(i + 1)); el.classList.toggle('selected', i === state.selectedSlot); });
-  [...invMainEl.children].forEach((el) => fillSlotEl(el, slots[+el.dataset.index]));
+  for (const grid of [invMainEl, storeBagEl]) [...grid.children].forEach((el) => fillSlotEl(el, slots[+el.dataset.index]));
   [...invHotbarEl.children].forEach((el) => fillSlotEl(el, slots[+el.dataset.index], el.dataset.index * 1 + 1 + ''));
+  if (openStore) [...storeEl.children].forEach((el, i) => fillSlotEl(el, openStore.items[i]));
+  PIECES.forEach((p, i) => fillSlotEl(wornEl.children[i], stats.worn[p] ? { id: stats.worn[p], count: 1 } : null, PIECE_NAMES[p]));
   fillSlotEl(heldEl, state.heldStack);
   heldEl.style.display = state.heldStack ? 'flex' : 'none';
   document.getElementById('inv-note').style.display = slots.some(Boolean) || state.heldStack ? 'none' : 'block';
@@ -144,7 +168,7 @@ function renderYou() {
   document.getElementById('you').innerHTML = state.creative ? 'Creative mode: nothing can hurt you, and every item is on the All items page.' :
     `Health ${Math.ceil(stats.health)} / ${MAX_HEALTH} · hunger ${Math.round(stats.hunger)} · thirst ${Math.round(stats.thirst)}<br>` +
     `Armour: ${stats.armour ? `${Math.round(stats.armour * 100)}% less damage` : 'none'}` +
-    (stats.sick > 0 ? `<br><span style="color:#c9e07a">Sick from dirty water (${Math.ceil(stats.sick)} s)</span>` : '');
+    (stats.sick > 0 ? `<br><span style="color:#c9e07a">Sick (${Math.ceil(stats.sick)} s)</span>` : '');
   const s = slots[state.selectedSlot];
   if (inventoryTab === 'bag' && tooltipEl.style.display !== 'block') showItemInfo(s?.id);
 }
@@ -165,32 +189,35 @@ export function sortBackpack() {
 }
 document.getElementById('btn-sort').addEventListener('click', sortBackpack);
 
-function onSlotClick(i, e) {
-  const s = slots[i];
+// A click on slot i of `list` (your slots, or an open basket's, chest's or crate's).
+function onSlotClick(list, i, e) {
+  const s = list[i];
   const max = (id) => ITEMS[id]?.maxStack ?? STACK;
   if (e.button === 0 && e.shiftKey && s && !state.heldStack) {
-    // quick move between hotbar and backpack
-    const [from, to] = i < HOTBAR_SIZE ? [HOTBAR_SIZE, INVENTORY_SIZE] : [0, HOTBAR_SIZE];
-    for (let j = from; j < to && slots[i]; j++) {
-      const t = slots[j];
-      if (t && t.id === s.id && t.count < max(s.id)) { const n = Math.min(s.count, max(s.id) - t.count); t.count += n; s.count -= n; if (!s.count) slots[i] = null; }
+    // quick move: between hotbar and backpack, or between a store and you while its page is open
+    const store = openStore && inventoryTab === 'store';
+    const [to, from, end] = store && list !== openStore.items ? [openStore.items, 0, openStore.items.length]
+      : store ? [slots, 0, INVENTORY_SIZE] : i < HOTBAR_SIZE ? [list, HOTBAR_SIZE, INVENTORY_SIZE] : [list, 0, HOTBAR_SIZE];
+    for (let j = from; j < end && list[i]; j++) {
+      const t = to[j];
+      if (t && t !== s && t.id === s.id && t.count < max(s.id)) { const n = Math.min(s.count, max(s.id) - t.count); t.count += n; s.count -= n; if (!s.count) list[i] = null; }
     }
-    for (let j = from; j < to && slots[i]; j++) if (!slots[j]) { slots[j] = slots[i]; slots[i] = null; }
+    for (let j = from; j < end && list[i]; j++) if (!to[j]) { to[j] = list[i]; list[i] = null; }
   } else if (e.button === 0) {
-    if (!state.heldStack) { state.heldStack = s; slots[i] = null; }
-    else if (!s) { slots[i] = state.heldStack; state.heldStack = null; }
+    if (!state.heldStack) { state.heldStack = s; list[i] = null; }
+    else if (!s) { list[i] = state.heldStack; state.heldStack = null; }
     else if (s.id === state.heldStack.id) {
       const n = Math.min(state.heldStack.count, max(s.id) - s.count);
       s.count += n; state.heldStack.count -= n;
       if (!state.heldStack.count) state.heldStack = null;
-    } else { slots[i] = state.heldStack; state.heldStack = s; }
+    } else { list[i] = state.heldStack; state.heldStack = s; }
   } else if (e.button === 2) {
     if (!state.heldStack && s) {
       const half = Math.ceil(s.count / 2);
       state.heldStack = { id: s.id, count: half }; s.count -= half;
-      if (!s.count) slots[i] = null;
+      if (!s.count) list[i] = null;
     } else if (state.heldStack && (!s || (s.id === state.heldStack.id && s.count < max(s.id)))) {
-      if (!s) slots[i] = { id: state.heldStack.id, count: 1 }; else s.count++;
+      if (!s) list[i] = { id: state.heldStack.id, count: 1 }; else s.count++;
       if (!--state.heldStack.count) state.heldStack = null;
     }
   }
@@ -211,10 +238,11 @@ export function selectSlot(i) {
 
 export function setInventoryTab(tab) {
   if (tab === 'items' && !state.creative) tab = 'craft';
+  if (tab === 'store' && !openStore) tab = 'bag';
   inventoryTab = tab;
   for (const b of document.querySelectorAll('.inv-tabs button')) {
     b.classList.toggle('on', b.dataset.tab === tab);
-    b.style.display = b.dataset.tab === 'items' && !state.creative ? 'none' : '';
+    b.style.display = (b.dataset.tab === 'items' && !state.creative) || (b.dataset.tab === 'store' && !openStore) ? 'none' : '';
   }
   for (const p of document.querySelectorAll('.inv-page')) p.classList.toggle('on', p.id === `page-${tab}`);
   tooltipEl.style.display = 'none';
@@ -226,6 +254,7 @@ for (const b of document.querySelectorAll('.inv-tabs button')) b.addEventListene
 // in creative the item list).
 export function setInventoryOpen(open, tab) {
   inventoryOpen = open;
+  if (!open || (tab && tab !== 'store')) openStore = null;
   if (open) setInventoryTab(tab || inventoryTab);
   inventoryEl.style.display = open ? 'block' : 'none';
   tooltipEl.style.display = 'none';
@@ -240,5 +269,14 @@ export function setInventoryOpen(open, tab) {
   }
   renderInventory();
   updateOverlay();
+}
+
+// Opens a basket, chest or crate (a placed block with `items`) on the inventory's storage page.
+export function openStorage(b, name) {
+  openStore = b;
+  storeEl.innerHTML = '';
+  makeSlots(storeEl, 0, b.items.length, true, () => openStore?.items || []);
+  document.getElementById('store-title').textContent = `${name} (${b.items.length} slots)`;
+  setInventoryOpen(true, 'store');
 }
 renderInventory();

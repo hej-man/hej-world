@@ -16,7 +16,7 @@ export const MATERIAL_COLORS = {
 };
 // what each metal looks like white hot
 const MOLTEN = { iron: '#ffb040', copper: '#ff8a50', gold: '#ffe070', steel: '#ffc860', titanium: '#fff4dc', rose_gold: '#ffa088' };
-const FLUID = { water: ['#7fd0ff', '#2a7fd0'], lava: ['#ffd060', '#ff4a10'], murky: ['#a8b88a', '#5f6a3a'] };
+const FLUID = { water: ['#7fd0ff', '#2a7fd0'], lava: ['#ffd060', '#ff4a10'], murky: ['#a8b88a', '#5f6a3a'], milk: ['#ffffff', '#e4e8f0'], rawmilk: ['#fff4d8', '#e0cfa0'] };
 
 const metalGrad = (g, c, x0, y0, x1, y1) => {
   const gr = g.createLinearGradient(x0, y0, x1, y1);
@@ -184,6 +184,34 @@ function armour(g, c) {
   g.strokeStyle = 'rgba(255,255,255,0.45)'; g.beginPath(); g.moveTo(16, 14); g.quadraticCurveTo(18, 26, 16, 36); g.stroke();
   g.fillStyle = 'rgba(0,0,0,0.35)'; for (const y of [18, 26, 34]) { g.beginPath(); g.arc(19, y, 1, 0, 7); g.arc(29, y, 1, 0, 7); g.fill(); }
 }
+// The four armour pieces (and the diving helmet, copper with a round window).
+function armourPiece(g, m, piece = 'breastplate') {
+  const c = MATERIAL_COLORS[m === 'diving' ? 'copper' : m];
+  if (piece === 'breastplate') return armour(g, c);
+  g.fillStyle = metalGrad(g, c, 8, 8, 40, 42);
+  if (piece === 'helmet') {
+    g.beginPath(); g.moveTo(8, 34); g.bezierCurveTo(8, 6, 40, 6, 40, 34); g.lineTo(40, 40); g.lineTo(8, 40); g.closePath(); g.fill(); outline(g);
+    if (m === 'diving') {
+      g.fillStyle = '#9fd8f0'; g.beginPath(); g.arc(24, 26, 8, 0, 7); g.fill(); outline(g, '#5a3a18', 2.5);
+      g.fillStyle = 'rgba(255,255,255,0.7)'; g.beginPath(); g.ellipse(21, 23, 2, 3, 0.4, 0, 7); g.fill();
+    } else {
+      g.fillStyle = 'rgba(0,0,0,0.55)'; g.fillRect(12, 25, 24, 4); // the eye slit
+      g.strokeStyle = 'rgba(0,0,0,0.3)'; g.lineWidth = 1.2; g.beginPath(); g.moveTo(24, 10); g.lineTo(24, 24); g.stroke();
+    }
+    g.strokeStyle = 'rgba(255,255,255,0.45)'; g.beginPath(); g.moveTo(13, 30); g.quadraticCurveTo(13, 16, 20, 12); g.stroke();
+  } else if (piece === 'gauntlets') {
+    for (const [x, flip] of [[13, -1], [31, 1]]) {
+      g.save(); g.translate(x, 25); g.scale(flip, 1);
+      poly(g, [-7, 16, 7, 16, 8, -2, 6, -12, 2, -15, -2, -14, -5, -10, -9, -4, -8, 2]); g.fillStyle = metalGrad(g, c, -8, -14, 8, 16); g.fill(); outline(g);
+      g.strokeStyle = 'rgba(0,0,0,0.3)'; g.lineWidth = 1; for (const y of [-6, 0, 8]) { g.beginPath(); g.moveTo(-6, y); g.lineTo(6, y); g.stroke(); }
+      g.restore();
+    }
+  } else if (piece === 'pants') {
+    poly(g, [11, 6, 37, 6, 40, 43, 28, 43, 24, 18, 20, 43, 8, 43]); g.fill(); outline(g);
+    g.fillStyle = 'rgba(0,0,0,0.3)'; g.fillRect(11, 6, 26, 4); // the belt
+    g.strokeStyle = 'rgba(255,255,255,0.4)'; g.lineWidth = 1.2; g.beginPath(); g.moveTo(14, 14); g.lineTo(12, 40); g.stroke();
+  }
+}
 function coal(g) {
   for (const [x, y, r, a] of [[19, 28, 11, 0.3], [31, 22, 9, -0.4], [30, 34, 7, 0.8]]) {
     g.save(); g.translate(x, y); g.rotate(a);
@@ -280,7 +308,8 @@ function bottle(g, fluid) {
     w.addColorStop(0, hi); w.addColorStop(1, lo);
     g.fillStyle = w; g.fillRect(0, 25, S, 20);
     g.fillStyle = 'rgba(255, 255, 255, 0.35)'; g.fillRect(0, 25, S, 1.5); // the water's surface
-    if (fluid === 'murky') for (let i = 0; i < 12; i++) { g.fillStyle = 'rgba(70, 60, 30, 0.6)'; g.fillRect(12 + ((i * 37) % 24), 29 + ((i * 13) % 13), 1.6, 1.6); }
+    if (fluid === 'murky' || fluid === 'rawmilk') for (let i = 0; i < 12; i++) { g.fillStyle = fluid === 'murky' ? 'rgba(70, 60, 30, 0.6)' : 'rgba(150, 120, 60, 0.45)'; g.fillRect(12 + ((i * 37) % 24), 29 + ((i * 13) % 13), 1.6, 1.6); }
+    if (fluid === 'milk') { g.fillStyle = '#3a8ad0'; g.fillRect(0, 33, S, 5); g.fillStyle = '#ffffff'; g.fillRect(22, 34, 4, 3); } // a blue label
     g.restore();
   }
   body();
@@ -355,7 +384,7 @@ const DRAW = {
   ingot: (g, m) => ingot(g, MATERIAL_COLORS[m]), plate: (g, m) => plate(g, MATERIAL_COLORS[m]), rod: (g, m) => rod(g, MATERIAL_COLORS[m]),
   raw: (g, m) => raw(g, MATERIAL_COLORS[m]), ore: (g) => raw(g, ['#ffd2a8', '#c8743a', '#7a3a14']),
   molten: (g, m) => crucible(g, MOLTEN[m]), crucible: (g) => crucible(g), mould: (g, k) => mould(g, k),
-  armour: (g, m) => armour(g, MATERIAL_COLORS[m]), coal: (g) => coal(g), stick: (g) => stick(g), leather: (g) => leather(g), brick: (g) => brick(g),
+  armour: (g, m, piece) => armourPiece(g, m, piece), coal: (g) => coal(g), stick: (g) => stick(g), leather: (g) => leather(g), brick: (g) => brick(g),
   gem: (g, m) => gem(g, MATERIAL_COLORS[m]), paper: (g) => paper(g), nails: (g) => nails(g), chain: (g) => chain(g), gear: (g) => gear(g),
   bucket: (g, f) => bucket(g, f), bottle: (g, f) => bottle(g, f), station: (g, k) => station(g, k),
   egg: (g, k) => egg(g, k),

@@ -231,7 +231,7 @@ R.dryCaves = await log('dryCaves', () => {
   for (let x = 20; x < 1000 && !(hill && sea); x += 16)
     for (let z = 20; z < 1000 && !(hill && sea); z += 16) {
       const h = T.surfaceHeight(x, z);
-      if (!hill && h > 40) hill = { x, z, h, water: T.waterAt(x, z) };
+      if (!hill && h > game.WORLD.lift + 40) hill = { x, z, h, water: T.waterAt(x, z) };
       if (!sea && T.waterAt(x, z) > h + 1) sea = { x, z, h, water: T.waterAt(x, z) };
     }
   return { hill, sea };

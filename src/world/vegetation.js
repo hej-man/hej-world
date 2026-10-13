@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { QUALITY, WORLD } from '../config.js';
 import { hash1, mulberry32, smoothstep } from '../noise.js';
 import { LAYER } from '../terrain/textures.js';
-import { bambooGeometry, barkMaterial, boulderGeometry, cactusGeometry, deadBushGeometry, flowerGeometries, foliageMaterials, frondGeometry, gourdGeometry,
+import { bambooGeometry, barkMaterial, grainGeometry, boulderGeometry, cactusGeometry, deadBushGeometry, flowerGeometries, foliageMaterials, frondGeometry, gourdGeometry,
   leafClump, mushroomGeometries, petalsGeometry, pineTier, puffTexture, triplanarMaterial } from './plant-looks.js';
 import { addObstacle, addTarget, terrainFns, whenLoaded, world } from './world.js';
 import { groundAt } from './query.js';
@@ -43,6 +43,7 @@ export const PLANT_KINDS = {
   melons:     { name: 'Melon', drops: [['melon_slice', 3, 5]] },
   bamboo:     { name: 'Bamboo', drops: [['bamboo', 2, 4]] },
   petals:     { name: 'Pink petals', drops: [['pink_petals', 1, 2]] },
+  wild_grain: { name: 'Wild grain', drops: [['wild_grain', 2, 4]] },
 };
 // [item id, colour, name]: the game's own flowers
 export const FLOWERS = [
@@ -68,6 +69,7 @@ export function placeVegetation(seed) {
     rock: boulderGeometry(2), ore: new THREE.DodecahedronGeometry(0.2, 0),
     cactus: cactusGeometry(), dead_bush: deadBushGeometry(), stem: stemGeo, bloom: bloomGeo, mstem: mStemGeo, cap: capGeo,
     fern: pineTier(0.55, 0.45, low ? 6 : 9, 9), gourd: gourdGeometry(), bamboo: bambooGeometry(), petals: petalsGeometry(),
+    grain: grainGeometry(),
   };
   const far = {
     trunk: new THREE.CylinderGeometry(0.13, 0.27, 1, 5, 1, true).translate(0, 0.5, 0),
@@ -86,7 +88,7 @@ export function placeVegetation(seed) {
     ore: litMaterial(new THREE.MeshStandardMaterial({ color: 0xe0782e, roughness: 0.35, metalness: 0.45, emissive: 0x3a1204, flatShading: true })),
     cactus: plain({ roughness: 0.6 }), dead_bush: plain({ roughness: 0.9 }), stem: plain({ color: 0x4f8a34 }), bloom: plain({ roughness: 0.6 }),
     mstem: plain({ color: 0xe8e0d0 }), cap: plain({ roughness: 0.6 }), fern: foliageMaterials(true), gourd: plain({ roughness: 0.55 }),
-    bamboo: plain({ roughness: 0.45 }), petals: plain({ side: THREE.DoubleSide }),
+    bamboo: plain({ roughness: 0.45 }), petals: plain({ side: THREE.DoubleSide }), grain: plain({ roughness: 0.75 }),
   };
   const farMats = { pine: foliageMaterials(true, true), crown: foliageMaterials(false, true), birch: foliageMaterials(false, true), bush: foliageMaterials(false, true) };
 
@@ -148,13 +150,13 @@ function placeVegTile(seed, ti, tj, kit) {
       if (Math.abs(y - T.surfaceHeight(x, z)) > 4) continue; // not on cave floors
       const wl = T.baseWaterAt(x, z);
       if (wantRock) { if (y > wl + 0.5 && ny > 0.6) rocks.push({ x, y, z, s: 0.6 + rand() * 1.4, rot: rand() * 6.28, iron: rand() < 0.14 }); continue; }
-      if (ny < 0.72 || y < wl + (wl > W ? 1.0 : 1.8) || y > 76 || vi > 0.35) continue;
+      if (ny < 0.72 || y < wl + (wl > W ? 1.0 : 1.8) || y > WORLD.lift + 76 || vi > 0.35) continue;
       if (vi > 0.2 && lavaAt(x, y, z, 1.5)) continue;
       if (plant === 'ice_spikes') { spikes.push({ x, y, z, rot: rand() * 6.28, tint: rand() }); continue; }
       if (plant) { plants.push({ kind: plant, x, y, z, s: 0.5 + rand() * 0.6, rot: rand() * 6.28, tint: rand() }); continue; }
       // pines take over up high
       let kind = pick(biome.trees.mix, rand());
-      if (rand() < smoothstep(45, 68, y) * 0.8 && kind !== 'palm' && kind !== 'acacia') kind = 'pine';
+      if (rand() < smoothstep(WORLD.lift + 45, WORLD.lift + 68, y) * 0.8 && kind !== 'palm' && kind !== 'acacia') kind = 'pine';
       trees.push({ x, y, z, scale: 0.75 + rand() * 0.7, kind, rot: rand() * 6.28, tint: rand(), snowy: !!biome.trees.snowy });
     }
   }
@@ -269,6 +271,7 @@ function plantParts(p, add) {
       one('gourd', 1 + s * 0.4, 1 + s * 0.3, 1 + s * 0.4, p.kind === 'pumpkins' ? _c.set(0xe08a24) : _c.set(0x5a9a3a));
       return [p.y + 0.35, 0.55];
     case 'bamboo': { const h = 3 + p.tint * 4; one('bamboo', 1.4, h, 1.4, _c.setHSL(0.24, 0.5, 0.42 + p.tint * 0.1)); return [p.y + 1, 0.6]; }
+    case 'wild_grain': one('grain', 1 + s * 0.3, 0.8 + s * 0.5, 1 + s * 0.3, _c.setHSL(0.11 + p.tint * 0.03, 0.62, 0.36 + p.tint * 0.08)); return [p.y + 0.4, 0.5];
     case 'petals': one('petals', 1, 1, 1, _c.setHSL(0.93, 0.6, 0.8 + p.tint * 0.08)); return [p.y + 0.1, 0.8];
   }
   return [p.y, 0.5];

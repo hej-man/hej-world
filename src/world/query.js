@@ -53,7 +53,7 @@ export function naturalMaterial(x, y, z, ny = 1) {
   if (T.volcanoInfluence(x, z) > 0.3) return 'basalt';
   const surf = T.surfaceHeight(x, z), b = T.biomeAt(x, z);
   const rock = () => T.oreKind(x, y, z)?.[0] || (b === 'mesa' && y > surf - 14 ? 'terracotta' : b === 'desert' && y > surf - 14 ? 'sandstone' : T.stoneAt(x, y, z));
-  if (y < surf - 3.5 || y > 72 || ny < 0.5) return rock();
+  if (y < surf - 3.5 || y > WORLD.lift + 72 || ny < 0.5) return rock();
   if (y < T.baseWaterAt(x, z) + 1.8) return T.lakeAt(x, z) && y < T.baseWaterAt(x, z) ? 'clay' : 'sand';
   switch (b) {
     case 'desert': return y > surf - 2.5 ? 'sand' : 'sandstone';
@@ -87,6 +87,12 @@ export function editCell(x, y, z, ground = false, material = 'dirt') {
   if (ground) cellMat.set(cellIndex(x, y, z), material); else remember(x, y, z);
   rebuildAround(x, x, z, z);
   return true;
+}
+// Takes the terrain slope out of a cell that a block is placed in: its sides would show through
+// the block's sides, flickering, where both lie in the same plane.
+export function clearSlope(x, y, z) {
+  if (slopeDir(x, y, z) < 0 || !setCell(x, y, z, false)) return;
+  rebuildAround(x, x, z, z);
 }
 // Digs out (or fills in) every cell whose centre is within `radius` of a point, in one rebuild.
 // Returns how many cells changed.

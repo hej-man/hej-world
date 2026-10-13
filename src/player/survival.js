@@ -1,7 +1,8 @@
 import { state } from '../state.js';
 import { terrainFns } from '../world/world.js';
 import { player, respawn } from './character.js';
-import { addItem, renderInventory } from '../inventory/inventory.js';
+import { ITEMS, addItem, renderInventory } from '../inventory/inventory.js';
+import { armourOf } from '../inventory/armour.js';
 import { flashDamage, toast } from '../ui/hud.js';
 import { gameState } from '../ui/menu.js';
 
@@ -10,8 +11,18 @@ import { gameState } from '../ui/menu.js';
 // ---------------------------------------------------------------------------
 
 export const MAX_HEALTH = 150;
-export const stats = { health: MAX_HEALTH, hunger: 100, thirst: 100, mana: 100, armour: 0, sick: 0 };
-export const fullStats = () => ({ health: MAX_HEALTH, hunger: 100, thirst: 100, mana: 100, sick: 0 });
+// armour: how much less damage you take, from what's `worn` (see inventory/armour.js); air: breath
+// left underwater, in seconds
+export const stats = { health: MAX_HEALTH, hunger: 100, thirst: 100, mana: 100, armour: 0, sick: 0, air: 20, worn: { helmet: null, breastplate: null, gauntlets: null, pants: null } };
+export const fullStats = () => ({ health: MAX_HEALTH, hunger: 100, thirst: 100, mana: 100, sick: 0, air: 20 });
+
+// Puts on a piece of armour (`id`), or takes one off (`id` null); returns what was worn before.
+export function wearArmour(piece, id) {
+  const old = stats.worn[piece];
+  stats.worn[piece] = id;
+  stats.armour = armourOf(stats.worn, ITEMS);
+  return old;
+}
 let regenTimer = 0, starveTimer = 0, thirstTimer = 0, burnTimer = 0, sickTimer = 0;
 
 // Drinking unpurified water (straight from a lake or the sea, or a bottle of murky water) makes you
@@ -33,6 +44,7 @@ export function damagePlayer(amount, reason) {
 
 function die(reason) {
   state.burning = 0;
+  for (const k in state.effects) state.effects[k] = 0;
   toast(`You ${reason}. Back to the start, you keep your things.`);
   Object.assign(stats, fullStats());
   respawn();
@@ -59,6 +71,20 @@ export function updateStats(dt) {
     if (stats.sick === 0) toast('You feel better');
   }
   stats.mana = Math.min(100, stats.mana + 3 * dt);
+  for (const k in state.effects) state.effects[k] = Math.max(0, state.effects[k] - dt);
+  // air: 20 seconds with your head under water (a diving helmet makes it last three times as long),
+  // then you start drowning; it fills back up quickly once you come up
+  const maxAir = maxAirOf();
+  if (headUnderWater() && state.effects.gills <= 0) {
+    stats.air = Math.max(0, Math.min(stats.air, maxAir) - dt);
+    if (stats.air <= 0) {
+      drownTimer += dt;
+      if (drownTimer > 0.5) { drownTimer = 0; damagePlayer(1.5, 'drowned'); }
+    }
+  } else {
+    drownTimer = 0;
+    stats.air = Math.min(maxAir, stats.air + 8 * dt);
+  }
   if (stats.hunger <= 0) {
     starveTimer += dt;
     if (starveTimer > 1.5) { starveTimer = 0; damagePlayer(2, 'starved'); }
@@ -80,7 +106,12 @@ export function updateStats(dt) {
   }
 }
 
-const statEls = { hp: document.querySelector('#hp i'), hpText: document.querySelector('#hp span'), food: document.querySelector('#food i'), water: document.querySelector('#water i'), waterBar: document.getElementById('water'), waterText: document.querySelector('#water span'), mana: document.querySelector('#mana i') };
+// your head is under water (or a poured water cell) when it sinks a little below the floating depth
+export const headUnderWater = () => player.swimDepth > 1.7 && !player.inLava;
+export const maxAirOf = () => 20 * (ITEMS[stats.worn.helmet]?.air || 1);
+let drownTimer = 0;
+
+const statEls = { hp: document.querySelector('#hp i'), hpText: document.querySelector('#hp span'), food: document.querySelector('#food i'), water: document.querySelector('#water i'), waterBar: document.getElementById('water'), waterText: document.querySelector('#water span'), mana: document.querySelector('#mana i'), air: document.querySelector('#air i'), airBar: document.getElementById('air') };
 export function renderStats() {
   statEls.hp.style.width = `${Math.max(0, stats.health) / MAX_HEALTH * 100}%`;
   statEls.hpText.textContent = `Health ${Math.max(0, Math.ceil(stats.health))}`;
@@ -92,6 +123,10 @@ export function renderStats() {
     statEls.waterText.textContent = sick ? 'Thirst · sick' : 'Thirst';
   }
   statEls.mana.style.width = `${stats.mana}%`;
+  // the air bar only shows while you're using up your air or getting it back
+  const max = maxAirOf(), showAir = stats.air < max - 0.01;
+  statEls.airBar.style.display = showAir ? '' : 'none';
+  if (showAir) statEls.air.style.width = `${stats.air / max * 100}%`;
 }
 
 export function setCreative(on) {

@@ -120,7 +120,7 @@ export function buildRenderGeometry(colliderGeo, T) {
       // dry grass patches on sunny open slopes, tundra higher up, bare dirt on rough ground
       const dry = smoothstep(0.35, 0.7, n + nb) * g * 0.6;
       tr *= 1 + dry * 0.35; tg *= 1 + dry * 0.12; tb *= 1 - dry * 0.45;
-      const tundra = smoothstep(56, 78, y + nb * 10) * (1 - s);
+      const tundra = smoothstep(WORLD.lift + 56, WORLD.lift + 78, y + nb * 10) * (1 - s);
       g *= 1 - tundra * 0.6; d += tundra * 0.6 + smoothstep(0.82, 0.65, ny) * 0.5 * (1 - s) + Math.max(0, n - 0.45) * 0.8 * (g + f);
       tr *= 1 + tundra * 0.1; tb *= 1 - tundra * 0.2;
     }
@@ -157,7 +157,7 @@ export const terrainUniforms = {
   uRainWet: { value: 0 },  // how wet the ground is from rain, 0..1
   uPuddles: { value: 0 },  // how much rain has gathered in puddles, 0..1 (dries in the sun)
   uRaining: { value: 0 },  // how hard it's raining now (rings on the puddles)
-  uSnowLine: { value: 84 },
+  uSnowLine: { value: WORLD.lift + 84 },
   uVolc: { value: [0, 1, 2, 3].map(() => new THREE.Vector4(-1e4, -1e4, 1, 0)) }, // x, z, crater radius, lava height
   uTexScale: { value: TEX_LAYERS.map((l) => 1 / l.size) },
 };
@@ -214,7 +214,7 @@ export function makeTerrainMaterial() {
         float n1 = vnoise(vWorldPos * 0.12), n2 = vnoise(vWorldPos * 0.45);
 
         // layer weights: grass, forest floor, dirt, sand from the vertex; rock by slope; snow by height
-        float alpine = smoothstep(58.0, 82.0, vWorldPos.y + (n1 - 0.5) * 10.0);
+        float alpine = smoothstep(${(WORLD.lift + 58).toFixed(1)}, ${(WORLD.lift + 82).toFixed(1)}, vWorldPos.y + (n1 - 0.5) * 10.0);
         float edge = (n2 - 0.5) * 0.1;
         float steep = 1.0 - smoothstep(0.6 + alpine * 0.12 + edge, 0.78 + alpine * 0.1 + edge, normalize(vSmooth).y);
         float rockW = clamp(max(max(steep, stone), smoothstep(0.1, 0.45, volc) * 0.85), 0.0, 1.0);

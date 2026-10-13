@@ -299,6 +299,17 @@ export function bambooGeometry() {
   }
   return mergeSimple(parts);
 }
+// Wild grain: a tuft of thin stalks, each bending a little, with a long seed head on top.
+export function grainGeometry() {
+  const parts = [], rand = mulberry32(41);
+  for (let i = 0; i < 14; i++) {
+    const x = (rand() - 0.5) * 0.45, z = (rand() - 0.5) * 0.45, h = 0.6 + rand() * 0.3, lean = (rand() - 0.5) * 0.35, turn = rand() * Math.PI * 2;
+    const stalk = new THREE.CylinderGeometry(0.006, 0.01, h, 3).translate(0, h / 2, 0);
+    const head = new THREE.IcosahedronGeometry(0.03, 0).scale(0.8, 3.2, 0.8).translate(0, h + 0.07, 0);
+    for (const g of [stalk, head]) parts.push(g.rotateZ(lean).rotateY(turn).translate(x, 0, z));
+  }
+  return mergeSimple(parts);
+}
 // Fallen petals: a flat scatter of little pink discs on the ground.
 export function petalsGeometry() {
   const parts = [], rand = mulberry32(31);

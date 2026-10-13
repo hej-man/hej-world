@@ -32,6 +32,7 @@
   #keys-list button.listening { background: #3c8a4e; border-color: #5ab36d; }
   #menu #loading { margin: 6px 0 4px; font-size: 13px; color: #ffd98a; }
 
+  #coords { position: fixed; right: 14px; top: 10px; color: #fff; font: 600 14px/1.4 system-ui, sans-serif; text-align: right; text-shadow: 0 1px 3px #000; pointer-events: none; white-space: pre; }
   #hud { position: fixed; left: 12px; top: 10px; color: #fff; font-size: 13px; text-shadow: 0 1px 2px #000; pointer-events: none; white-space: pre; }
   #crosshair { position: fixed; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; background: rgba(255,255,255,0.85); box-shadow: 0 0 2px #000; display: none; pointer-events: none; }
   #toast { position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%); color: #fff; font-size: 15px; text-shadow: 0 1px 3px #000; pointer-events: none; opacity: 0; transition: opacity 0.3s; }
@@ -81,6 +82,8 @@
   .bag-cols { display: flex; gap: 16px; }
   .bag-side { flex: 1; display: flex; flex-direction: column; gap: 4px; font-size: 12px; min-width: 0; }
   .bag-side h3, .inv-foot h2 { margin: 2px 0 2px; font-size: 13px; font-weight: 600; opacity: 0.8; }
+  #inventory #worn { grid-template-columns: repeat(4, 48px); }
+  #worn .slot .key { opacity: 0.8; font-size: 9px; }
   #you, #item-info { background: rgba(255,255,255,0.05); border-radius: 8px; padding: 6px 8px; line-height: 1.5; }
   #item-info { min-height: 54px; }
   #item-info b { font-size: 13px; }
@@ -118,6 +121,7 @@
   #water i { background: linear-gradient(#7fe0ff, #1f86c9); }
   #water.sick i { background: linear-gradient(#b7c86a, #6b7a2a); }
   #mana i { background: linear-gradient(#a7a0ff, #5a46d8); }
+  #air i { background: linear-gradient(#e8fbff, #6fc4e8); }
   #mode { position: fixed; left: 50%; bottom: 76px; transform: translateX(-50%); color: #fff; font-size: 13px; font-weight: 600; letter-spacing: 1px; background: rgba(120, 70, 200, 0.75); padding: 2px 12px; border-radius: 10px; display: none; z-index: 5; pointer-events: none; }
 
   /* Aiming: what you're looking at, and break progress */

@@ -97,6 +97,11 @@ run it. See README.md for features, controls and the code layout table.
   the nearest. Ground, grass, trees, plants, animals and land shape all read from it.
 - Caves (`caveDistance` in `generate.js`): cheese caverns, pillars and spaghetti tunnels. Under
   low ground they must stay above sea level, or the sea would show through their roofs.
+- Heights in the generator, materials, vegetation and weather are written for the old sea level
+  of 20 plus `WORLD.lift` (24): the world was made deeper by raising everything. A new absolute
+  height (a snow line, a tree line) needs `WORLD.lift +` too.
+- Day and night live in `src/effects/daynight.js` (`day`, `isNight`); fire in `src/world/fire.js`;
+  falling trees in `src/world/felling.js`; armour pieces in `src/inventory/armour.js`.
 
 ## Tests
 

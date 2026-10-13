@@ -13,6 +13,7 @@ export const state = {
   buildTilt: 0, // index into TILTS: upright, on its side, upside down
   creative: false,
   burning: 0,
+  effects: { gills: 0, swift: 0, nighteye: 0 }, // seconds left of each potion (see survival.js)
   testMode: false, // lets headless tests act without pointer lock
   useCd: 0,
   currentTarget: null,

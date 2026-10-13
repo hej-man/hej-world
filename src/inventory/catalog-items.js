@@ -82,9 +82,9 @@ export function defineCatalogItems(reg, RECIPES) {
   R('glass', { red_sand: 3, '#fuel': 1 }, { n: 3, at: 'furnace' });
 
   // --- Ores, metals and metal blocks
-  reg('coal', 'Coal', null, { draw: 'coal', tags: ['fuel'] });
-  reg('raw_copper', 'Raw copper', null, { draw: 'raw:copper' });
-  reg('raw_gold', 'Raw gold', null, { draw: 'raw:gold' });
+  reg('coal', 'Coal', null, { draw: 'coal', tags: ['fuel'], place: 'coal', cat: 'materials' });
+  reg('raw_copper', 'Raw copper', null, { draw: 'raw:copper', place: 'raw_copper', cat: 'materials' });
+  reg('raw_gold', 'Raw gold', null, { draw: 'raw:gold', place: 'raw_gold', cat: 'materials' });
   reg('copper_ingot', 'Copper ingot', null, { draw: 'ingot:copper' });
   reg('gold_ingot', 'Gold ingot', null, { draw: 'ingot:gold' });
   reg('brick', 'Brick', null, { draw: 'brick' });
@@ -99,7 +99,7 @@ export function defineCatalogItems(reg, RECIPES) {
   block('crystal_block');
   R('crystal_block', { crystal: 4, glass: 1 }, { at: 'workbench' });
 
-  // --- Copper and gold tools and armour (copper digs a little faster than stone; gold is very
+  // --- Copper and gold tools (copper digs a little faster than stone; gold is very
   //     fast but doesn't hit hard)
   for (const [mat, Mat, speed, badge, head, hit] of [['copper', 'Copper', 2, '#d27a48', 0xd27a48, 1], ['gold', 'Golden', 3.2, '#f0c63a', 0xf0c63a, 0]]) {
     const ingot = `${mat}_ingot`;
@@ -112,10 +112,6 @@ export function defineCatalogItems(reg, RECIPES) {
     R(`${mat}_shovel`, { [ingot]: 1, stick: 2 }, { at: 'workbench' });
     R(`${mat}_sword`, { [ingot]: 2, stick: 1 }, { at: 'workbench' });
   }
-  reg('copper_armour', 'Copper armour', null, { draw: 'armour:copper', armour: 0.45, maxStack: 1, badge: '#d27a48', look: 0xc87a4a });
-  reg('gold_armour', 'Golden armour', null, { draw: 'armour:gold', armour: 0.5, maxStack: 1, badge: '#f0c63a', look: 0xe8c040 });
-  R('copper_armour', { copper_ingot: 6, leather: 2 }, { at: 'workbench' });
-  R('gold_armour', { gold_ingot: 6, leather: 2 }, { at: 'workbench' });
 
   // --- Light: torches and lanterns
   reg('torch', 'Torch', '🕯️', { place: 'torch' });
@@ -133,6 +129,7 @@ export function defineCatalogItems(reg, RECIPES) {
   plant('cactus', 'Cactus', '🌵');
   plant('bamboo', 'Bamboo', '🎋');
   plant('plant_fibre', 'Plant fibre', '🌿');
+  plant('wild_grain', 'Wild grain', '🌾');
   plant('pinecone', 'Pinecone', null, { color: 'radial-gradient(ellipse at 50% 55%, #8a5a30 0 9px, transparent 10px)', flat: true });
   plant('cocoa_beans', 'Cocoa beans', null, { color: 'radial-gradient(ellipse at 40% 45%, #7a4422 0 6px, transparent 7px), radial-gradient(ellipse at 64% 60%, #5e321a 0 6px, transparent 7px)', flat: true });
   plant('red_mushroom', 'Red mushroom', '🍄', { tags: ['mushrooms'] });
@@ -151,8 +148,16 @@ export function defineCatalogItems(reg, RECIPES) {
   reg('fruit_salad', 'Fruit salad', '🥗', { food: 35, drink: 10 });
   reg('pine_nuts', 'Roasted pine nuts', '🌰', { food: 6 });
   reg('maple_syrup', 'Maple syrup', '🧴', { drink: 15, food: 12, leaves: 'bottle' });
+  // milk from a cow or goat (right click it with an empty bottle): raw milk can carry germs, so
+  // drinking it may make you sick like dirty water; heat it at a campfire or furnace to make it safe
+  reg('raw_milk', 'Raw milk', null, { draw: 'bottle:rawmilk', drink: 30, leaves: 'bottle', dirty: 0.4 });
+  reg('milk', 'Pasteurised milk', null, { draw: 'bottle:milk', drink: 40, leaves: 'bottle' });
+  R('milk', { raw_milk: 1, stick: 1 }, { at: 'campfire' });
+  R('milk', { raw_milk: 3, '#fuel': 1 }, { n: 3, at: 'furnace' });
   reg('coconut_milk', 'Coconut milk', '🥛', { drink: 35, leaves: 'bottle' });
   reg('melon_juice', 'Melon juice', '🧃', { drink: 45, leaves: 'bottle' });
+  R('bread', { wild_grain: 3 }, { at: 'campfire' });
+  R('bread', { wild_grain: 6, '#fuel': 1 }, { n: 2, at: 'furnace' });
   R('mushroom_stew', { '#mushrooms': 2 }, { at: 'campfire' });
   R('chocolate', { cocoa_beans: 2, maple_sap: 1 }, { at: 'campfire' });
   R('pumpkin_pie', { pumpkin: 1, maple_sap: 1 }, { n: 2, at: 'furnace' });

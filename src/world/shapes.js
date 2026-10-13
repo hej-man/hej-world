@@ -5,9 +5,25 @@ import { ConvexGeometry } from 'three/addons/geometries/ConvexGeometry.js';
 // Block shapes: the geometry of a 1 m cell in each buildable shape, centred on the origin
 // ---------------------------------------------------------------------------
 // Shapes you can build with; B switches the shape of the blocks you place. Slopes, stairs and roof
-// prisms turn to face the way you look (a slope rises away from you).
-export const SHAPES = ['block', 'slab', 'slope', 'stairs', 'prism', 'pillar'];
-export const SHAPE_NAMES = { block: 'Block', slab: 'Half slab', slope: 'Slope', stairs: 'Stairs', prism: 'Roof prism', pillar: 'Pillar' };
+// ridges turn to face the way you look (a slope rises away from you). There are three slopes: a
+// gentle one that rises half a metre over the block, the normal one that rises a whole metre, and a
+// steep one that rises a metre over half the block; the corner slope slopes down on two sides, for
+// the corners of a sloped roof or a pyramid.
+export const SHAPES = ['block', 'slab', 'gentle', 'slope', 'steep', 'corner', 'stairs', 'prism', 'pillar'];
+export const SHAPE_NAMES = {
+  block: 'Full block', slab: 'Half slab', gentle: 'Gentle slope', slope: 'Slope', steep: 'Steep slope', corner: 'Corner slope',
+  stairs: 'Stairs', prism: 'Roof ridge', pillar: 'Round pillar',
+};
+// The corners of the shapes made of flat faces (all inside the cell, -0.5..0.5); the high side of a
+// slope is its local -z, and a corner slope's peak is at local (-x, -z).
+const l = -0.5, h = 0.5;
+export const WEDGES = {
+  slope: [[l, l, h], [h, l, h], [h, l, l], [l, l, l], [l, h, l], [h, h, l]],
+  prism: [[l, l, h], [h, l, h], [h, l, l], [l, l, l], [l, h, 0], [h, h, 0]],
+  gentle: [[l, l, h], [h, l, h], [h, l, l], [l, l, l], [l, 0, l], [h, 0, l]],
+  steep: [[l, l, 0], [h, l, 0], [h, l, l], [l, l, l], [l, h, l], [h, h, l]],
+  corner: [[l, l, h], [h, l, h], [h, l, l], [l, l, l], [l, h, l]],
+};
 
 
 // Triangles [[a, b, c], ...] -> geometry with flat normals; each triangle is turned to face away from
@@ -102,12 +118,14 @@ function roundedConvex(points) {
 }
 // Rounding pulls sharp (less than 90 degree) edges in, so a slope's tip and toe would stop short of
 // the cell's sides; stretch the shape back out to fill the cell, so neighbours still meet.
-function fillCell(g) {
+// `to` is the box the sharp shape fills (the whole cell unless it's a gentle or steep slope).
+function fillCell(g, to = new THREE.Box3(new THREE.Vector3(-0.5, -0.5, -0.5), new THREE.Vector3(0.5, 0.5, 0.5))) {
   g.computeBoundingBox();
-  const { min, max } = g.boundingBox, sc = new THREE.Vector3(1 / (max.x - min.x), 1 / (max.y - min.y), 1 / (max.z - min.z));
+  const { min, max } = g.boundingBox, size = to.getSize(new THREE.Vector3());
+  const sc = new THREE.Vector3(size.x / (max.x - min.x), size.y / (max.y - min.y), size.z / (max.z - min.z));
   const pos = g.attributes.position, nor = g.attributes.normal, n = new THREE.Vector3();
   for (let i = 0; i < pos.count; i++) {
-    pos.setXYZ(i, (pos.getX(i) - min.x) * sc.x - 0.5, (pos.getY(i) - min.y) * sc.y - 0.5, (pos.getZ(i) - min.z) * sc.z - 0.5);
+    pos.setXYZ(i, (pos.getX(i) - min.x) * sc.x + to.min.x, (pos.getY(i) - min.y) * sc.y + to.min.y, (pos.getZ(i) - min.z) * sc.z + to.min.z);
     n.fromBufferAttribute(nor, i).divide(sc).normalize(); // normals take the inverse stretch
     nor.setXYZ(i, n.x, n.y, n.z);
   }
@@ -120,7 +138,7 @@ export const roundedBox = (w, h, d, x = 0, y = 0, z = 0) => roundedConvex(boxPoi
 const _sharpGeos = {};
 export function sharpShape(shape) {
   if (_sharpGeos[shape]) return _sharpGeos[shape];
-  const l = -0.5, h = 0.5;
+  if (shape !== 'slope' && shape !== 'prism') return (_sharpGeos[shape] = new ConvexGeometry(WEDGES[shape].map((p) => new THREE.Vector3(...p))));
   // bottom corners A B (front) C D (back); top edge E F: at the back for a slope, along the middle for a prism
   const A = [l, l, h], B = [h, l, h], C = [h, l, l], D = [l, l, l];
   const zt = shape === 'slope' ? l : 0, E = [l, h, zt], F = [h, h, zt];
@@ -131,7 +149,6 @@ export function sharpShape(shape) {
 const _shapeGeos = {};
 export function shapeGeometry(shape) {
   if (_shapeGeos[shape]) return _shapeGeos[shape];
-  const l = -0.5, h = 0.5;
   let g;
   if (shape === 'slab') g = roundedBox(1, 0.5, 1, 0, -0.25, 0);
   else if (shape === 'pillar') {
@@ -139,9 +156,9 @@ export function shapeGeometry(shape) {
     for (let i = 0; i < 16; i++) { const a = (i / 16) * Math.PI * 2; for (const y of [l, h]) pts.push(new THREE.Vector3(Math.cos(a) * 0.3, y, Math.sin(a) * 0.3)); }
     g = roundedConvex(pts);
   } else if (shape === 'stairs') g = mergeGeometries([roundedBox(1, 0.5, 1, 0, -0.25, 0), roundedBox(1, 0.5, 0.5, 0, 0.25, -0.25)]);
-  else if (shape === 'slope' || shape === 'prism') {
-    const zt = shape === 'slope' ? l : 0;
-    g = fillCell(roundedConvex([[l, l, h], [h, l, h], [h, l, l], [l, l, l], [l, h, zt], [h, h, zt]].map((p) => new THREE.Vector3(...p))));
+  else if (WEDGES[shape]) {
+    const pts = WEDGES[shape].map((p) => new THREE.Vector3(...p));
+    g = fillCell(roundedConvex(pts), new THREE.Box3().setFromPoints(pts));
   } else g = roundedBox(1, 1, 1);
   return (_shapeGeos[shape] = boxUVs(g));
 }
