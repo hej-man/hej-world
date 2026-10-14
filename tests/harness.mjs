@@ -38,7 +38,7 @@ export async function openGame({
   const shotsDir = path.join(root, 'tests/shots');
   fs.mkdirSync(shotsDir, { recursive: true });
   const { server, port } = await startServer();
-  const browser = await chromium.launch({
+  const browser = await chromium.launch({ ...(process.env.PW_CHANNEL ? { channel: process.env.PW_CHANNEL } : {}),
     args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'],
   });
   const page = await browser.newPage({ viewport });

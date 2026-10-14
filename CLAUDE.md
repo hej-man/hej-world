@@ -34,9 +34,12 @@ run it. See README.md for features, controls and the code layout table.
 - One global density field (`terrainField`, Float32Array of 513 × 65 × 513 points, 2 m apart)
   for the whole 1024 m map; ground is where the value is > 0. The ground you see is 1 m blocks
   read from it (`src/terrain/voxels.js`): a cell is ground where the interpolated field is > 0 at
-  its centre, unless `edits` says the player dug or filled it. An empty cell on ground with higher
-  ground beside it holds a slope (`slopeDir`); dug cells never do. `blockMesh` (`mesh.js`) meshes
-  32 × 32 m chunks with greedy face merging; `fillSolid` is the fast column-at-a-time version of
+  its centre, unless `edits` says the player dug or filled it. An empty cell on ground with ground
+  beside it (or diagonally) holds a piece (`slopeDir` returns its code: kind * 4 + turn; kinds slope,
+  steep, gentle low/high, outer and inner corner; `pieceHeight` gives its top). Pieces depend on
+  cells up to three away, so edits rebuild chunks within 4 cells; dug cells never hold one.
+  `blockMesh` (`mesh.js`) meshes 32 × 32 m chunks with greedy face merging for the cubes and draws
+  each piece from its 3 × 3 height grid; `fillSolid` is the fast column-at-a-time version of
   `solidCell` and must give the same answer.
 - Anything that asks "is this ground?" uses `solidCell`/`solidAt`, never `sampleField > 0`
   directly: the two differ near the surface.
@@ -110,3 +113,5 @@ serves three.js from `node_modules` when installed, blocks Poly Haven downloads,
 rendering off (software WebGL takes seconds per frame on this map) and turns it back on only for
 `shot()`. It calls `__game.loadAll()` by default so the whole map exists. Tests are plain
 scripts; `check(label, ok, detail)` records a pass or failure and the exit code reflects it.
+`PW_CHANNEL=chromium` runs them in full Chromium (new headless) instead of Playwright's headless
+shell, which with the whole map loaded can use twice the memory and get killed on a 16 GB machine.

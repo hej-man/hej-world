@@ -5,16 +5,22 @@ import { terrainFns } from './world.js';
 // Water: a smooth surface whose small waves and ripples are drawn per pixel. It reflects the sky,
 // is clearer when you look straight down (Fresnel), and turns shallow turquoise with foam near the
 // shore. Where the water is (and how deep) comes from a map of the ground's top in every 1 m column,
-// so the surface stops exactly at the side of the first block that stands above it.
+// so the surface stops exactly at the side of the first block that stands above it. Columns under
+// dry land (where the land's shape is well above the water: a cave mouth or a pit dug down below the
+// water level) never show it, or a cave would hold a thin sheet of water that isn't there.
 export const waterUniforms = { uTime: { value: 0 }, uGroundH: { value: null }, uWorld: { value: new THREE.Vector3() } };
-let tops = null, topsTex = null, topsDirty = false;
+let tops = null, shown = null, dry = null, topsTex = null, topsDirty = false;
 // Starts the map from the terrain's shape; each chunk writes its real block tops once it's built.
 function makeWaterDepthTexture() {
   const n = WORLD.size, T = terrainFns;
-  tops = new Uint8Array(n * n);
-  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++)
-    tops[i + j * n] = Math.max(0, Math.min(255, Math.floor(T.surfaceHeight(i + 0.5, j + 0.5))));
-  topsTex = new THREE.DataTexture(tops, n, n, THREE.RedFormat, THREE.UnsignedByteType);
+  tops = new Uint8Array(n * n); shown = new Uint8Array(n * n); dry = new Uint8Array(n * n);
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+    const k = i + j * n;
+    tops[k] = Math.max(0, Math.min(255, Math.floor(T.surfaceHeight(i + 0.5, j + 0.5))));
+    dry[k] = T.baseWaterAt(i + 0.5, j + 0.5) < -100 ? 1 : 0;
+    shown[k] = dry[k] ? 255 : tops[k];
+  }
+  topsTex = new THREE.DataTexture(shown, n, n, THREE.RedFormat, THREE.UnsignedByteType);
   topsTex.magFilter = topsTex.minFilter = THREE.LinearFilter;
   topsTex.needsUpdate = true;
   return topsTex;
@@ -31,7 +37,9 @@ export function setGroundTops(x0, z0, nx, nz, solid) {
     if (x < 0 || z < 0 || x >= n || z >= n) continue;
     let y = H - 1;
     while (y >= 0 && !solid[lx + nx * (y + H * lz)]) y--;
-    tops[x + z * n] = y + 1;
+    const k = x + z * n;
+    tops[k] = y + 1;
+    shown[k] = dry[k] ? 255 : y + 1;
   }
   topsDirty = true;
 }

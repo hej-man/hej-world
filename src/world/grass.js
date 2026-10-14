@@ -7,7 +7,7 @@ import { fieldNormal, terrainUniforms } from '../terrain/material.js';
 import { canvasTexture } from './plant-looks.js';
 import { litMaterial } from '../render/scene.js';
 import { isLoaded, terrainFns } from './world.js';
-import { cellMat, slopeDir, solidCell } from '../terrain/voxels.js';
+import { cellMat, pieceHeight, slopeDir, solidCell } from '../terrain/voxels.js';
 import { editedMaterialAt } from './query.js';
 
 // ---------------------------------------------------------------------------
@@ -99,7 +99,7 @@ function fieldSurfaceY(x, z) {
   while (y > h - 3 && !solidCell(cx, y - 1, cz)) y--;
   if (y <= h - 3) return null;
   const d = slopeDir(cx, y, cz);
-  return d < 0 ? y : y + [x - cx, 1 - (x - cx), z - cz, 1 - (z - cz)][d];
+  return d < 0 ? y : y + pieceHeight(d, x - cx, z - cz);
 }
 
 // How much grass grows here (0..1), following the same rules as the ground texture.

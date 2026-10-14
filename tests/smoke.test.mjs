@@ -2,7 +2,7 @@
 // rest of the map streams in, and the title screen and gameplay render.
 import { openGame } from './harness.mjs';
 
-const { log, check, shot, finish } = await openGame({ loadAll: false, start: null });
+const { log, check, shot, finish, renderOn } = await openGame({ loadAll: false, start: null });
 const start = await log('start', () => ({ ...window.__game.worldStats(), terrain: window.__game.terrainProgress() }));
 check('only the start area is generated up front', start?.terrain.meshed > 0 && start.terrain.meshed < start.terrain.total, start?.terrain);
 await shot('menu');
@@ -47,6 +47,9 @@ check('the whole map generates', all?.terrain.meshed === all?.terrain.total, all
 check('forests, bushes and rocks', all?.trees > 1000 && all.bushes > 100 && all.rocks > 100, all);
 check('animals fill the map', all?.animals > 100, all);
 check('volcanoes have lava flows', all?.lavaFlows > 0, all);
+// stop drawing the whole map between checks: software-GL frames of it pile up and run the browser
+// out of memory (the picture at the end still draws its two frames)
+await renderOn(false);
 
 // ice spikes are built of blocks; taking one out of a spike shows the ice behind it, not a hole
 const spikes = await log('iceSpikes', () => {

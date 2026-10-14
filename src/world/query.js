@@ -68,9 +68,10 @@ export function naturalMaterial(x, y, z, ny = 1) {
 // Rebuilds the chunks whose blocks or slopes a change to cells x0..x1, z0..z1 can affect.
 function rebuildAround(x0, x1, z0, z1) {
   const w = WORLD.voxel * CHUNK;
-  invalidateGrass(x0 - 1, x1 + 2, z0 - 1, z1 + 2);
-  const i0 = Math.max(0, Math.floor((x0 - 2) / w)), i1 = Math.min(chunkCount - 1, Math.floor((x1 + 2) / w));
-  const j0 = Math.max(0, Math.floor((z0 - 2) / w)), j1 = Math.min(chunkCount - 1, Math.floor((z1 + 2) / w));
+  // a cell changes the slope pieces up to three cells away
+  invalidateGrass(x0 - 4, x1 + 5, z0 - 4, z1 + 5);
+  const i0 = Math.max(0, Math.floor((x0 - 4) / w)), i1 = Math.min(chunkCount - 1, Math.floor((x1 + 4) / w));
+  const j0 = Math.max(0, Math.floor((z0 - 4) / w)), j1 = Math.min(chunkCount - 1, Math.floor((z1 + 4) / w));
   for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) if (chunks[i + chunkCount * j].stage >= 3) buildChunk(i, j);
 }
 // The ground around a cell that was just opened up keeps showing what it's made of.

@@ -5,6 +5,7 @@ import { BLOCKS, blocks } from '../world/blocks.js';
 import { SPECIES } from '../animals/animals.js';
 import { BOLT_COST } from '../player/survival.js';
 import { toast } from '../ui/hud.js';
+import { withKeys } from '../ui/keybinds.js';
 import { TAGS, defineCatalogItems } from './catalog-items.js';
 import { FORGE, HAMMER, defineMetalwork } from './metalwork.js';
 import { PIECE_NAMES, defineArmour } from './armour.js';
@@ -72,7 +73,8 @@ export function defineItems() {
   defineArmour(reg, (out, inp, extra = {}) => RECIPES.push({ out, in: inp, ...extra }), FORGE, HAMMER);
 }
 
-export function itemHint(def) {
+export const itemHint = (def) => withKeys(rawHint(def));
+function rawHint(def) {
   if (def.hint) return def.hint;
   if (def.id === 'campfire') return 'Right click to place. Not under a tree or against wood: it can set them alight';
   if (def.id === 'crucible') return 'Melt metal in it at a smelter';

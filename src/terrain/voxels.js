@@ -6,8 +6,8 @@ import { terrainField } from '../world/world.js';
 // The ground as 1 m blocks. A cell is ground where the density field (2 m apart, smoothly
 // interpolated) is positive at its centre, unless the player dug it out or filled it in (`edits`).
 // On hillsides, an empty cell standing on ground with higher ground on one side holds a slope
-// rising toward it, so walking up a hill doesn't need a jump for every step. Dug-out cells never
-// get a slope, so a hole is exactly as big as what you took out.
+// rising toward it (or another of the pieces below), so walking up a hill doesn't need a jump for
+// every step. Dug-out cells never get a piece, so a hole is exactly as big as what you took out.
 // ---------------------------------------------------------------------------
 const SX = WORLD.size, SY = WORLD.height;
 export const cellIndex = (x, y, z) => x + SX * (y + SY * z);
@@ -25,17 +25,77 @@ export function solidCell(x, y, z) {
 // The same for any point.
 export const solidAt = (x, y, z) => solidCell(Math.floor(x), Math.floor(y), Math.floor(z));
 
-// Which way a slope in this cell rises: 0 +x, 1 -x, 2 +z, 3 -z, or -1 for none. `solid` can be a
-// faster lookup over the same cells.
+// The pieces of ground that fill hillside cells. An empty cell standing on ground can hold one, made
+// from the same shapes you can build with:
+//   slope        ground on one side: a ramp up to it (45°)
+//   steep slope  at the foot of a cliff three or more blocks high (too steep to stand on)
+//   gentle slope a one-block step with flat ground below it is spread over two cells: a low gentle
+//                ramp up to half a metre, then a high one on to the top (27°)
+//   corner slope ground only diagonally (the outside corner of a hill): slopes down on two sides
+//   inner corner ground on two sides next to each other (the inside corner of a hill)
+// A piece is a code: kind * 4 + turn. Slopes turn to face SLOPE_DIRS (the way they rise); corners
+// to CORNERS (the way they're high). -1 is no piece.
 export const SLOPE_DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+export const CORNERS = [[1, 1], [-1, 1], [1, -1], [-1, -1]];
+export const PIECE = { slope: 0, steep: 1, gentleLow: 2, gentleHigh: 3, outer: 4, inner: 5 };
+export const pieceKind = (code) => code >> 2;
+const open = (x, y, z, solid) => !solid(x, y, z) && solid(x, y - 1, z) && !solid(x, y + 1, z) && !(edits.size && edits.has(cellIndex(x, y, z)));
+// A cell with ground on exactly one side, one block high, and open on the other side: the plain
+// step a gentle slope can spread out. Returns the way it rises, or -1.
+function plainStep(x, y, z, solid) {
+  if (!open(x, y, z, solid)) return -1;
+  let d = -1;
+  for (let k = 0; k < 4; k++) {
+    const [dx, dz] = SLOPE_DIRS[k];
+    if (solid(x + dx, y, z + dz)) { if (d >= 0) return -1; d = k; }
+  }
+  if (d < 0) return -1;
+  const [dx, dz] = SLOPE_DIRS[d];
+  return solid(x + dx, y + 1, z + dz) ? -1 : d;
+}
+const walls = (x, y, z, solid) => {
+  let m = 0;
+  for (let k = 0; k < 4; k++) if (solid(x + SLOPE_DIRS[k][0], y, z + SLOPE_DIRS[k][1])) m |= 1 << k;
+  return m;
+};
+// A flat open cell in front of a plain step: the low half of a gentle slope rising toward it.
+function gentleBelow(x, y, z, solid) {
+  for (let k = 0; k < 4; k++) if (plainStep(x + SLOPE_DIRS[k][0], y, z + SLOPE_DIRS[k][1], solid) === k) return k;
+  return -1;
+}
+// The piece in the cell at integer (x, y, z), or -1. `solid` can be a faster lookup over the same cells.
 export function slopeDir(x, y, z, solid = solidCell) {
-  if (solid(x, y, z) || !solid(x, y - 1, z) || solid(x, y + 1, z)) return -1;
-  if (edits.size && edits.has(cellIndex(x, y, z))) return -1;
+  if (!open(x, y, z, solid)) return -1;
+  const m = walls(x, y, z, solid);
+  if (!m) {
+    const g = gentleBelow(x, y, z, solid);
+    if (g >= 0) return PIECE.gentleLow * 4 + g;
+    for (let c = 0; c < 4; c++) if (solid(x + CORNERS[c][0], y, z + CORNERS[c][1])) return PIECE.outer * 4 + c;
+    return -1;
+  }
+  // two sides next to each other: an inside corner
+  for (let c = 0; c < 4; c++) {
+    const [sx, sz] = CORNERS[c], bx = sx > 0 ? 1 : 2, bz = sz > 0 ? 4 : 8;
+    if (m === (bx | bz)) return PIECE.inner * 4 + c;
+  }
   for (let d = 0; d < 4; d++) {
+    if (!(m & (1 << d)) || m & (1 << (d ^ 1))) continue;
     const [dx, dz] = SLOPE_DIRS[d];
-    if (solid(x + dx, y, z + dz) && !solid(x - dx, y, z - dz)) return d;
+    if (solid(x + dx, y + 1, z + dz) && solid(x + dx, y + 2, z + dz)) return PIECE.steep * 4 + d;
+    if (m === 1 << d && plainStep(x, y, z, solid) === d && open(x - dx, y, z - dz, solid) && gentleBelow(x - dx, y, z - dz, solid) === d && !walls(x - dx, y, z - dz, solid)) return PIECE.gentleHigh * 4 + d;
+    return PIECE.slope * 4 + d;
   }
   return -1;
+}
+// How high the top of a piece is (0..1 of the cell) at (fx, fz) across the cell (each 0..1).
+export function pieceHeight(code, fx, fz) {
+  const k = code >> 2, r = code & 3;
+  if (k >= PIECE.outer) {
+    const [sx, sz] = CORNERS[r], tx = sx > 0 ? fx : 1 - fx, tz = sz > 0 ? fz : 1 - fz;
+    return k === PIECE.outer ? Math.min(tx, tz) : Math.max(tx, tz);
+  }
+  const [dx, dz] = SLOPE_DIRS[r], t = dx ? (dx > 0 ? fx : 1 - fx) : dz > 0 ? fz : 1 - fz;
+  return k === PIECE.slope ? t : k === PIECE.steep ? Math.max(0, 2 * t - 1) : k === PIECE.gentleLow ? t / 2 : 0.5 + t / 2;
 }
 
 // Digging out or filling in one cell. Returns whether it changed.

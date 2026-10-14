@@ -1,5 +1,20 @@
 # Changelog
 
+## Round 13: terrain from the building shapes, mouse buttons you can change
+
+- The ground uses the new building shapes too. A one-block step with flat ground in front of it
+  becomes two gentle slopes (easy to walk up), the foot of a cliff gets a steep slope, the
+  outside corners of hills get corner slopes and inside corners get an inside-corner piece, so
+  hillsides are smoother and no longer only 45° ramps.
+- Break / attack and place / use are in Settings > Keys like every other action: put them on any
+  key or mouse button, and put any action on a mouse button (left, middle, right or the side
+  buttons). Item hints and the controls list name whatever you chose.
+- No more paper-thin "lakes" underground: a cave mouth or pit that dips below the sea level under
+  dry land showed a sheet of water you could walk through. Water now only shows where the land is
+  actually low enough to hold the sea, a lake or the river.
+- Fixed ground faces that could be joined to the wrong corner high up in the world (a leftover
+  from making the world taller).
+
 ## Round 12, part 2: night, armour, storage, fire and a deeper world
 
 - Day and night: a day lasts 20 minutes. The sun rises and sets, the night sky has stars and a

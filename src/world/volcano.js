@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { lerp, mulberry32 } from '../noise.js';
 import { puffTexture } from './plant-looks.js';
 import { terrainFns, volcanoFx, whenLoaded, world } from './world.js';
-import { slopeDir, solidCell } from '../terrain/voxels.js';
+import { pieceHeight, slopeDir, solidCell } from '../terrain/voxels.js';
 
 export function addVolcanoEffects() {
   lavaFlows.length = 0;
@@ -175,11 +175,12 @@ function addLavaFlows(v, rand) {
   }
 }
 // The height of the ground's top in the column at (x, z), searching down from about `near`: the top
-// of the highest ground block, or halfway up a slope sitting on it.
+// of the highest ground block, or the middle of a slope piece sitting on it.
 function columnTop(x, z, near) {
   for (let y = Math.floor(near) + 4; y > near - 12; y--) {
     if (!solidCell(x, y, z)) continue;
-    return slopeDir(x, y + 1, z) >= 0 ? y + 1.5 : y + 1;
+    const d = slopeDir(x, y + 1, z);
+    return d >= 0 ? y + 1 + pieceHeight(d, 0.5, 0.5) : y + 1;
   }
   return null;
 }

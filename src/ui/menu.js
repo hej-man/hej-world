@@ -21,14 +21,14 @@ export const $ = (id) => document.getElementById(id);
 export function renderControls() {
   const html = `${kbd('forward')} ${kbd('left')} ${kbd('back')} ${kbd('right')} move &nbsp; ${kbd('sprint')} sprint &nbsp; ${kbd('jump')} jump / swim up (${kbd('sprint')} dives)<br>
     Mouse look &nbsp; ${kbd('view')} view: first person, behind, in front &nbsp; ${kbd('camDist')} camera distance<br>
-    Left click: break / attack &nbsp; Right click: place / eat / drink / use<br>
-    Right click on water: drink, or fill an empty bottle<br>
+    ${kbd('attack')} break / attack &nbsp; ${kbd('use')} place / eat / drink / use<br>
+    ${kbd('use')} on water: drink, or fill an empty bottle<br>
     <kbd>1</kbd>–<kbd>9</kbd> or wheel: hotbar &nbsp; ${kbd('inventory')} backpack &nbsp; ${kbd('crafting')} crafting<br>
     ${kbd('creative')} creative mode (fly: ${kbd('jump')} up, ${kbd('sprint')} down)<br>
     ${kbd('shape')} building shape: block, slab, slope, stairs, roof prism, pillar<br>
     ${kbd('tilt')} tip it: upright, on its side, upside down (it turns the way you look)<br>
     ${kbd('weather')} change the weather (creative) &nbsp; ${kbd('sound')} sound on / off<br>
-    ${kbd('lantern')} lantern &nbsp; ${kbd('respawn')} respawn &nbsp; <kbd>Esc</kbd> pause · all keys can be changed under Keys…`;
+    ${kbd('lantern')} lantern &nbsp; ${kbd('respawn')} respawn &nbsp; <kbd>Esc</kbd> pause · all keys and mouse buttons can be changed under Keys…`;
   for (const el of document.querySelectorAll('#menu .controls')) el.innerHTML = html;
   $('inv-keys').innerHTML = `${kbd('inventory')} backpack · ${kbd('crafting')} crafting · <kbd>Esc</kbd> close`;
 }
@@ -36,6 +36,7 @@ renderControls();
 
 // Settings > Keys: click a key, then press the new one
 let keysOpen = false, listening = null;   // listening: [action id, 0 or 1, button]
+let skipClick = false;                     // the click that ends a mouse-button bind isn't a new click on the list
 function renderKeys() {
   $('keys-list').innerHTML = ACTIONS.map((a) => `<span>${a.name}</span>` +
     [0, 1].map((i) => `<button class="small" data-a="${a.id}" data-i="${i}">${keyName(binds[a.id][i])}</button>`).join('')).join('');
@@ -50,11 +51,13 @@ $('btn-keys-done').addEventListener('click', () => setKeysOpen(false));
 $('btn-keys-reset').addEventListener('click', () => { resetBinds(); renderKeys(); });
 $('keys-list').addEventListener('click', (e) => {
   const b = e.target.closest('button');
+  if (skipClick) { skipClick = false; return; }
   if (!b) return;
   renderKeys();
   listening = [b.dataset.a, +b.dataset.i];
   const now = $('keys-list').querySelector(`[data-a="${b.dataset.a}"][data-i="${b.dataset.i}"]`);
-  now.classList.add('listening'); now.textContent = 'press a key…';
+  now.classList.add('listening'); now.textContent = 'press a key or click…';
+  skipClick = false;
 });
 window.addEventListener('keydown', (e) => {
   if (!keysOpen || !listening) return;
@@ -65,6 +68,17 @@ window.addEventListener('keydown', (e) => {
   listening = null;
   renderKeys();
 }, true);
+// A mouse button pressed while waiting binds that button (clicking Done or Reset just stops waiting).
+window.addEventListener('mousedown', (e) => {
+  if (!keysOpen || !listening) { skipClick = false; return; }
+  if (e.target.closest?.('#btn-keys-done, #btn-keys-reset')) { listening = null; renderKeys(); return; }
+  e.preventDefault(); e.stopImmediatePropagation();
+  setBind(listening[0], listening[1], `Mouse${e.button}`);
+  listening = null;
+  skipClick = true;
+  renderKeys();
+}, true);
+window.addEventListener('contextmenu', (e) => { if (keysOpen) e.preventDefault(); });
 $('quality-select').value = QUALITY;
 $('seed-input').value = urlParams.get('seed') || '';
 

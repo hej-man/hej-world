@@ -10,13 +10,13 @@ import { setSound, sound } from '../effects/sound.js';
 import { toast } from './hud.js';
 import { $, clampPitch, gameState, updateOverlay } from './menu.js';
 import { CAM_DISTANCES } from '../player/camera.js';
-import { actionOf, binds, keyName } from './keybinds.js';
+import { actionOf, binds, held, keyName } from './keybinds.js';
 
 export const keys = {};
 
 document.addEventListener('pointerlockchange', () => {
   state.locked = document.pointerLockElement === renderer.domElement;
-  if (!state.locked) mouse.left = mouse.right = false;
+  if (!state.locked) { mouse.left = mouse.right = false; for (const k in keys) if (k.startsWith('Mouse')) keys[k] = false; }
   updateOverlay();
 });
 document.addEventListener('pointerlockerror', updateOverlay);
@@ -26,15 +26,18 @@ document.addEventListener('mousemove', (e) => {
   state.pitch -= e.movementY * 0.0022;
   clampPitch();
 });
+// Mouse buttons are bound like keys (Mouse0 left, Mouse2 right...), so any of them can do any action.
 document.addEventListener('mousedown', (e) => {
   if (!state.locked || inventoryOpen || gameState !== 'playing') return;
-  if (e.button === 0) mouse.left = true;
-  if (e.button === 2) { mouse.right = true; state.useCd = Math.min(state.useCd, 0); }
+  if (e.button === 1) e.preventDefault(); // middle click would start scrolling
+  press(`Mouse${e.button}`, e);
 });
-document.addEventListener('mouseup', (e) => {
-  if (e.button === 0) mouse.left = false;
-  if (e.button === 2) mouse.right = false;
-});
+document.addEventListener('mouseup', (e) => release(`Mouse${e.button}`));
+// break / attack and place / use follow whichever keys or buttons they're on
+function syncMouse() {
+  mouse.left = held(keys, 'attack');
+  mouse.right = held(keys, 'use');
+}
 document.addEventListener('contextmenu', (e) => { if (state.locked) e.preventDefault(); });
 window.addEventListener('wheel', (e) => {
   if (!state.locked || inventoryOpen) return;
@@ -43,8 +46,11 @@ window.addEventListener('wheel', (e) => {
 window.addEventListener('keydown', (e) => {
   if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
   if (gameState !== 'playing') return;
-  const act = actionOf(e.code);
-  if (e.code === 'Tab' || act === 'view') e.preventDefault(); // Tab would move the focus
+  press(e.code, e);
+});
+function press(code, e) {
+  const act = actionOf(code);
+  if (code === 'Tab' || act === 'view') e.preventDefault(); // Tab would move the focus
   if (act === 'inventory' || act === 'crafting') {
     if (e.repeat) return;
     const tab = act === 'crafting' ? 'craft' : state.creative ? 'items' : 'bag';
@@ -54,11 +60,15 @@ window.addEventListener('keydown', (e) => {
     else setInventoryOpen(true, tab);
     return;
   }
-  if (inventoryOpen) { if (e.code === 'Escape') setInventoryOpen(false); return; }
-  keys[e.code] = true;
-  if (e.code === 'Space' || act === 'jump') e.preventDefault();
+  if (inventoryOpen) { if (code === 'Escape') setInventoryOpen(false); return; }
+  keys[code] = true;
+  if (act === 'attack' || act === 'use') {
+    if (act === 'use' && !mouse.right) state.useCd = Math.min(state.useCd, 0);
+    syncMouse();
+  }
+  if (code === 'Space' || act === 'jump') e.preventDefault();
   if (e.repeat) return;
-  if (e.code.startsWith('Digit') && e.code !== 'Digit0') selectSlot(+e.code.slice(5) - 1);
+  if (code.startsWith('Digit') && code !== 'Digit0') selectSlot(+code.slice(5) - 1);
   switch (act) {
     case 'view': cycleView(); break;
     case 'creative': setCreative(!state.creative); break;
@@ -79,7 +89,8 @@ window.addEventListener('keydown', (e) => {
       break;
     case 'sound': setSound(!sound.on); $('sound-select').value = sound.on ? 'on' : 'off'; toast(sound.on ? 'Sound on' : 'Sound off'); break;
   }
-});
+}
+
 // First person, then the camera behind you, then in front of you looking back at you.
 export function cycleView() {
   const order = ['first', 'back', 'front'], next = order[(order.indexOf(state.view) + 1) % order.length];
@@ -92,7 +103,12 @@ export function setView(view) {
   state.thirdPerson = view !== 'first';
   clampPitch();
 }
-window.addEventListener('keyup', (e) => { keys[e.code] = false; });
+function release(code) {
+  if (!keys[code]) return;
+  keys[code] = false;
+  syncMouse();
+}
+window.addEventListener('keyup', (e) => release(e.code));
 window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; mouse.left = mouse.right = false; });
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;

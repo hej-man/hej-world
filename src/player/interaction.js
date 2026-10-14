@@ -18,6 +18,7 @@ import { fluidRay, floodFromNature, poolAmount, pourFluid, removeFluid, takeFlui
 import { craterLavaAt, craterOf, lavaAt } from '../world/volcano.js';
 import { takeCraterLava, takeFromNature } from '../world/hydro.js';
 import { cameraUnderwater } from '../effects/underwater.js';
+import { withKeys } from '../ui/keybinds.js';
 import { toast } from '../ui/hud.js';
 import { collectStation } from '../inventory/items.js';
 import { gameState } from '../ui/menu.js';
@@ -499,8 +500,8 @@ export function updateInteraction(dt) {
     outline.position.set(t.cell[0] + 0.5, t.cell[1] + 0.5, t.cell[2] + 0.5);
     outline.material.color.set(0x000000); outline.visible = true;
   } else outline.visible = false;
-  const waterNote = !aimWater ? null : held?.id === 'bottle' ? 'Water: right click to fill the bottle'
-    : drinksWater(t, def) ? 'Water: right click to drink (unpurified, makes you sick)' : null;
+  const waterNote = !aimWater ? null : held?.id === 'bottle' ? withKeys('Water: right click to fill the bottle')
+    : drinksWater(t, def) ? withKeys('Water: right click to drink (unpurified, makes you sick)') : null;
   targetEl.textContent = (aimWater?.under || !waterNote) && t ? targetName(t) : waterNote || '';
 
   if (active && mouse.left) {

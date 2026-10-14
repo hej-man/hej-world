@@ -60,14 +60,17 @@ the game uses them whenever it's served. Which Poly Haven texture each layer use
 | E (or I)          | Open / close the inventory (C opens it on the crafting page)                              |
 | G                 | Toggle creative mode (fly with Space / Shift)                                             |
 | F                 | Toggle the lantern (useful in caves)                                                      |
-| B                 | Cycle the building shape: block, slab, slope, stairs, roof prism, pillar                  |
+| B                 | Cycle the building shape: block, slab, gentle / normal / steep slope, corner, stairs...   |
 | T                 | Tip the next block: upright, on its side, upside down (it also turns the way you look)    |
 | K                 | Change the weather in creative mode (clear, cloudy, rain, storm)                          |
 | M                 | Sound on / off                                                                            |
 | R                 | Respawn at the cave mouth                                                                 |
 | Esc               | Pause (resume or go back to the main menu)                                                |
 
-Every key except 1–9 and Esc can be changed under Keys… in the pause or main menu.
+Every key except 1–9 and Esc can be changed under Keys… in the pause or main menu, and so can
+the mouse buttons: break / attack and place / use can go on any key or mouse button (left, middle,
+right or the two side buttons), and any action can go on a mouse button. Item hints follow what
+you've chosen.
 
 A slot holds up to 100 of an item (tools, weapons, armour and buckets one each). In the
 inventory: click to pick up and drop a stack, right-click to split a stack or place one
@@ -261,8 +264,10 @@ game.getSelectedItem(); // stack in the selected hotbar slot, or null
   The density field for the whole map is kept in memory (about 70 MB), so a much bigger map
   would need it stored per chunk instead.
 - **Ground blocks**: the ground is built of 1 m blocks read from the density field (a cell is
-  ground where the field is positive at its centre), with a slope in any empty cell that has
-  ground below and higher ground on one side, so hills can be walked up. Chunks are 32 × 32 m and
+  ground where the field is positive at its centre). Empty cells on hillsides hold pieces made
+  from the building shapes, so hills can be walked up: a slope against a one-block step, a pair
+  of gentle slopes where a step has flat ground below it, a steep slope at the foot of a cliff,
+  corner slopes on the outside corners of hills and inside corners where two sides meet. Chunks are 32 × 32 m and
   meshed with greedy face merging. The flat block faces are used for lighting, while a smooth
   normal from the field decides where steep ground shows as bare rock; the sides of grassy blocks
   show dirt. Each vertex also stores how much grass, forest floor, dirt and sand covers it (from
