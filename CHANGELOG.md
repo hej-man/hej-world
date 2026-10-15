@@ -1,5 +1,15 @@
 # Changelog
 
+## Round 14: trees fall like dominoes, burnt trees leave ash
+
+- A falling tree knocks over the trees it hits. Each one topples on in about the same direction
+  (a little to either side), so chopping the first of a row can bring down the whole row, up to
+  16 trees in one go. You get the wood from every tree that falls.
+- A tree that burns down leaves a grey pile of ash around a charred stump instead of nothing.
+  Break it to get 1 to 3 wood ash and sometimes a lump of coal.
+- Wood ash is a fertiliser: right-click a growing sapling with it and the sapling grows into a
+  tree straight away.
+
 ## Round 13: terrain from the building shapes, mouse buttons you can change
 
 - The ground uses the new building shapes too. A one-block step with flat ground in front of it

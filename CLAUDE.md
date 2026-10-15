@@ -104,7 +104,9 @@ run it. See README.md for features, controls and the code layout table.
   of 20 plus `WORLD.lift` (24): the world was made deeper by raising everything. A new absolute
   height (a snow line, a tree line) needs `WORLD.lift +` too.
 - Day and night live in `src/effects/daynight.js` (`day`, `isNight`); fire in `src/world/fire.js`;
-  falling trees in `src/world/felling.js`; armour pieces in `src/inventory/armour.js`.
+  falling trees in `src/world/felling.js` (a falling tree finds the trees in its path and calls
+  `onHit` when it reaches each; `interaction.js` fells those too, capped by `MAX_CHAIN`); ash piles
+  (`kind: 'ash'` targets) are made in `fire.js` when a standing tree burns out; armour pieces in `src/inventory/armour.js`.
 
 ## Tests
 

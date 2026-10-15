@@ -11,7 +11,7 @@ import { ITEMS, addItem, inventoryOpen, openStorage, renderInventory, setInvento
 import { BLOCKS, blockKey, blocks, placeBlock, removeBlock, voxelRay } from '../world/blocks.js';
 import { PLANT_KINDS, TREE_KINDS } from '../world/vegetation.js';
 import { fellTree } from '../world/felling.js';
-import { flammable, igniteBlock, igniteTree } from '../world/fire.js';
+import { flammable, igniteBlock, igniteTree, removeAsh } from '../world/fire.js';
 import { BOLT_COST, MAX_HEALTH, drankDirtyWater, stats, wearArmour } from './survival.js';
 import { animals, hurtAnimal, spawnAnimal } from '../animals/animals.js';
 import { fluidRay, floodFromNature, poolAmount, pourFluid, removeFluid, takeFluid, wakeArea } from '../world/fluids.js';
@@ -136,6 +136,7 @@ function targetName(t) {
     case 'tree': return TREE_KINDS[t.target.species].name;
     case 'plant': return t.target.flower ? (ITEMS[t.target.flower]?.name || nice(t.target.flower)) : t.target.plant === 'mushrooms' ? (t.target.red ? 'Red mushroom' : 'Brown mushroom') : PLANT_KINDS[t.target.plant].name;
     case 'rock': return t.target.iron ? 'Iron-rich boulder' : 'Boulder';
+    case 'ash': return 'Ash';
     case 'block': { const b = blocks.get(t.key); return BLOCKS[t.type].name + (b?.plantedAt !== undefined ? ' (growing)' : ''); }
     case 'animal': return `${t.animal.sp.name}  ${Math.max(0, Math.ceil(t.animal.hp))}/${t.animal.sp.hp}`;
     case 'terrain': materialOf(t); return ground(t.material)[2];
@@ -185,9 +186,24 @@ export function give(list) {
 }
 
 const _hide = new THREE.Matrix4().makeScale(0, 0, 0);
-function harvest(tg) {
-  // a tree falls over (world/felling.js hides it once it's down); everything else just goes
-  if (tg.kind === 'tree') fellTree(tg, player.position.x, player.position.z);
+// A tree falling on others knocks them down too, at most this many after the one you chopped.
+const MAX_CHAIN = 16;
+let chained = 0;
+function harvest(tg, dir = null) {
+  // a tree falls over (world/felling.js hides it once it's down) and may take others with it;
+  // a pile of ash is scooped up; everything else just goes
+  if (tg.kind === 'tree') {
+    if (!dir) chained = 0;
+    fellTree(tg, player.position.x, player.position.z, {
+      dir,
+      onHit: (o, dx, dz) => {
+        // still standing (not chopped, burnt or knocked down already)?
+        if (chained >= MAX_CHAIN || !(targetGrid.get(cellKey(Math.floor(o.x / CELL), Math.floor(o.z / CELL))) || []).includes(o)) return;
+        chained++;
+        harvest(o, [dx, dz]);
+      },
+    });
+  } else if (tg.kind === 'ash') removeAsh(tg);
   else for (const [mesh, i] of tg.parts) { mesh.setMatrixAt(i, _hide); mesh.instanceMatrix.needsUpdate = true; }
   if (tg.obstacle) gridRemove(obstacleGrid, tg.obstacle);
   gridRemove(targetGrid, tg);
@@ -205,13 +221,15 @@ function harvest(tg) {
     if (tg.flower) give([[tg.flower, between(1, 2)]]);
     else if (tg.plant === 'mushrooms') give([[tg.red ? 'red_mushroom' : 'brown_mushroom', between(1, 2)]]);
     else give(PLANT_KINDS[tg.plant].drops.map(([id, a, b]) => [id, between(a, b)]));
+  } else if (tg.kind === 'ash') {
+    give([['ash', between(1, 3)], ['coal', r() < 0.35 ? 1 : 0]]);
   } else if (tg.kind === 'rock') {
     give(tg.iron ? [['stone', 1 + Math.round(tg.s)], ['iron_ore', 1 + Math.round(tg.s * 1.5)]] : [['stone', 2 + Math.round(tg.s * 2)]]);
   }
 }
 
 export function doBreak(t) {
-  if (t.kind === 'tree' || t.kind === 'plant' || t.kind === 'rock') { harvest(t.target); return; }
+  if (t.kind === 'tree' || t.kind === 'plant' || t.kind === 'rock' || t.kind === 'ash') { harvest(t.target); return; }
   if (t.kind === 'block') {
     const b = removeBlock(t.key);
     if (!b) return;
@@ -289,7 +307,7 @@ export function useWater() {
 
 // Does a right click on water drink it? Only with nothing in hand that has a use of its own (a block
 // to place, a bucket, food...) and nothing you can use in front of you (a workbench, a furnace...).
-const hasUse = (def) => !!(def && (def.place || def.bucket || def.fluid || def.spawn || def.food || def.drink || def.heal || def.mana || def.effect || def.wear || def.wand || def.ignite));
+const hasUse = (def) => !!(def && (def.place || def.bucket || def.fluid || def.spawn || def.food || def.drink || def.heal || def.mana || def.effect || def.wear || def.wand || def.ignite || def.fertilise));
 const usable = (t) => t?.kind === 'block' && !!(BLOCKS[t.type].station || BLOCKS[t.type].storage);
 function drinksWater(t, def) { return !hasUse(def) && !usable(t) && def?.id !== 'bottle'; }
 
@@ -324,6 +342,14 @@ export function useItem(t) {
     setInventoryOpen(true); return;
   }
   if (!def) return;
+  if (def.fertilise) {
+    // wood ash on a growing sapling: it grows into a tree the next time saplings are checked
+    const b = t?.kind === 'block' ? blocks.get(t.key) : null;
+    if (b?.plantedAt !== undefined) { b.plantedAt = -1e9; consumeSelected(); toast('The sapling will grow in a moment'); }
+    else toast('Sprinkle it on a growing sapling');
+    state.useCd = 0.5;
+    return;
+  }
   if (def.ignite) {
     const lit = t?.kind === 'tree' ? igniteTree(t.target) : t?.kind === 'block' ? igniteBlock(t.key) : false;
     if (lit) { consumeSelected(); toast(t.kind === 'tree' ? 'The tree catches fire' : 'It catches fire'); }

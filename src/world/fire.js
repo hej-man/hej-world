@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { state } from '../state.js';
 import { BLOCKS, blockKey, blocks, removeBlock } from './blocks.js';
 import { fluids } from './fluids.js';
-import { CELL, cellKey, gridRemove, obstacleGrid, targetGrid, world } from './world.js';
+import { CELL, addTarget, cellKey, gridRemove, obstacleGrid, targetGrid, world } from './world.js';
 import { hiddenMatrix } from './felling.js';
 import { player } from '../player/character.js';
 import { weather } from '../effects/weather.js';
@@ -11,7 +11,8 @@ import { weather } from '../effects/weather.js';
 // Fire. Trees and wooden or leafy blocks burn: lava poured next to them sets them alight, so does a
 // campfire built right under a tree or against wooden blocks, and so does a fire starter. A burning
 // tree flames for a while and is gone; a burning block too. Fire spreads to trees and wooden blocks
-// close by (not in the rain), and standing in it sets you on fire.
+// close by (not in the rain), and standing in it sets you on fire. A tree that burns down leaves a
+// grey pile of ash around a charred stump; break it to scoop up the ash (and maybe a lump of coal).
 // ---------------------------------------------------------------------------
 const fires = [];             // { tree | key, spots: [[x, y, z, r]], t, life, group }
 const burningTrees = new Set(), burningBlocks = new Set();
@@ -55,12 +56,46 @@ export function igniteBlock(key) {
   return true;
 }
 
+// Ash piles: a flat mound of grey ash, a black stump and a few charred bits, sized to the tree.
+const ashes = [];
+const ashMat = new THREE.MeshStandardMaterial({ color: 0x8a8580, roughness: 1 });
+const charMat = new THREE.MeshStandardMaterial({ color: 0x1c1816, roughness: 0.9 });
+const moundGeo = new THREE.SphereGeometry(1, 14, 6, 0, Math.PI * 2, 0, Math.PI / 2);
+const stumpGeo = new THREE.CylinderGeometry(0.16, 0.24, 0.5, 7).translate(0, 0.25, 0);
+const bitGeo = new THREE.BoxGeometry(0.5, 0.09, 0.11);
+function addAsh(tg) {
+  const size = Math.min(1.6, 0.7 + (tg.scale || 1) * 0.45), g = new THREE.Group();
+  const mound = new THREE.Mesh(moundGeo, ashMat);
+  mound.scale.set(size, 0.16 * size, size * 0.9);
+  mound.receiveShadow = true;
+  g.add(mound, new THREE.Mesh(stumpGeo, charMat));
+  for (let i = 0; i < 5; i++) {
+    const bit = new THREE.Mesh(bitGeo, charMat), a = i * 2.4 + tg.x, d = size * (0.35 + ((i * 0.37) % 0.5));
+    bit.position.set(Math.cos(a) * d, 0.06 * size, Math.sin(a) * d);
+    bit.rotation.set(0, a * 1.7, 0.15);
+    g.add(bit);
+  }
+  g.position.set(tg.x, tg.y - 0.05, tg.z);
+  world.add(g);
+  const ash = { kind: 'ash', x: tg.x, y: tg.y, z: tg.z, group: g, spheres: [[tg.x, tg.y + 0.1, tg.z, size * 0.75]] };
+  ashes.push(ash);
+  addTarget(ash);
+}
+// Scoops up an ash pile (interaction.js gives what's in it).
+export function removeAsh(ash) {
+  world.remove(ash.group);
+  const i = ashes.indexOf(ash);
+  if (i >= 0) ashes.splice(i, 1);
+}
+
 function burnOut(f) {
   world.remove(f.group);
   if (f.tree) {
     burningTrees.delete(f.tree);
     for (const [mesh, i] of f.tree.parts) { mesh.setMatrixAt(i, hiddenMatrix); mesh.instanceMatrix.needsUpdate = true; }
     if (f.tree.obstacle) gridRemove(obstacleGrid, f.tree.obstacle);
+    // only a tree still standing leaves ash where it stood (one knocked down meanwhile is gone)
+    if ((targetGrid.get(cellKey(Math.floor(f.tree.x / CELL), Math.floor(f.tree.z / CELL))) || []).includes(f.tree)) addAsh(f.tree);
     gridRemove(targetGrid, f.tree);
   } else {
     burningBlocks.delete(f.key);
@@ -133,5 +168,6 @@ export function updateFire(dt) {
 export const firesBurning = () => fires.length;
 export function clearFire() {
   for (const f of fires) world.remove(f.group);
-  fires.length = 0; burningTrees.clear(); burningBlocks.clear();
+  for (const a of ashes) world.remove(a.group);
+  fires.length = 0; ashes.length = 0; burningTrees.clear(); burningBlocks.clear();
 }

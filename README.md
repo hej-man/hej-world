@@ -170,6 +170,11 @@ caves, metalwork, flowing water and more.
 - **Storage.** A basket, chest or large crate holds 9, 18 or 36 stacks; right-click it to open it.
 - **Fire.** Lava next to trees, a campfire under a tree or against wood, and the fire starter set
   trees and wooden blocks burning. Fire spreads to trees and wood nearby unless it's raining.
+  A burnt tree leaves a pile of ash around a charred stump: break it for wood ash (and sometimes
+  coal), and right-click a growing sapling with ash to make it grow straight away.
+- **Falling trees.** A tree you chop falls away from you and knocks over any tree it hits, which
+  falls on in roughly the same direction, so a row of trees can go down like dominoes (up to 16
+  in one chain). You get the wood from every tree that falls.
 - **Health, hunger, thirst, mana.** You have 150 health. Hunger and thirst drain over time
   (thirst faster when sprinting or near a volcano); at zero you start losing health, and when
   fed and watered you heal. You start with bread, apples, cooked meat and three bottles of clean

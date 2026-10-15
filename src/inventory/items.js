@@ -59,6 +59,7 @@ export function defineItems() {
   // what the night monsters drop, and the magic made from it
   reg('fire_starter', 'Fire starter', '🎇', { ignite: true, hint: 'Right click on a tree or a wooden block to set it alight. Fire spreads to trees and wood nearby!' });
   reg('grave_dust', 'Grave dust', '⚱️');
+  reg('ash', 'Wood ash', '🌫️', { fertilise: true, hint: 'What a burnt tree leaves. Right click a growing sapling with it to make it grow straight away' });
   reg('bone', 'Bone', '🦴');
   reg('hex_shard', 'Hex shard', '💠');
   reg('gloom_silk', 'Gloom silk', '🧶');
